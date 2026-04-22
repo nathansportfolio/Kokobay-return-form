@@ -8,6 +8,12 @@ import {
   getThumbnailsBySkus,
   getUnitPricesBySkus,
 } from "@/lib/returnOrderLinesFromProducts";
+import type { ShopifyOrderDisplay } from "@/lib/shopifyReturnOrderLookup";
+import {
+  fetchReturnOrderFromShopify,
+  fetchShopifyOrderDisplay,
+  shopifyOrderDisplayFromLookup,
+} from "@/lib/shopifyReturnOrderLookup";
 
 export type { ReturnPageResume };
 
@@ -25,8 +31,23 @@ export type ReturnPageFormContext =
   | { kind: "noFormOnFile" };
 
 /**
+ * How bare order lines (no return log, no customer form) were loaded — Shopify
+ * Admin vs dev sample from Mongo, or a failure to resolve in Shopify.
+ */
+export type ReturnPageBareLineSource =
+  | null
+  | { type: "shopify"; orderRef: string; shopifyOrderId: string }
+  | { type: "sample" }
+  | { type: "shopify_not_found" }
+  | { type: "shopify_unavailable" };
+
+/**
  * Loads order lines for the warehouse return flow: latest warehouse return log
- * (if any), else latest customer return form, else a sample of products.
+ * (if any), else latest customer return form, else **Shopify order** (when
+ * configured), else a dev sample of products.
+ *
+ * `shopifyOrder` is from the Admin API (order name, id, email, etc.) when the
+ * store is configured; use it for headings and admin links, not the URL alone.
  */
 export async function getReturnPageLinesAndResume(
   orderRef: string,
@@ -34,10 +55,18 @@ export async function getReturnPageLinesAndResume(
   lines: KokobayOrderLine[];
   resume: ReturnPageResume | null;
   formContext: ReturnPageFormContext;
+  bareLineSource: ReturnPageBareLineSource;
+  shopifyOrder: ShopifyOrderDisplay | null;
 }> {
   const key = orderRef.trim();
   if (!key) {
-    return { lines: [], resume: null, formContext: { kind: "noFormOnFile" } };
+    return {
+      lines: [],
+      resume: null,
+      formContext: { kind: "noFormOnFile" },
+      bareLineSource: null,
+      shopifyOrder: null,
+    };
   }
 
   const last = await getLatestReturnLogForOrder(key);
@@ -61,6 +90,9 @@ export async function getReturnPageLinesAndResume(
       ]),
     );
 
+    const shopifyOrder = process.env.SHOPIFY_STORE?.trim()
+      ? await fetchShopifyOrderDisplay(key)
+      : null;
     return {
       lines,
       resume: {
@@ -71,6 +103,8 @@ export async function getReturnPageLinesAndResume(
         byLine,
       },
       formContext: { kind: "returnLog" },
+      bareLineSource: null,
+      shopifyOrder,
     };
   }
 
@@ -84,10 +118,8 @@ export async function getReturnPageLinesAndResume(
 
     const byLine: ReturnPageResume["byLine"] = {};
     const lines: KokobayOrderLine[] = form.items.map((i) => {
-      const { reason, disposition } = mapCustomerFormReasonToWarehouse(
-        i.reasonValue,
-      );
-      byLine[i.lineId] = { reason, disposition };
+      const { disposition } = mapCustomerFormReasonToWarehouse(i.reasonValue);
+      byLine[i.lineId] = { reason: i.reasonValue, disposition };
       return {
         id: i.lineId,
         sku: i.sku,
@@ -98,6 +130,9 @@ export async function getReturnPageLinesAndResume(
       } satisfies KokobayOrderLine;
     });
 
+    const shopifyOrder = process.env.SHOPIFY_STORE?.trim()
+      ? await fetchShopifyOrderDisplay(key)
+      : null;
     return {
       lines,
       resume: {
@@ -115,7 +150,53 @@ export async function getReturnPageLinesAndResume(
         customerEmail: form.customerEmail,
         submittedAtIso: form.createdAt.toISOString(),
       },
+      bareLineSource: null,
+      shopifyOrder,
     };
+  }
+
+  if (process.env.SHOPIFY_STORE?.trim()) {
+    try {
+      const s = await fetchReturnOrderFromShopify(key);
+      if (s.ok) {
+        return {
+          lines: s.lines,
+          resume: null,
+          formContext: { kind: "noFormOnFile" },
+          bareLineSource: {
+            type: "shopify",
+            orderRef: s.orderRef,
+            shopifyOrderId: s.shopifyOrderId,
+          },
+          shopifyOrder: shopifyOrderDisplayFromLookup(s),
+        };
+      }
+      if (s.error === "not_found") {
+        return {
+          lines: [],
+          resume: null,
+          formContext: { kind: "noFormOnFile" },
+          bareLineSource: { type: "shopify_not_found" },
+          shopifyOrder: null,
+        };
+      }
+      return {
+        lines: [],
+        resume: null,
+        formContext: { kind: "noFormOnFile" },
+        bareLineSource: { type: "shopify_unavailable" },
+        shopifyOrder: null,
+      };
+    } catch (e) {
+      console.error("[getReturnPageLinesAndResume] shopify", e);
+      return {
+        lines: [],
+        resume: null,
+        formContext: { kind: "noFormOnFile" },
+        bareLineSource: { type: "shopify_unavailable" },
+        shopifyOrder: null,
+      };
+    }
   }
 
   const lines = await getReturnOrderLinesFromProducts(key);
@@ -123,5 +204,7 @@ export async function getReturnPageLinesAndResume(
     lines,
     resume: null,
     formContext: { kind: "noFormOnFile" },
+    bareLineSource: { type: "sample" },
+    shopifyOrder: null,
   };
 }

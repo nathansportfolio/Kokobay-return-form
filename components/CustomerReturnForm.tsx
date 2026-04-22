@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
 import { formatGbp } from "@/lib/kokobayOrderLines";
 import {
-  CUSTOMER_FORM_REASONS,
+  CUSTOMER_FORM_REASON_SELECT_OPTIONS,
+  CUSTOMER_FORM_REASON_UNSET,
 } from "@/lib/customerReturnFormReasons";
 import { womensFashionPlaceholderForReturnLine } from "@/lib/picklistPlaceholderImages";
 import {
@@ -59,8 +60,6 @@ type PerLine = {
   reasonValue: string;
 };
 
-const REASON_UNSET = "";
-
 export function CustomerReturnForm() {
   const [orderInput, setOrderInput] = useState("");
   const [orderRef, setOrderRef] = useState<string | null>(null);
@@ -114,7 +113,7 @@ export function CustomerReturnForm() {
       setLines(data.lines);
       const next: Record<string, PerLine> = {};
       for (const l of data.lines) {
-        next[l.id] = { include: false, reasonValue: REASON_UNSET };
+        next[l.id] = { include: false, reasonValue: CUSTOMER_FORM_REASON_UNSET };
       }
       setByLine(next);
     } finally {
@@ -371,8 +370,8 @@ export function CustomerReturnForm() {
                               [line.id]: {
                                 include: e.target.checked,
                                 reasonValue: e.target.checked
-                                  ? prev[line.id]?.reasonValue ?? REASON_UNSET
-                                  : REASON_UNSET,
+                                  ? prev[line.id]?.reasonValue ?? CUSTOMER_FORM_REASON_UNSET
+                                  : CUSTOMER_FORM_REASON_UNSET,
                               },
                             }))
                           }
@@ -410,9 +409,11 @@ export function CustomerReturnForm() {
                               }))
                             }
                           >
-                            <option value={REASON_UNSET}>Select a reason</option>
-                            {CUSTOMER_FORM_REASONS.map((r) => (
-                              <option key={r.value} value={r.value}>
+                            {CUSTOMER_FORM_REASON_SELECT_OPTIONS.map((r) => (
+                              <option
+                                key={r.value || "reason-unset"}
+                                value={r.value}
+                              >
                                 {r.label}
                               </option>
                             ))}

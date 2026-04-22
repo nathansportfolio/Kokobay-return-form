@@ -20,13 +20,15 @@ export default async function TodaysOrdersPage() {
           Today’s orders
         </h1>
         <p className="text-sm text-red-600 dark:text-red-400">
-          Could not load orders. Check MongoDB is configured and reachable.
+          Could not load orders. If you use Shopify, set{" "}
+          <code className="font-mono">SHOPIFY_STORE</code> and API credentials. Otherwise
+          check MongoDB is configured for sample orders.
         </p>
       </div>
     );
   }
 
-  const { dayKey, orders } = payload;
+  const { dayKey, orders, dataSource } = payload;
   const sorted = [...orders].sort((a, b) =>
     a.orderNumber.localeCompare(b.orderNumber),
   );
@@ -41,8 +43,19 @@ export default async function TodaysOrdersPage() {
           <span className="font-medium text-foreground">
             {formatDayKeyAsOrdinalEnglish(dayKey)}
           </span>
-          . Line counts, units to pick, and order total only — not the full
-          pick list.
+          {dataSource === "shopify" ? (
+            <>
+              . <span className="font-medium text-foreground">Live from Shopify</span>{" "}
+              (orders with <code> createdAt</code> in that London day, loaded with
+              pagination). Picked state matches the pick lists.
+            </>
+          ) : (
+            <>
+              . From MongoDB sample <code>orders</code> — not Shopify. Set{" "}
+              <code className="text-xs">SHOPIFY_STORE</code> for real orders.
+            </>
+          )}{" "}
+          Not the full walk — use Today&apos;s pick lists to pick.
         </p>
       </div>
 
@@ -52,9 +65,18 @@ export default async function TodaysOrdersPage() {
             No orders for this day
           </p>
           <p className="mt-2 text-sm text-zinc-500">
-            Orders are matched by <code className="font-mono">createdAt</code>{" "}
-            to the same calendar day as the warehouse. Seed or wait until that
-            day to see them here.
+            {dataSource === "shopify" ? (
+              <>
+                No Shopify orders with <code> createdAt</code> on this warehouse
+                day. If the clock or timezone is wrong, check the server and{" "}
+                <code>WAREHOUSE_TZ</code> match your expectations.
+              </>
+            ) : (
+              <>
+                Sample orders are matched by <code className="font-mono">createdAt</code>{" "}
+                to the warehouse day. Seed mock orders or enable Shopify.
+              </>
+            )}
           </p>
         </div>
       ) : (

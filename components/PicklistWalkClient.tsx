@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WarehouseLocationLine } from "@/components/WarehouseLocationLine";
 import type { OrderAssembly, PickStep } from "@/lib/fetchTodaysPickLists";
+import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
 import { womensFashionPlaceholderForStep } from "@/lib/picklistPlaceholderImages";
 
 type Props = {
@@ -124,18 +125,22 @@ function AssemblyOrdersList({ orders }: { orders: OrderAssembly[] }) {
                 key={`${o.orderNumber}-${line.lineIndex}`}
                 className="pl-0.5"
               >
-                <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400 sm:text-sm">
-                  {line.sku}
+                <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
+                  {!isVariantIdPlaceholderSku(line.sku) ? (
+                    <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400 sm:text-sm">
+                      {line.sku}
+                    </span>
+                  ) : null}
+                  <span className="tabular-nums font-medium text-foreground">
+                    ×{line.quantity}
+                  </span>
+                  <span className="text-zinc-600 dark:text-zinc-400">
+                    {line.name}
+                  </span>
+                  {line.color ? (
+                    <span className="text-zinc-500">· {line.color}</span>
+                  ) : null}
                 </span>
-                <span className="ml-1.5 tabular-nums font-medium text-foreground">
-                  ×{line.quantity}
-                </span>
-                <span className="ml-1.5 text-zinc-600 dark:text-zinc-400">
-                  {line.name}
-                </span>
-                {line.color ? (
-                  <span className="ml-1.5 text-zinc-500">· {line.color}</span>
-                ) : null}
               </li>
             ))}
           </ol>
@@ -165,6 +170,9 @@ export function PicklistWalkClient({
   const walkSessionStartedAt = useRef<number | null>(null);
   const n = steps.length;
   const current = complete ? null : (steps[index] ?? null);
+  const currentSkuIsVariantPlaceholder = current
+    ? isVariantIdPlaceholderSku(current.sku)
+    : false;
   const atStart = !complete && index === 0;
   const atEnd = !complete && index === n - 1;
   const totalItemsQty = steps.reduce((s, st) => s + st.quantity, 0);
@@ -437,11 +445,21 @@ export function PicklistWalkClient({
           <WarehouseLocationLine location={current.location} />
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-zinc-500">SKU</p>
-              <p className="font-mono text-sm font-medium text-foreground sm:text-base">
-                {current.sku}
-              </p>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              {!currentSkuIsVariantPlaceholder ? (
+                <>
+                  <p className="text-xs text-zinc-500">SKU</p>
+                  <p className="font-mono text-sm font-medium text-foreground sm:text-base">
+                    {current.sku}
+                  </p>
+                </>
+              ) : null}
+              <p
+                className={
+                  currentSkuIsVariantPlaceholder
+                    ? "text-sm text-zinc-600 dark:text-zinc-300"
+                    : "mt-1 text-sm text-zinc-600 dark:text-zinc-300"
+                }
+              >
                 {current.name}
               </p>
               {current.color ? (

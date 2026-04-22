@@ -22,7 +22,12 @@ function getParentHref(pathname: string, search: URLSearchParams): string {
     return "/";
   }
 
-  if (path === "/orders/today" || path === "/floor-map") {
+  if (
+    path === "/orders/today" ||
+    path === "/orders/shopify" ||
+    path === "/floor-map" ||
+    path === "/products"
+  ) {
     return "/";
   }
 

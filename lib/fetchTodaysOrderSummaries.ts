@@ -7,6 +7,10 @@ import {
 } from "@/lib/warehouseOrderPricing";
 import { getCompletedOrderNumbersSetForDay } from "@/lib/completedPicklist";
 import {
+  getTodaysShopifyOrderForPicks,
+  isShopifyWarehouseDataEnabled,
+} from "@/lib/shopifyWarehouseDayOrders";
+import {
   WAREHOUSE_TZ,
   calendarDateKeyInTz,
   isOrderOnWarehouseDay,
@@ -35,12 +39,29 @@ function buildPickPreview(items: WarehouseOrderLine[], maxParts = 3): string {
 export async function fetchTodaysOrderSummaries(): Promise<{
   dayKey: string;
   orders: TodaysOrderSummary[];
+  /** `shopify` when `SHOPIFY_STORE` is set; `sample` is legacy Mongo `orders` seed. */
+  dataSource: "shopify" | "sample";
 }> {
-  const client = await clientPromise;
-  const db = client.db(kokobayDbName);
   const now = new Date();
   const dayKey = calendarDateKeyInTz(now, WAREHOUSE_TZ);
   const pickedSet = await getCompletedOrderNumbersSetForDay(dayKey);
+
+  if (isShopifyWarehouseDataEnabled()) {
+    const forPick = await getTodaysShopifyOrderForPicks(dayKey);
+    const orders: TodaysOrderSummary[] = forPick.map((o) => ({
+      orderNumber: o.orderNumber,
+      status: o.status,
+      lineCount: o.items.length,
+      unitsToPick: unitsToPick(o.items),
+      totalFormatted: formatGbp(orderTotalPence(o.items)),
+      pickPreview: buildPickPreview(o.items),
+      picked: pickedSet.has(o.orderNumber),
+    }));
+    return { dayKey, orders, dataSource: "shopify" };
+  }
+
+  const client = await clientPromise;
+  const db = client.db(kokobayDbName);
 
   const raw = await db
     .collection("orders")
@@ -83,5 +104,5 @@ export async function fetchTodaysOrderSummaries(): Promise<{
     });
   }
 
-  return { dayKey, orders };
+  return { dayKey, orders, dataSource: "sample" };
 }

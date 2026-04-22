@@ -7,11 +7,16 @@ import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
 import { formatGbp } from "@/lib/kokobayOrderLines";
 import { womensFashionPlaceholderForReturnLine } from "@/lib/picklistPlaceholderImages";
 import {
-  RETURN_REASONS,
-  RETURN_REASON_UNSET,
-} from "@/lib/returnReasons";
+  CUSTOMER_FORM_REASON_SELECT_OPTIONS,
+  CUSTOMER_FORM_REASON_UNSET,
+} from "@/lib/customerReturnFormReasons";
+import { mapCustomerFormReasonToWarehouse } from "@/lib/customerFormToWarehouseReturn";
+import { reasonValueForSharedReturnSelect } from "@/lib/returnReasonForSelect";
 import type { ReturnPageResume } from "@/lib/returnLogTypes";
-import { shopifyOrderAdminUrl } from "@/lib/shopifyOrderAdminUrl";
+import {
+  shopifyOrderAdminUrlByOrderId,
+  shopifyOrderAdminUrlFromOrderRef,
+} from "@/lib/shopifyOrderAdminUrl";
 import { CurrencyGbp, EnvelopeSimple, Storefront } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -24,7 +29,7 @@ type LineState = {
 function emptyLine(): LineState {
   return {
     selected: false,
-    reason: RETURN_REASON_UNSET,
+    reason: CUSTOMER_FORM_REASON_UNSET,
     disposition: "restock",
   };
 }
@@ -54,10 +59,7 @@ function buildInitialState(
           line.id,
           {
             selected: true,
-            reason:
-              r.reason == null || r.reason === ""
-                ? RETURN_REASON_UNSET
-                : r.reason,
+            reason: reasonValueForSharedReturnSelect(r.reason),
             disposition: r.disposition,
           } satisfies LineState,
         ];
@@ -110,10 +112,17 @@ function ReturnLineThumbnail({
 
 export function OrderReturnLines({
   orderLabel,
+  shopifyOrderId,
   lines,
   resume = null,
 }: {
+  /** From Shopify `order.name` (e.g. #1001) when known. */
   orderLabel: string;
+  /**
+   * REST `order.id` for admin order URLs. Prefer this over the label so links
+   * open the correct order in all cases.
+   */
+  shopifyOrderId?: string;
   lines: KokobayOrderLine[];
   /** When present, pre-fill from the last return log for this order. */
   resume?: ReturnPageResume | null;
@@ -164,7 +173,7 @@ export function OrderReturnLines({
           ...(selected
             ? {}
             : {
-                reason: RETURN_REASON_UNSET,
+                reason: CUSTOMER_FORM_REASON_UNSET,
                 disposition: "restock" as const,
               }),
         },
@@ -191,8 +200,11 @@ export function OrderReturnLines({
   const someReturned = lines.some((l) => byId[l.id]?.selected);
   const fullOrderTotal = useMemo(() => orderTotal(lines), [lines]);
   const shopifyAdminHref = useMemo(
-    () => shopifyOrderAdminUrl(orderLabel),
-    [orderLabel],
+    () =>
+      shopifyOrderId
+        ? shopifyOrderAdminUrlByOrderId(shopifyOrderId)
+        : shopifyOrderAdminUrlFromOrderRef(orderLabel),
+    [orderLabel, shopifyOrderId],
   );
 
   useEffect(() => {
@@ -212,7 +224,7 @@ export function OrderReturnLines({
             ...(selected
               ? {}
               : {
-                  reason: RETURN_REASON_UNSET,
+                  reason: CUSTOMER_FORM_REASON_UNSET,
                   disposition: "restock" as const,
                 }),
           };
@@ -238,6 +250,16 @@ export function OrderReturnLines({
       });
       return;
     }
+    for (const l of lines) {
+      if (!byId[l.id]?.selected) continue;
+      const row = { ...emptyLine(), ...byId[l.id] };
+      if (row.reason === CUSTOMER_FORM_REASON_UNSET || !row.reason) {
+        toast.error("Select a return reason for each line", {
+          description: "Use the same reasons as the online return form (too big, damaged, etc.).",
+        });
+        return;
+      }
+    }
     setSaving(true);
     try {
       const body = {
@@ -252,7 +274,10 @@ export function OrderReturnLines({
               title: l.title,
               quantity: l.quantity,
               unitPrice: l.unitPrice,
-              reason: row.reason === RETURN_REASON_UNSET ? null : row.reason,
+              reason:
+                row.reason === CUSTOMER_FORM_REASON_UNSET || !row.reason
+                  ? null
+                  : row.reason,
               disposition: row.disposition,
             };
           }),
@@ -502,10 +527,7 @@ export function OrderReturnLines({
           const s = {
             ...emptyLine(),
             ...row,
-            reason:
-              !row?.reason || row.reason === ""
-                ? RETURN_REASON_UNSET
-                : row.reason,
+            reason: reasonValueForSharedReturnSelect(row?.reason),
           };
           const lineTotal = line.unitPrice * line.quantity;
           const idBase = safeDomId(line.id);
@@ -580,18 +602,22 @@ export function OrderReturnLines({
                         id={reasonFieldId}
                         name={`reason-${idBase}`}
                         value={s.reason}
-                        onChange={(e) =>
-                          updateLine(line.id, { reason: e.target.value })
-                        }
-                        onInput={(e) =>
-                          updateLine(line.id, {
-                            reason: (e.target as HTMLSelectElement).value,
-                          })
-                        }
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v) {
+                            updateLine(line.id, {
+                              reason: CUSTOMER_FORM_REASON_UNSET,
+                              disposition: "restock",
+                            });
+                            return;
+                          }
+                          const { disposition } = mapCustomerFormReasonToWarehouse(v);
+                          updateLine(line.id, { reason: v, disposition });
+                        }}
                         className="mt-1.5 min-h-[44px] w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base text-foreground outline-none focus:ring-2 focus:ring-amber-500/60 sm:text-sm dark:border-zinc-600"
                       >
-                        {RETURN_REASONS.map((opt) => (
-                          <option key={String(opt.value)} value={opt.value}>
+                        {CUSTOMER_FORM_REASON_SELECT_OPTIONS.map((opt) => (
+                          <option key={String(opt.value) || "unset"} value={opt.value}>
                             {opt.label}
                           </option>
                         ))}

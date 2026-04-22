@@ -16,7 +16,7 @@ import {
   sortHeaderArrow,
   type ReturnLogListState,
 } from "@/lib/returnLogListParams";
-import { shopifyOrderAdminUrl } from "@/lib/shopifyOrderAdminUrl";
+import { shopifyOrderAdminUrlFromOrderRef } from "@/lib/shopifyOrderAdminUrl";
 import { WAREHOUSE_TZ, formatDateAsOrdinalInTimeZone } from "@/lib/warehouseLondonDay";
 
 export const dynamic = "force-dynamic";
@@ -388,7 +388,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                           View
                         </Link>
                         <a
-                          href={shopifyOrderAdminUrl(r.orderRef)}
+                          href={shopifyOrderAdminUrlFromOrderRef(r.orderRef)}
                           className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[#006e52] bg-[#008060] px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950"
                           target="_blank"
                           rel="noopener noreferrer"

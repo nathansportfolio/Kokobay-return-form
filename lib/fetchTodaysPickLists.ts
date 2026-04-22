@@ -10,6 +10,10 @@ import {
   isOrderOnWarehouseDay,
 } from "@/lib/warehouseLondonDay";
 import { compareKokobayLocation } from "@/lib/kokobayLocationFormat";
+import {
+  getTodaysShopifyOrderForPicks,
+  isShopifyWarehouseDataEnabled,
+} from "@/lib/shopifyWarehouseDayOrders";
 
 export const DEFAULT_ORDERS_PER_PICK_LIST = 5;
 const MIN_ORDERS_PER_PICK = 1;
@@ -206,41 +210,49 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
   /** Orders placed on the warehouse day (before excluding completed). */
   dayOrderCount: number;
   batches: TodaysPickListBatch[];
+  dataSource: "shopify" | "sample";
 }> {
-  const client = await clientPromise;
-  const db = client.db(kokobayDbName);
   const now = new Date();
   const dayKey = calendarDateKeyInTz(now, WAREHOUSE_TZ);
 
-  const raw = await db
-    .collection("orders")
-    .find(
-      {},
-      {
-        projection: {
-          orderNumber: 1,
-          status: 1,
-          items: 1,
-          createdAt: 1,
-          _id: 0,
+  let allTodays: OrderForPick[] = [];
+  if (isShopifyWarehouseDataEnabled()) {
+    allTodays = await getTodaysShopifyOrderForPicks(dayKey);
+  } else {
+    const client = await clientPromise;
+    const db = client.db(kokobayDbName);
+    const raw = await db
+      .collection("orders")
+      .find(
+        {},
+        {
+          projection: {
+            orderNumber: 1,
+            status: 1,
+            items: 1,
+            createdAt: 1,
+            _id: 0,
+          },
         },
-      },
-    )
-    .sort({ orderNumber: 1 })
-    .limit(500)
-    .toArray();
+      )
+      .sort({ orderNumber: 1 })
+      .limit(500)
+      .toArray();
 
-  const allTodays: OrderForPick[] = [];
-  for (const doc of raw) {
-    const createdAt = doc.createdAt instanceof Date ? doc.createdAt : null;
-    if (!createdAt || !isOrderOnWarehouseDay(createdAt, dayKey, WAREHOUSE_TZ)) {
-      continue;
+    for (const doc of raw) {
+      const createdAt = doc.createdAt instanceof Date ? doc.createdAt : null;
+      if (
+        !createdAt ||
+        !isOrderOnWarehouseDay(createdAt, dayKey, WAREHOUSE_TZ)
+      ) {
+        continue;
+      }
+      allTodays.push({
+        orderNumber: String(doc.orderNumber ?? ""),
+        status: String(doc.status ?? "pending"),
+        items: (doc.items ?? []) as WarehouseOrderLine[],
+      });
     }
-    allTodays.push({
-      orderNumber: String(doc.orderNumber ?? ""),
-      status: String(doc.status ?? "pending"),
-      items: (doc.items ?? []) as WarehouseOrderLine[],
-    });
   }
 
   allTodays.sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
@@ -276,5 +288,6 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
     completedPicklistCount,
     dayOrderCount,
     batches,
+    dataSource: isShopifyWarehouseDataEnabled() ? "shopify" : "sample",
   };
 }

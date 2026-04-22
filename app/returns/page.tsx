@@ -15,7 +15,8 @@ export default function ReturnsPage() {
           Returns
         </h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Enter an order number to start a return or inspection.
+          We resolve your entry in <strong>Shopify</strong>, then open the return
+          screen for that order (name, id, and customer from live order data).
         </p>
         <div className="mt-4 flex flex-wrap gap-1.5" aria-label="Return lists">
           <Link

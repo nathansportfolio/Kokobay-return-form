@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Document } from "mongodb";
+import { getOrderRefLookupAliases } from "@/lib/orderRefAliases";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import {
   CUSTOMER_FORM_REASONS,
@@ -176,10 +177,23 @@ export async function getLatestCustomerReturnFormForOrder(
   const col = client
     .db(kokobayDbName)
     .collection<CustomerReturnFormDoc>(CUSTOMER_RETURN_FORMS_COLLECTION);
+  const aliases = getOrderRefLookupAliases(key);
+  const orClause =
+    aliases.length < 2
+      ? {
+          orderRef: {
+            $regex: new RegExp(`^${escCustomerFormRegex(aliases[0] ?? key)}$`, "i"),
+          },
+        }
+      : {
+          $or: aliases.map((a) => ({
+            orderRef: {
+              $regex: new RegExp(`^${escCustomerFormRegex(a)}$`, "i"),
+            },
+          })),
+        };
   const docs = await col
-    .find({
-      orderRef: { $regex: new RegExp(`^${escCustomerFormRegex(key)}$`, "i") },
-    })
+    .find(orClause)
     .sort({ createdAt: -1 })
     .limit(1)
     .toArray();

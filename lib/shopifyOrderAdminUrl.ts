@@ -1,9 +1,33 @@
 const DEFAULT_SHOPIFY_STORE = "koko-bay";
 
+function storeHandle(): string {
+  return process.env.NEXT_PUBLIC_SHOPIFY_STORE_HANDLE?.trim() || DEFAULT_SHOPIFY_STORE;
+}
+
 /**
- * Numeric order id in Shopify admin URLs, when it differs from the
- * `/returns/:orderLabel` key. Set e.g. `{"2122":"12983974494594"}` in
- * `NEXT_PUBLIC_SHOPIFY_ORDER_ADMIN_ID_MAP` (JSON object).
+ * Path shape (example):
+ * `https://admin.shopify.com/store/koko-bay/orders/12985108038018`
+ * The last segment is Shopify’s **resource id** (Admin / REST `order.id`), not the
+ * order name or `order_number`.
+ */
+function buildAdminOrderUrl(shopifyOrderId: string): string {
+  const id = String(shopifyOrderId).trim();
+  return `https://admin.shopify.com/store/${storeHandle()}/orders/${encodeURIComponent(id)}`;
+}
+
+/**
+ * Use when you have the real Shopify order id (from API `order.id`). Prefer
+ * `shopifyOrderId` string on app `Order` to avoid large-integer precision issues.
+ */
+export function shopifyOrderAdminUrlByOrderId(
+  orderId: number | string,
+): string {
+  return buildAdminOrderUrl(String(orderId));
+}
+
+/**
+ * Map warehouse / customer order ref to the numeric id used in admin URLs.
+ * Set `NEXT_PUBLIC_SHOPIFY_ORDER_ADMIN_ID_MAP` to JSON e.g. `{"333344":"12985108038018"}`.
  */
 export function resolveShopifyAdminOrderId(orderLabel: string): string {
   const key = orderLabel.trim();
@@ -15,17 +39,26 @@ export function resolveShopifyAdminOrderId(orderLabel: string): string {
         return map[key] ?? map[key.toUpperCase()] ?? key;
       }
     } catch {
-      /* use key as id */
+      /* */
     }
   }
   return key;
 }
 
-/** `https://admin.shopify.com/store/koko-bay/orders/…` (customisable via env). */
-export function shopifyOrderAdminUrl(orderLabel: string): string {
-  const id = resolveShopifyAdminOrderId(orderLabel);
-  const store =
-    process.env.NEXT_PUBLIC_SHOPIFY_STORE_HANDLE?.trim() ||
-    DEFAULT_SHOPIFY_STORE;
-  return `https://admin.shopify.com/store/${store}/orders/${encodeURIComponent(id)}`;
+/**
+ * When you only have a customer or logged `orderRef` (not the REST id).
+ * If the ref is already a long numeric id (typical admin id length), it is used as-is;
+ * otherwise the env map (or the ref) is used.
+ */
+export function shopifyOrderAdminUrlFromOrderRef(orderRef: string): string {
+  const t = orderRef.trim();
+  if (/^\d{10,}$/.test(t)) {
+    return buildAdminOrderUrl(t);
+  }
+  return buildAdminOrderUrl(resolveShopifyAdminOrderId(t));
+}
+
+/** @alias {@link shopifyOrderAdminUrlFromOrderRef} */
+export function shopifyOrderAdminUrl(orderRef: string): string {
+  return shopifyOrderAdminUrlFromOrderRef(orderRef);
 }

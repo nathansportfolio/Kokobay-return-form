@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { Document, Filter } from "mongodb";
+import { getOrderRefLookupAliases } from "@/lib/orderRefAliases";
+import {
+  customerFormReasonLabel,
+  isCustomerFormReturnReasonValue,
+} from "@/lib/customerReturnFormReasons";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import { returnReasonLabel } from "@/lib/returnReasons";
 import type {
@@ -31,6 +36,14 @@ function lineTotal(quantity: number, unit: number) {
   return Math.round(quantity * unit * 100) / 100;
 }
 
+function returnLogLineReasonLabel(reason: string | null): string {
+  if (reason == null || reason === "") return "—";
+  if (isCustomerFormReturnReasonValue(reason)) {
+    return customerFormReasonLabel(reason);
+  }
+  return returnReasonLabel(reason);
+}
+
 export async function insertReturnLog(
   input: InsertReturnLogInput,
 ): Promise<string> {
@@ -51,7 +64,7 @@ export async function insertReturnLog(
       quantity: l.quantity,
       unitPrice: l.unitPrice,
       reason: l.reason,
-      reasonLabel: returnReasonLabel(l.reason),
+      reasonLabel: returnLogLineReasonLabel(l.reason),
       disposition: l.disposition,
       lineTotalGbp: lt,
     };
@@ -196,8 +209,17 @@ export async function getLatestReturnLogForOrder(
   const col = client
     .db(kokobayDbName)
     .collection<ReturnLogMongo>(RETURN_LOGS_COLLECTION);
+  const aliases = getOrderRefLookupAliases(key);
+  const orClause =
+    aliases.length < 2
+      ? { orderRef: { $regex: new RegExp(`^${escRegex(aliases[0] ?? key)}$`, "i") } }
+      : {
+          $or: aliases.map((a) => ({
+            orderRef: { $regex: new RegExp(`^${escRegex(a)}$`, "i") },
+          })),
+        };
   const docs = await col
-    .find({ orderRef: { $regex: new RegExp(`^${escRegex(key)}$`, "i") } })
+    .find(orClause)
     .sort({ createdAt: -1 })
     .limit(1)
     .toArray();

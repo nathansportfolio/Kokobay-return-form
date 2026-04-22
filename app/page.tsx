@@ -22,7 +22,7 @@ export default function Home() {
               Today’s pick lists
             </span>
             <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Five orders per list, stops in efficient walk order
+              Shopify lines for today (when configured), walk by location
             </span>
           </Link>
         </li>
@@ -41,6 +41,19 @@ export default function Home() {
         </li>
         <li>
           <Link
+            href="/orders/shopify"
+            className="flex flex-col rounded-xl border border-sky-200 bg-sky-50/90 p-5 transition-colors hover:border-sky-300 hover:bg-sky-100/90 dark:border-sky-900/40 dark:bg-sky-950/30 dark:hover:border-sky-800/60 dark:hover:bg-sky-900/30"
+          >
+            <span className="text-sm font-semibold text-foreground">
+              Shopify orders
+            </span>
+            <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              All live orders (cached ~1 min), return + admin links
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link
             href="/orders/today"
             className="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/80 p-5 transition-colors hover:border-zinc-300 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950/50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900/80"
           >
@@ -48,7 +61,7 @@ export default function Home() {
               Today’s orders
             </span>
             <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Lines, units to pick, and totals for the warehouse day
+              Today’s Shopify orders for the warehouse (or sample data)
             </span>
           </Link>
         </li>
@@ -62,6 +75,19 @@ export default function Home() {
             </span>
             <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
               Hub and links to picking tools
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link
+            href="/products"
+            className="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/80 p-5 transition-colors hover:border-zinc-300 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950/50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900/80"
+          >
+            <span className="text-sm font-semibold text-foreground">
+              Product catalog
+            </span>
+            <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Live Shopify with warehouse locations from Mongo
             </span>
           </Link>
         </li>

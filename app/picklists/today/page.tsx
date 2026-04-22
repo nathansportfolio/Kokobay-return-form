@@ -4,10 +4,8 @@ import { Suspense } from "react";
 import { PicklistMarkCompleteButton } from "@/components/PicklistMarkCompleteButton";
 import { PicklistOrdersPerListSelect } from "@/components/PicklistOrdersPerListSelect";
 import { WarehouseLocationLine } from "@/components/WarehouseLocationLine";
-import {
-  fetchTodaysPickLists,
-  parseOrdersPerListParam,
-} from "@/lib/fetchTodaysPickLists";
+import { fetchTodaysPickLists, parseOrdersPerListParam } from "@/lib/fetchTodaysPickLists";
+import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +32,9 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
           Today’s pick lists
         </h1>
         <p className="text-sm text-red-600 dark:text-red-400">
-          Could not load pick lists. Check MongoDB is configured and reachable.
+          Could not load pick lists. If you use Shopify, check{" "}
+          <code className="font-mono">SHOPIFY_</code> env vars. Otherwise
+          check MongoDB for sample orders.
         </p>
       </div>
     );
@@ -46,6 +46,7 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
     ordersPerList: appliedOrdersPerList,
     totalPicklistsForDay,
     completedPicklistCount,
+    dataSource,
   } = payload;
   const completedQuery = new URLSearchParams();
   completedQuery.set("ordersPerList", String(appliedOrdersPerList));
@@ -66,6 +67,15 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
             View completed
           </Link>
         </div>
+        {dataSource === "shopify" ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <span className="font-medium text-foreground">Today’s orders are from Shopify</span>{" "}
+            (same list as <Link className="underline" href="/orders/today">Today’s orders</Link>).
+            Bin and walk order use <span className="text-foreground">mock location codes</span> for
+            now. Thumbnails and colour may still come from <code className="text-xs">products</code> in
+            Mongo when the SKU exists.
+          </p>
+        ) : null}
         {showProgress && (
           <p
             className="text-sm text-zinc-600 dark:text-zinc-400"
@@ -97,9 +107,25 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
             No orders to pick today
           </p>
           <p className="mt-2 text-sm text-zinc-500">
-            Pick lists follow the same calendar day as{" "}
-            <span className="font-medium text-foreground">Today’s orders</span>.
-            Seed orders on the current day, or open that page to confirm dates.
+            {dataSource === "shopify" ? (
+              <>
+                No Shopify line items to pick for the warehouse day, or
+                all are already in completed pick lists. See{" "}
+                <Link
+                  className="font-medium text-foreground underline"
+                  href="/orders/today"
+                >
+                  Today’s orders
+                </Link>{" "}
+                for the same set.
+              </>
+            ) : (
+              <>
+                Pick lists follow the same day as{" "}
+                <span className="font-medium text-foreground">Today’s orders</span>{" "}
+                (sample Mongo <code>orders</code>).
+              </>
+            )}
           </p>
         </div>
       ) : (
@@ -153,14 +179,16 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <WarehouseLocationLine location={s.location} />
-                          <p className="mt-1.5 min-w-0 break-all font-mono text-xs text-zinc-500 sm:text-sm">
-                            <span className="text-zinc-500 dark:text-zinc-400">
-                              SKU:{" "}
-                            </span>
-                            <span className="font-medium text-foreground">
-                              {s.sku}
-                            </span>
-                          </p>
+                          {!isVariantIdPlaceholderSku(s.sku) ? (
+                            <p className="mt-1.5 min-w-0 break-all font-mono text-xs text-zinc-500 sm:text-sm">
+                              <span className="text-zinc-500 dark:text-zinc-400">
+                                SKU:{" "}
+                              </span>
+                              <span className="font-medium text-foreground">
+                                {s.sku}
+                              </span>
+                            </p>
+                          ) : null}
                           <p className="mt-1.5 text-sm leading-snug text-zinc-700 dark:text-zinc-300">
                             {s.name}
                           </p>
@@ -229,20 +257,22 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
                       <ol className="mt-1.5 list-decimal pl-5 text-sm text-zinc-700 dark:text-zinc-300">
                         {o.lines.map((line) => (
                           <li key={`${o.orderNumber}-${line.lineIndex}`} className="pl-0.5">
-                            <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400 sm:text-sm">
-                              {line.sku}
-                            </span>
-                            <span className="ml-1.5 tabular-nums font-medium text-foreground">
-                              ×{line.quantity}
-                            </span>
-                            <span className="ml-1.5 text-zinc-600 dark:text-zinc-400">
-                              {line.name}
-                            </span>
-                            {line.color ? (
-                              <span className="ml-1.5 text-zinc-500">
-                                · {line.color}
+                            <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
+                              {!isVariantIdPlaceholderSku(line.sku) ? (
+                                <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400 sm:text-sm">
+                                  {line.sku}
+                                </span>
+                              ) : null}
+                              <span className="tabular-nums font-medium text-foreground">
+                                ×{line.quantity}
                               </span>
-                            ) : null}
+                              <span className="text-zinc-600 dark:text-zinc-400">
+                                {line.name}
+                              </span>
+                              {line.color ? (
+                                <span className="text-zinc-500">· {line.color}</span>
+                              ) : null}
+                            </span>
                           </li>
                         ))}
                       </ol>

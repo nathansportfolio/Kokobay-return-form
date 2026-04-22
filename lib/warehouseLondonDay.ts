@@ -1,4 +1,38 @@
+import { DateTime } from "luxon";
+
 export const WAREHOUSE_TZ = "Europe/London";
+
+/**
+ * Full warehouse calendar day in UTC, for Shopify `created_at_min` / `created_at_max`
+ * (inclusive of that entire London wall-clock day, including GMT/BST).
+ */
+export function getWarehouseDayCreatedAtQueryBoundsUtc(
+  dayKey: string,
+): { createdAtMin: string; createdAtMax: string } {
+  const t = String(dayKey).trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (!m) {
+    throw new Error(`Invalid dayKey: ${dayKey}`);
+  }
+  const start = DateTime.fromObject(
+    {
+      year: parseInt(m[1], 10),
+      month: parseInt(m[2], 10),
+      day: parseInt(m[3], 10),
+    },
+    { zone: WAREHOUSE_TZ },
+  ).startOf("day");
+  if (!start.isValid) {
+    throw new Error(`Invalid dayKey: ${dayKey}`);
+  }
+  const end = start.endOf("day");
+  const a = start.toUTC();
+  const b = end.toUTC();
+  return {
+    createdAtMin: a.toISO() ?? a.toString(),
+    createdAtMax: b.toISO() ?? b.toString(),
+  };
+}
 
 export function calendarDateKeyInTz(iso: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
