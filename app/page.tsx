@@ -78,6 +78,19 @@ export default function Home() {
             </span>
           </Link>
         </li>
+        <li>
+          <Link
+            href="/returns/form"
+            className="flex flex-col rounded-xl border border-amber-200/90 bg-amber-50/90 p-5 transition-colors hover:border-amber-300 hover:bg-amber-100/90 dark:border-amber-800/60 dark:bg-amber-950/30 dark:hover:border-amber-700/80 dark:hover:bg-amber-950/50"
+          >
+            <span className="text-sm font-semibold text-amber-950 dark:text-amber-200">
+              Example form for customers
+            </span>
+            <span className="mt-1 text-sm text-amber-900/90 dark:text-amber-200/80">
+              Order lookup, items, reasons, then post — same flow as the live store
+            </span>
+          </Link>
+        </li>
       </ul>
     </div>
   );

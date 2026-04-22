@@ -22,7 +22,14 @@ export default function ReturnsPage() {
           >
             View logged returns
           </Link>
-          .
+          .{" "}
+          <Link
+            className="font-medium text-foreground underline"
+            href="/returns/form"
+          >
+            Customer return form
+          </Link>{" "}
+          (the online flow customers use).
         </p>
       </div>
       <ReturnsOrderForm />
