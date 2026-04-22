@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRef } from "react";
 import { toast } from "sonner";
 
@@ -58,14 +57,6 @@ export function ReturnsOrderForm() {
       >
         Open order return
       </button>
-      <p className="text-center text-sm text-zinc-600">
-        <Link
-          href="/returns/420420"
-          className="font-medium text-foreground underline underline-offset-2"
-        >
-          Open mock order (420420)
-        </Link>
-      </p>
     </form>
   );
 }
