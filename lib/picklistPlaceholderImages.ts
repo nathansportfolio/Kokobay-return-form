@@ -33,3 +33,15 @@ export function womensFashionPlaceholderForStep(step: PlaceholderKey): string {
   const i = hash32(key) % WOMENS_FASHION_PLACEHOLDER_IMAGES.length;
   return WOMENS_FASHION_PLACEHOLDER_IMAGES[i]!;
 }
+
+type ReturnLineKey = { lineId: string; sku: string };
+
+/**
+ * Women’s / girls’ clothing–style Unsplash art for returns when a line image is missing
+ * or fails. Stable per `lineId`+`sku`.
+ */
+export function womensFashionPlaceholderForReturnLine(key: ReturnLineKey): string {
+  const s = `${key.lineId}\t${key.sku}`;
+  const i = hash32(s) % WOMENS_FASHION_PLACEHOLDER_IMAGES.length;
+  return WOMENS_FASHION_PLACEHOLDER_IMAGES[i]!;
+}

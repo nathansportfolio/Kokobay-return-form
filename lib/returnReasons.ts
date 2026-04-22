@@ -10,3 +10,9 @@ export const RETURN_REASONS = [
   { value: "defective", label: "Faulty / defective" },
   { value: "other", label: "Other" },
 ] as const;
+
+export function returnReasonLabel(value: string | null | undefined): string {
+  if (!value || value === RETURN_REASON_UNSET) return "—";
+  const r = RETURN_REASONS.find((o) => o.value === value);
+  return r?.label ?? value;
+}

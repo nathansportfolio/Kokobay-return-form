@@ -1,14 +1,16 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
 import { formatGbp } from "@/lib/kokobayOrderLines";
+import { womensFashionPlaceholderForReturnLine } from "@/lib/picklistPlaceholderImages";
 import {
   RETURN_REASONS,
   RETURN_REASON_UNSET,
 } from "@/lib/returnReasons";
+import type { ReturnPageResume } from "@/lib/returnLogTypes";
 import { toast } from "sonner";
 
 type LineState = {
@@ -35,19 +37,99 @@ function initialState(lines: KokobayOrderLine[]): Record<string, LineState> {
   );
 }
 
+function buildInitialState(
+  lines: KokobayOrderLine[],
+  resume: ReturnPageResume | null,
+): Record<string, LineState> {
+  if (!resume) {
+    return initialState(lines);
+  }
+  return Object.fromEntries(
+    lines.map((line) => {
+      const r = resume.byLine[line.id];
+      if (r) {
+        return [
+          line.id,
+          {
+            selected: true,
+            reason:
+              r.reason == null || r.reason === ""
+                ? RETURN_REASON_UNSET
+                : r.reason,
+            disposition: r.disposition,
+          } satisfies LineState,
+        ];
+      }
+      return [line.id, emptyLine()];
+    }),
+  );
+}
+
 function orderTotal(lines: KokobayOrderLine[]): number {
   return lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
+}
+
+function ReturnLineThumbnail({
+  line,
+}: {
+  line: Pick<KokobayOrderLine, "id" | "sku" | "title" | "imageUrl">;
+}) {
+  const placeholder = useMemo(
+    () =>
+      womensFashionPlaceholderForReturnLine({
+        lineId: line.id,
+        sku: line.sku,
+      }),
+    [line.id, line.sku],
+  );
+  const primary = line.imageUrl?.trim();
+  const [src, setSrc] = useState(() => primary || placeholder);
+  useEffect(() => {
+    setSrc(primary || placeholder);
+  }, [line.id, line.imageUrl, primary, placeholder]);
+
+  return (
+    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
+      <img
+        src={src}
+        alt=""
+        width={80}
+        height={80}
+        className="h-full w-full object-cover"
+        loading="lazy"
+        decoding="async"
+        onError={() => {
+          setSrc((s) => (s === placeholder ? s : placeholder));
+        }}
+      />
+    </div>
+  );
 }
 
 export function OrderReturnLines({
   orderLabel,
   lines,
+  resume = null,
 }: {
   orderLabel: string;
   lines: KokobayOrderLine[];
+  /** When present, pre-fill from the last return log for this order. */
+  resume?: ReturnPageResume | null;
 }) {
-  const [byId, setById] = useState(() => initialState(lines));
+  const router = useRouter();
+  const [byId, setById] = useState(() => buildInitialState(lines, resume));
   const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [returnUid, setReturnUid] = useState<string | null>(
+    () => resume?.returnUid ?? null,
+  );
+  const [regEmail, setRegEmail] = useState(
+    () => resume?.customerEmailSent ?? false,
+  );
+  const [regRefund, setRegRefund] = useState(
+    () => resume?.fullRefundIssued ?? false,
+  );
+  const [saving, setSaving] = useState(false);
+  const [returnBusy, setReturnBusy] = useState(false);
   const masterCheckboxRef = useRef<HTMLInputElement>(null);
 
   const lineKey = useMemo(() => lines.map((l) => l.id).join("\0"), [lines]);
@@ -135,24 +217,85 @@ export function OrderReturnLines({
     [lines],
   );
 
-  const sendReceivedEmail = useCallback(() => {
-    console.info("Email customer: return received", { order: orderLabel });
-    toast.success("Customer email queued", {
-      description:
-        "We will let them know we received their return. Connect your email API to send for real.",
-    });
-  }, [orderLabel]);
+  const applyLogFlags = useCallback(
+    (doc: { customerEmailSent: boolean; fullRefundIssued: boolean }) => {
+      setRegEmail(!!doc.customerEmailSent);
+      setRegRefund(!!doc.fullRefundIssued);
+    },
+    [],
+  );
 
-  const confirmFullRefund = useCallback(() => {
-    console.info("Issue full refund", {
-      order: orderLabel,
-      amount: fullOrderTotal,
-    });
-    setRefundModalOpen(false);
-    toast.success("Full refund recorded", {
-      description: `${formatGbp(fullOrderTotal)} for order ${orderLabel}. Hook up payments to process for real.`,
-    });
-  }, [orderLabel, fullOrderTotal]);
+  const sendReceivedEmail = useCallback(async () => {
+    if (!returnUid) {
+      toast.error("Log this return first", {
+        description: "Use “Log return” to register, then you can mark email sent.",
+      });
+      return;
+    }
+    setReturnBusy(true);
+    try {
+      const res = await fetch(`/api/returns/log/${encodeURIComponent(returnUid)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markEmailSent: true }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        return?: { customerEmailSent: boolean; fullRefundIssued: boolean };
+      };
+      if (!res.ok || !data.ok) {
+        toast.error(data.error ?? "Could not update");
+        return;
+      }
+      if (data.return) applyLogFlags(data.return);
+      else setRegEmail(true);
+      router.refresh();
+      toast.success("Customer email marked as sent", {
+        description: "We received their return. Connect your email API to actually send email.",
+      });
+    } finally {
+      setReturnBusy(false);
+    }
+  }, [applyLogFlags, returnUid, router]);
+
+  const confirmFullRefund = useCallback(async () => {
+    if (!returnUid) {
+      toast.error("Log this return first", {
+        description: "Use “Log return” to register, then you can mark the refund.",
+      });
+      return;
+    }
+    setReturnBusy(true);
+    try {
+      const res = await fetch(`/api/returns/log/${encodeURIComponent(returnUid)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          markFullRefund: true,
+          fullRefundAmountGbp: fullOrderTotal,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        return?: { customerEmailSent: boolean; fullRefundIssued: boolean };
+      };
+      if (!res.ok || !data.ok) {
+        toast.error(data.error ?? "Could not update");
+        return;
+      }
+      if (data.return) applyLogFlags(data.return);
+      else setRegRefund(true);
+      setRefundModalOpen(false);
+      router.refresh();
+      toast.success("Full refund recorded", {
+        description: `${formatGbp(fullOrderTotal)} for order ${orderLabel}. Connect payments to process for real.`,
+      });
+    } finally {
+      setReturnBusy(false);
+    }
+  }, [applyLogFlags, fullOrderTotal, orderLabel, returnUid, router]);
 
   useEffect(() => {
     if (!refundModalOpen) return;
@@ -174,19 +317,58 @@ export function OrderReturnLines({
             {orderLabel}
           </p>
         </div>
-        <Link
-          href="/returns"
-          className="text-sm font-medium text-zinc-600 underline-offset-4 hover:text-foreground hover:underline dark:text-zinc-400"
-        >
-          Different order
-        </Link>
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+          <Link
+            href="/returns/logged"
+            className="text-sm font-medium text-zinc-600 underline-offset-4 hover:text-foreground hover:underline dark:text-zinc-400"
+          >
+            Logged returns
+          </Link>
+          <span className="text-zinc-300 dark:text-zinc-600" aria-hidden>
+            |
+          </span>
+          <Link
+            href="/returns"
+            className="text-sm font-medium text-zinc-600 underline-offset-4 hover:text-foreground hover:underline dark:text-zinc-400"
+          >
+            Different order
+          </Link>
+        </div>
       </div>
 
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        Use the checkbox to include a line in this return. Choose a reason and
-        whether it goes back on the shelf or is disposed of. The refund total
-        updates as you toggle lines.
-      </p>
+      {resume ? (
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Pre-filled from your last return for this order reference.
+        </p>
+      ) : null}
+
+      {returnUid ? (
+        <div
+          className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm dark:border-emerald-900/60 dark:bg-emerald-950/30"
+          role="status"
+        >
+          <p className="font-medium text-emerald-900 dark:text-emerald-200">
+            This return is registered
+          </p>
+          <p className="mt-1.5 break-all font-mono text-xs text-emerald-800/90 dark:text-emerald-300/90">
+            {returnUid}
+          </p>
+          <p className="mt-1.5 text-xs text-emerald-800/90 dark:text-emerald-300/90">
+            Customer email: {regEmail ? "Sent (logged)" : "Not yet"} · Full
+            refund: {regRefund ? "Yes (logged)" : "Not yet"}{" "}
+            {returnUid && (
+              <span className="ml-0.5 inline">
+                <Link
+                  className="font-medium underline"
+                  href={`/returns/logged/${encodeURIComponent(returnUid)}`}
+                >
+                  Open log entry
+                </Link>
+              </span>
+            )}
+          </p>
+        </div>
+      ) : null}
 
       <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
         <input
@@ -251,19 +433,20 @@ export function OrderReturnLines({
                       aria-label={`Include ${line.title} in this return`}
                     />
                   </span>
-                  <label
-                    htmlFor={checkboxId}
+                  <div
                     className="flex min-w-0 flex-1 cursor-pointer gap-3 sm:items-start"
+                    onClick={() => setLineSelected(line.id, !selected)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setLineSelected(line.id, !selected);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Toggle line: ${line.title}`}
                   >
-                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
-                      <Image
-                        src={line.imageUrl}
-                        alt={line.title}
-                        fill
-                        className="object-cover"
-                        sizes="80px"
-                      />
-                    </div>
+                    <ReturnLineThumbnail line={line} />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-foreground">{line.title}</p>
                       <p className="mt-0.5 font-mono text-xs text-zinc-500">
@@ -276,7 +459,7 @@ export function OrderReturnLines({
                         </span>
                       </p>
                     </div>
-                  </label>
+                  </div>
                 </div>
 
                 <div
@@ -318,7 +501,13 @@ export function OrderReturnLines({
                         Warehouse handling
                       </legend>
                       <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm has-[:checked]:border-amber-500 has-[:checked]:ring-1 has-[:checked]:ring-amber-500 dark:border-zinc-700">
+                        <label
+                          className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                            s.disposition === "restock"
+                              ? "border-emerald-500 bg-emerald-50 font-medium text-emerald-900 ring-1 ring-emerald-500/45 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-500/35"
+                              : "border-zinc-200 bg-white text-foreground dark:border-zinc-700"
+                          }`}
+                        >
                           <input
                             type="radio"
                             name={`disp-${idBase}`}
@@ -326,16 +515,32 @@ export function OrderReturnLines({
                             onChange={() =>
                               updateLine(line.id, { disposition: "restock" })
                             }
+                            className={
+                              s.disposition === "restock"
+                                ? "accent-emerald-600"
+                                : "accent-zinc-400"
+                            }
                           />
                           On shelf / to be reshelved
                         </label>
-                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm has-[:checked]:border-amber-500 has-[:checked]:ring-1 has-[:checked]:ring-amber-500 dark:border-zinc-700">
+                        <label
+                          className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                            s.disposition === "dispose"
+                              ? "border-red-500 bg-red-50 font-medium text-red-900 ring-1 ring-red-500/45 dark:border-red-500 dark:bg-red-950/40 dark:text-red-200 dark:ring-red-500/35"
+                              : "border-zinc-200 bg-white text-foreground dark:border-zinc-700"
+                          }`}
+                        >
                           <input
                             type="radio"
                             name={`disp-${idBase}`}
                             checked={s.disposition === "dispose"}
                             onChange={() =>
                               updateLine(line.id, { disposition: "dispose" })
+                            }
+                            className={
+                              s.disposition === "dispose"
+                                ? "accent-red-600"
+                                : "accent-zinc-400"
                             }
                           />
                           Disposed of
@@ -353,15 +558,27 @@ export function OrderReturnLines({
       <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
         <button
           type="button"
-          className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:hover:bg-zinc-800"
-          onClick={sendReceivedEmail}
+          className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition-colors enabled:hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:enabled:hover:bg-zinc-800"
+          disabled={!returnUid || returnBusy}
+          onClick={() => {
+            void sendReceivedEmail();
+          }}
         >
-          Email customer — we received their return
+          {returnBusy
+            ? "…"
+            : "Email customer — we received their return (mark as sent)"}
         </button>
         <button
           type="button"
-          className="w-full rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-800 shadow-sm transition-colors hover:bg-red-50 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-950/50"
+          className="w-full rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-800 shadow-sm transition-colors enabled:hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200 dark:enabled:hover:bg-red-950/50"
+          disabled={!returnUid || returnBusy}
           onClick={() => {
+            if (!returnUid) {
+              toast.error("Log this return first", {
+                description: "Use “Log return” below, then you can mark the refund.",
+              });
+              return;
+            }
             setRefundModalOpen(true);
             toast.message("Confirm full refund", {
               description: `${formatGbp(fullOrderTotal)} — check the dialog.`,
@@ -389,8 +606,9 @@ export function OrderReturnLines({
         </div>
         <button
           type="button"
-          className="mt-4 w-full rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 active:opacity-90"
-          onClick={() => {
+          className="mt-4 w-full rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity enabled:hover:opacity-90 active:enabled:opacity-90 disabled:opacity-50"
+          disabled={saving}
+          onClick={async () => {
             if (selectedCount === 0) {
               toast.warning("Select at least one line", {
                 description:
@@ -398,29 +616,56 @@ export function OrderReturnLines({
               });
               return;
             }
-            const payload = lines
-              .filter((l) => byId[l.id]?.selected)
-              .map((l) => {
-                const row = { ...emptyLine(), ...byId[l.id] };
-                return {
-                  line: l,
-                  reason:
-                    row.reason === RETURN_REASON_UNSET ? null : row.reason,
-                  disposition: row.disposition,
-                  selected: row.selected,
-                };
+            setSaving(true);
+            try {
+              const body = {
+                orderRef: orderLabel,
+                lines: lines
+                  .filter((l) => byId[l.id]?.selected)
+                  .map((l) => {
+                    const row = { ...emptyLine(), ...byId[l.id] };
+                    return {
+                      lineId: l.id,
+                      sku: l.sku,
+                      title: l.title,
+                      quantity: l.quantity,
+                      unitPrice: l.unitPrice,
+                      reason:
+                        row.reason === RETURN_REASON_UNSET
+                          ? null
+                          : row.reason,
+                      disposition: row.disposition,
+                    };
+                  }),
+              };
+              const res = await fetch("/api/returns/log", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
               });
-            console.info("Return draft", { order: orderLabel, payload });
-            toast.success("Return draft saved", {
-              description: `${selectedCount} line(s) · ${formatGbp(selectedRefund)} refund value.`,
-            });
+              const data = (await res.json().catch(() => ({}))) as {
+                ok?: boolean;
+                returnUid?: string;
+                error?: string;
+              };
+              if (!res.ok || !data.ok || !data.returnUid) {
+                toast.error(data.error ?? "Could not log return");
+                return;
+              }
+              setReturnUid(data.returnUid);
+              setRegEmail(false);
+              setRegRefund(false);
+              router.refresh();
+              toast.success("Return registered", {
+                description: `${selectedCount} line(s) · ${formatGbp(selectedRefund)} · You can now mark email or refund above.`,
+              });
+            } finally {
+              setSaving(false);
+            }
           }}
         >
-          Save return draft
+          {saving ? "Saving…" : "Log return"}
         </button>
-        <p className="mt-2 text-center text-xs text-zinc-500">
-          Hook this button to your warehouse API when ready.
-        </p>
       </div>
 
       {refundModalOpen ? (
@@ -471,8 +716,11 @@ export function OrderReturnLines({
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-red-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-800"
-                onClick={confirmFullRefund}
+                className="rounded-lg bg-red-700 px-4 py-2.5 text-sm font-medium text-white enabled:hover:bg-red-800 disabled:opacity-50"
+                disabled={returnBusy}
+                onClick={() => {
+                  void confirmFullRefund();
+                }}
               >
                 Yes, issue full refund
               </button>

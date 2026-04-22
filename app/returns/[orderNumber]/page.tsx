@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OrderReturnLines } from "@/components/OrderReturnLines";
-import { getKokobayOrderLines } from "@/lib/kokobayOrderLines";
+import { getReturnPageLinesAndResume } from "@/lib/returnPageContext";
 
 type PageProps = {
   params: Promise<{ orderNumber: string }>;
@@ -21,7 +21,20 @@ export async function generateMetadata({
 export default async function OrderReturnPage({ params }: PageProps) {
   const { orderNumber } = await params;
   const label = decodeURIComponent(orderNumber);
-  const lines = getKokobayOrderLines(label);
+
+  let lines: Awaited<ReturnType<typeof getReturnPageLinesAndResume>>["lines"] =
+    [];
+  let resume: Awaited<
+    ReturnType<typeof getReturnPageLinesAndResume>
+  >["resume"] = null;
+  let loadError: string | null = null;
+  try {
+    const r = await getReturnPageLinesAndResume(label);
+    lines = r.lines;
+    resume = r.resume;
+  } catch {
+    loadError = "Could not load products. Check MongoDB and try again.";
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-4 sm:p-6">
@@ -35,16 +48,30 @@ export default async function OrderReturnPage({ params }: PageProps) {
         </p>
       </div>
 
-      {lines.length === 0 ? (
+      {loadError ? (
+        <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
+      ) : lines.length === 0 ? (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          No lines found for this reference.{" "}
+          No products in the database for returns.{" "}
+          <span className="text-zinc-500">
+            Post to{" "}
+            <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
+              /api/warehouse/seed-mock-products
+            </code>{" "}
+            to seed the catalog, or{" "}
+          </span>
           <Link href="/returns" className="font-medium underline">
-            Try another order
+            try another order
           </Link>
           .
         </p>
       ) : (
-        <OrderReturnLines key={label} orderLabel={label} lines={lines} />
+        <OrderReturnLines
+          key={`${label}::${resume?.returnUid ?? "new"}`}
+          orderLabel={label}
+          lines={lines}
+          resume={resume}
+        />
       )}
     </div>
   );
