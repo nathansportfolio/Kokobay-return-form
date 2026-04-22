@@ -34,7 +34,7 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
           className="font-medium text-zinc-600 hover:underline dark:text-zinc-400"
           href="/returns/logged"
         >
-          ← All logged returns
+          ← All Logged Returns
         </Link>
       </p>
       <h1 className="mt-3 text-2xl font-semibold">Return log</h1>

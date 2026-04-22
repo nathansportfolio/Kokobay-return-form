@@ -7,6 +7,12 @@ import {
   CUSTOMER_FORM_REASONS,
 } from "@/lib/customerReturnFormReasons";
 import { womensFashionPlaceholderForReturnLine } from "@/lib/picklistPlaceholderImages";
+import {
+  EnvelopeSimple,
+  ListChecks,
+  MagnifyingGlass,
+  Truck,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const RETURNS_ADDRESS = `KOKOBAY RETURNS
@@ -197,8 +203,9 @@ export function CustomerReturnForm() {
           </p>
           <p className="mt-3 text-sm text-emerald-800/95 dark:text-emerald-200/90">
             If you have not posted your return yet, use the address below. We will email
-            you when the parcel has arrived. Refunds are usually processed within 5–10
-            working days after we receive the items.
+            you when the parcel has arrived. Refunds are usually processed within{" "}
+            <strong className="font-semibold">5–10 working days</strong> after we receive
+            the items.
           </p>
           <div
             className="mt-4 whitespace-pre-line border-2 border-emerald-800/30 bg-white/60 p-3 text-[0.7rem] font-semibold leading-snug text-emerald-950 sm:text-xs dark:border-emerald-700/40 dark:bg-emerald-950/20 dark:text-emerald-100"
@@ -232,11 +239,14 @@ export function CustomerReturnForm() {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 text-zinc-800 sm:space-y-8 dark:text-zinc-200">
       <header>
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Returns</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+          HOW TO RETURN: RETURNS FORM
+        </h1>
+        <p className="mt-8 text-sm leading-relaxed text-zinc-500 sm:mt-10 mb-12 sm:mb-16">
           Enter your order number, choose what you are sending back and a reason, then
           post to our address. We email you when we have your parcel, and we aim to
-          refund within 5–10 working days.
+          refund within{" "}
+          <strong className="font-semibold text-zinc-700 dark:text-zinc-300">5–10 working days</strong>.
         </p>
       </header>
 
@@ -244,19 +254,51 @@ export function CustomerReturnForm() {
         className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3 text-base leading-relaxed text-zinc-800 sm:p-4 sm:text-sm dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-200"
         aria-label="Instructions"
       >
-        <ol className="list-decimal space-y-2 pl-4">
-          <li>Enter your order number and load your items.</li>
-          <li>Tick the items you are returning and select a reason for each.</li>
-          <li>
-            Submit the form, then post your return to the address below (use a tracked
-            or signed-for service and keep your proof of postage).
+        <ul className="space-y-3" role="list" aria-label="How to return, step by step">
+          <li className="flex gap-3">
+            <MagnifyingGlass
+              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
+              weight="duotone"
+              aria-hidden
+            />
+            <span>Enter your order number and load your items.</span>
           </li>
-          <li>We email you when we have received the parcel. Refund within 5–10 working days.</li>
-        </ol>
+          <li className="flex gap-3">
+            <ListChecks
+              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
+              weight="duotone"
+              aria-hidden
+            />
+            <span>Tick the items you are returning and select a reason for each.</span>
+          </li>
+          <li className="flex gap-3">
+            <Truck
+              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
+              weight="duotone"
+              aria-hidden
+            />
+            <span>
+              Submit the form, then post your return to the address below (use a tracked
+              or signed-for service and keep your proof of postage).
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <EnvelopeSimple
+              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
+              weight="duotone"
+              aria-hidden
+            />
+            <span>
+              We email you when we have received the parcel. Refund within 5–10 working
+              days.
+            </span>
+          </li>
+        </ul>
         <p>
           Re-pack the item(s) in the original packaging where possible, with tags still
           attached. You are responsible for the parcel until it reaches us, so pack
-          items securely. If we cannot match a return to a submitted form, processing may
+          items securely. If we cannot match a return to a{" "}
+          <strong className="font-semibold">submitted form</strong>, processing may
           be delayed.
         </p>
         <div
@@ -442,8 +484,9 @@ export function CustomerReturnForm() {
               PLEASE READ – Returns policy
             </h2>
             <p>
-              Items that you wish to return must be posted back no later than 14 working
-              days from the date you receive them. We will not accept returns after this
+              Items that you wish to return must be posted back no later than{" "}
+              <strong className="font-semibold">14 working days</strong> from
+              the date you receive them. We will not accept returns after this
               time has passed.
             </p>
             <p>

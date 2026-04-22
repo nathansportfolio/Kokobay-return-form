@@ -161,3 +161,27 @@ export async function insertCustomerReturnForm(
   await col.insertOne(doc as unknown as Document);
   return submissionUid;
 }
+
+function escCustomerFormRegex(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Most recent online return form for this order (case-insensitive on `orderRef`). */
+export async function getLatestCustomerReturnFormForOrder(
+  orderRef: string,
+): Promise<CustomerReturnFormDoc | null> {
+  const key = String(orderRef).trim();
+  if (!key) return null;
+  const client = await clientPromise;
+  const col = client
+    .db(kokobayDbName)
+    .collection<CustomerReturnFormDoc>(CUSTOMER_RETURN_FORMS_COLLECTION);
+  const docs = await col
+    .find({
+      orderRef: { $regex: new RegExp(`^${escCustomerFormRegex(key)}$`, "i") },
+    })
+    .sort({ createdAt: -1 })
+    .limit(1)
+    .toArray();
+  return docs[0] ?? null;
+}

@@ -11,6 +11,8 @@ import {
   RETURN_REASON_UNSET,
 } from "@/lib/returnReasons";
 import type { ReturnPageResume } from "@/lib/returnLogTypes";
+import { shopifyOrderAdminUrl } from "@/lib/shopifyOrderAdminUrl";
+import { CurrencyGbp, EnvelopeSimple, Storefront } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 type LineState = {
@@ -188,6 +190,10 @@ export function OrderReturnLines({
     lines.length > 0 && lines.every((l) => byId[l.id]?.selected);
   const someReturned = lines.some((l) => byId[l.id]?.selected);
   const fullOrderTotal = useMemo(() => orderTotal(lines), [lines]);
+  const shopifyAdminHref = useMemo(
+    () => shopifyOrderAdminUrl(orderLabel),
+    [orderLabel],
+  );
 
   useEffect(() => {
     const el = masterCheckboxRef.current;
@@ -225,10 +231,97 @@ export function OrderReturnLines({
     [],
   );
 
+  const submitLogReturn = useCallback(async () => {
+    if (selectedCount === 0) {
+      toast.warning("Select at least one line", {
+        description: "Tick the checkboxes for items included in this return.",
+      });
+      return;
+    }
+    setSaving(true);
+    try {
+      const body = {
+        orderRef: orderLabel,
+        lines: lines
+          .filter((l) => byId[l.id]?.selected)
+          .map((l) => {
+            const row = { ...emptyLine(), ...byId[l.id] };
+            return {
+              lineId: l.id,
+              sku: l.sku,
+              title: l.title,
+              quantity: l.quantity,
+              unitPrice: l.unitPrice,
+              reason: row.reason === RETURN_REASON_UNSET ? null : row.reason,
+              disposition: row.disposition,
+            };
+          }),
+      };
+      const res = await fetch("/api/returns/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        returnUid?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok || !data.returnUid) {
+        toast.error(data.error ?? "Could not log return");
+        return;
+      }
+      const newUid = data.returnUid;
+      setReturnUid(newUid);
+
+      const patchRes = await fetch(
+        `/api/returns/log/${encodeURIComponent(newUid)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ markEmailSent: true }),
+        },
+      );
+      const patchData = (await patchRes.json().catch(() => ({}))) as {
+        ok?: boolean;
+        return?: { customerEmailSent: boolean; fullRefundIssued: boolean };
+        error?: string;
+      };
+      if (!patchRes.ok || !patchData.ok) {
+        setRegEmail(false);
+        setRegRefund(false);
+        router.refresh();
+        toast.error(
+          patchData.error ?? "Return saved but could not mark email as sent",
+          {
+            description:
+              "The return is logged; you can use “Email Customer Items Received” when it appears, or try again.",
+          },
+        );
+        return;
+      }
+      if (patchData.return) applyLogFlags(patchData.return);
+      else {
+        setRegEmail(true);
+        setRegRefund(false);
+      }
+      toast.success("Return registered", {
+        description: `${selectedCount} line(s) · Customer email marked as sent (return received). Connect your email API to actually send the email.`,
+      });
+      router.push("/returns");
+    } finally {
+      setSaving(false);
+    }
+  }, [applyLogFlags, byId, lines, orderLabel, router, selectedCount]);
+
   const sendReceivedEmail = useCallback(async () => {
+    if (regEmail) {
+      toast.info("customer already emailed");
+      return;
+    }
     if (!returnUid) {
       toast.error("Log this return first", {
-        description: "Use “Log return” to register, then you can mark email sent.",
+        description: "Use “Log & notify customer” to register, then you can mark email sent.",
       });
       return;
     }
@@ -257,12 +350,12 @@ export function OrderReturnLines({
     } finally {
       setReturnBusy(false);
     }
-  }, [applyLogFlags, returnUid, router]);
+  }, [applyLogFlags, regEmail, returnUid, router]);
 
   const confirmFullRefund = useCallback(async () => {
     if (!returnUid) {
       toast.error("Log this return first", {
-        description: "Use “Log return” to register, then you can mark the refund.",
+        description: "Use “Log & notify customer” to register, then you can mark the refund.",
       });
       return;
     }
@@ -289,7 +382,7 @@ export function OrderReturnLines({
       else setRegRefund(true);
       setRefundModalOpen(false);
       router.refresh();
-      toast.success("Full refund recorded", {
+      toast.success("Refund marked as complete", {
         description: `${formatGbp(fullOrderTotal)} for order ${orderLabel}. Connect payments to process for real.`,
       });
     } finally {
@@ -322,7 +415,7 @@ export function OrderReturnLines({
             href="/returns/logged"
             className="text-sm font-medium text-zinc-600 underline-offset-4 hover:text-foreground hover:underline dark:text-zinc-400"
           >
-            Logged returns
+            Logged Returns
           </Link>
           <span className="text-zinc-300 dark:text-zinc-600" aria-hidden>
             |
@@ -338,7 +431,15 @@ export function OrderReturnLines({
 
       {resume ? (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Pre-filled from your last return for this order reference.
+          {resume.source === "customerForm" ? (
+            <>
+              Lines, quantities, and reasons are pre-filled from the
+              customer&apos;s online return form. Review when goods arrive and
+              correct if needed.
+            </>
+          ) : (
+            <>Pre-filled from the last warehouse return for this order.</>
+          )}
         </p>
       ) : null}
 
@@ -354,8 +455,8 @@ export function OrderReturnLines({
             {returnUid}
           </p>
           <p className="mt-1.5 text-xs text-emerald-800/90 dark:text-emerald-300/90">
-            Customer email: {regEmail ? "Sent (logged)" : "Not yet"} · Full
-            refund: {regRefund ? "Yes (logged)" : "Not yet"}{" "}
+            Customer email: {regEmail ? "Sent (logged)" : "Not yet"} ·
+            Refund complete: {regRefund ? "Yes (logged)" : "Not yet"}{" "}
             {returnUid && (
               <span className="ml-0.5 inline">
                 <Link
@@ -556,37 +657,50 @@ export function OrderReturnLines({
       </ul>
 
       <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
-        <button
-          type="button"
-          className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition-colors enabled:hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:enabled:hover:bg-zinc-800"
-          disabled={!returnUid || returnBusy}
-          onClick={() => {
-            void sendReceivedEmail();
-          }}
+        <a
+          href={shopifyAdminHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-lg border border-[#006e52] bg-[#008060] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] active:bg-[#005a47] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-2 sm:min-h-10"
         >
-          {returnBusy
-            ? "…"
-            : "Email customer — we received their return (mark as sent)"}
-        </button>
-        <button
-          type="button"
-          className="w-full rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-800 shadow-sm transition-colors enabled:hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200 dark:enabled:hover:bg-red-950/50"
-          disabled={!returnUid || returnBusy}
-          onClick={() => {
-            if (!returnUid) {
-              toast.error("Log this return first", {
-                description: "Use “Log return” below, then you can mark the refund.",
+          <Storefront className="h-5 w-5 shrink-0 text-white" weight="fill" aria-hidden />
+          View order in Shopify
+        </a>
+        {returnUid && !returnBusy && !regRefund ? (
+          <button
+            type="button"
+            className="inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-800 shadow-sm transition-colors hover:bg-red-50 sm:min-h-10 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-950/50"
+            onClick={() => {
+              setRefundModalOpen(true);
+              toast.message("Confirm refund complete", {
+                description: `${formatGbp(fullOrderTotal)} — check the dialog.`,
               });
-              return;
-            }
-            setRefundModalOpen(true);
-            toast.message("Confirm full refund", {
-              description: `${formatGbp(fullOrderTotal)} — check the dialog.`,
-            });
-          }}
-        >
-          Issue full refund ({formatGbp(fullOrderTotal)})
-        </button>
+            }}
+          >
+            <CurrencyGbp
+              className="h-5 w-5 shrink-0 text-red-800 dark:text-red-200"
+              weight="duotone"
+              aria-hidden
+            />
+            Mark as refund complete ({formatGbp(fullOrderTotal)})
+          </button>
+        ) : null}
+        {returnUid && !returnBusy && !regEmail ? (
+          <button
+            type="button"
+            className="inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-zinc-50 sm:min-h-10 dark:border-zinc-600 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+            onClick={() => {
+              void sendReceivedEmail();
+            }}
+          >
+            <EnvelopeSimple
+              className="h-5 w-5 shrink-0 text-foreground"
+              weight="duotone"
+              aria-hidden
+            />
+            Email Customer Items Received
+          </button>
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-zinc-200 bg-background p-4 dark:border-zinc-800">
@@ -604,68 +718,18 @@ export function OrderReturnLines({
             {formatGbp(selectedRefund)}
           </span>
         </div>
-        <button
-          type="button"
-          className="mt-4 w-full rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity enabled:hover:opacity-90 active:enabled:opacity-90 disabled:opacity-50"
-          disabled={saving}
-          onClick={async () => {
-            if (selectedCount === 0) {
-              toast.warning("Select at least one line", {
-                description:
-                  "Tick the checkboxes for items included in this return.",
-              });
-              return;
-            }
-            setSaving(true);
-            try {
-              const body = {
-                orderRef: orderLabel,
-                lines: lines
-                  .filter((l) => byId[l.id]?.selected)
-                  .map((l) => {
-                    const row = { ...emptyLine(), ...byId[l.id] };
-                    return {
-                      lineId: l.id,
-                      sku: l.sku,
-                      title: l.title,
-                      quantity: l.quantity,
-                      unitPrice: l.unitPrice,
-                      reason:
-                        row.reason === RETURN_REASON_UNSET
-                          ? null
-                          : row.reason,
-                      disposition: row.disposition,
-                    };
-                  }),
-              };
-              const res = await fetch("/api/returns/log", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
-              });
-              const data = (await res.json().catch(() => ({}))) as {
-                ok?: boolean;
-                returnUid?: string;
-                error?: string;
-              };
-              if (!res.ok || !data.ok || !data.returnUid) {
-                toast.error(data.error ?? "Could not log return");
-                return;
-              }
-              setReturnUid(data.returnUid);
-              setRegEmail(false);
-              setRegRefund(false);
-              router.refresh();
-              toast.success("Return registered", {
-                description: `${selectedCount} line(s) · ${formatGbp(selectedRefund)} · You can now mark email or refund above.`,
-              });
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          {saving ? "Saving…" : "Log return"}
-        </button>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            type="button"
+            className="w-full rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity enabled:hover:opacity-90 active:enabled:opacity-90 disabled:opacity-50"
+            disabled={saving}
+            onClick={() => {
+              void submitLogReturn();
+            }}
+          >
+            {saving ? "Saving…" : "Log & notify customer"}
+          </button>
+        </div>
       </div>
 
       {refundModalOpen ? (
@@ -689,16 +753,16 @@ export function OrderReturnLines({
               id="refund-modal-title"
               className="text-lg font-semibold text-foreground"
             >
-              Issue full refund?
+              Mark as refund complete?
             </h2>
             <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              This will record a full refund of{" "}
+              This will record that the full refund of{" "}
               <span className="font-semibold text-foreground">
                 {formatGbp(fullOrderTotal)}
               </span>{" "}
               for order{" "}
-              <span className="font-mono font-medium">{orderLabel}</span>. This
-              cannot be undone from this screen.
+              <span className="font-mono font-medium">{orderLabel}</span> is
+              complete. This cannot be undone from this screen.
             </p>
             <p className="mt-3 text-sm font-medium text-zinc-800 dark:text-zinc-200">
               Are you sure?
@@ -722,7 +786,7 @@ export function OrderReturnLines({
                   void confirmFullRefund();
                 }}
               >
-                Yes, issue full refund
+                Yes, mark as complete
               </button>
             </div>
           </div>

@@ -39,9 +39,16 @@ export type ReturnLogListItem = {
   fullRefundIssued: boolean;
 };
 
-/** Pre-filled return form from the latest `returnLogs` row for this order. */
+/**
+ * Pre-filled return UI: from the latest warehouse return log, or from the
+ * customer’s online return form (when there is no log yet).
+ */
 export type ReturnPageResume = {
-  returnUid: string;
+  source: "returnLog" | "customerForm";
+  /** Set when a warehouse return is already registered. */
+  returnUid?: string;
+  /** Latest customer form row, when `source` is `customerForm`. */
+  customerFormSubmissionUid?: string;
   customerEmailSent: boolean;
   fullRefundIssued: boolean;
   byLine: Record<

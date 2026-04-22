@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Document } from "mongodb";
+import type { Document, Filter } from "mongodb";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import { returnReasonLabel } from "@/lib/returnReasons";
 import type {
@@ -85,27 +85,95 @@ export async function insertReturnLog(
   return returnUid;
 }
 
-export async function listReturnLogs(
-  limit = 200,
-): Promise<ReturnLogListItem[]> {
+export type ReturnLogListSort = "date" | "email" | "refund";
+export type ReturnLogListOrder = "asc" | "desc";
+
+const mapDocToListItem = (d: ReturnLogMongo): ReturnLogListItem => ({
+  returnUid: d.returnUid,
+  orderRef: d.orderRef,
+  createdAt: d.createdAt.toISOString(),
+  lineCount: d.lineCount,
+  totalRefundGbp: d.totalRefundGbp,
+  customerEmailSent: d.customerEmailSent,
+  fullRefundIssued: d.fullRefundIssued,
+});
+
+/**
+ * Build Mongo sort. Tie-breaks with `createdAt` then `returnUid` for stable order.
+ */
+function returnLogsSort(
+  sort: ReturnLogListSort,
+  order: ReturnLogListOrder,
+): Record<string, 1 | -1> {
+  const d: 1 | -1 = order === "asc" ? 1 : -1;
+  if (sort === "date") {
+    return { createdAt: d, returnUid: d };
+  }
+  if (sort === "email") {
+    return { customerEmailSent: d, createdAt: -1, returnUid: -1 };
+  }
+  return { fullRefundIssued: d, createdAt: -1, returnUid: -1 };
+}
+
+export type ListReturnLogsPagedInput = {
+  page: number;
+  pageSize: number;
+  sort: ReturnLogListSort;
+  order: ReturnLogListOrder;
+  /** Inclusive on `createdAt` (UTC) when set; `null` means all time. */
+  createdAtRange: { gte: Date; lte: Date } | null;
+  /** If true, only rows where a full refund has not been recorded yet. */
+  refundPendingOnly: boolean;
+};
+
+/**
+ * Paged, sorted return log list for the warehouse /returns/logged view.
+ * Returns the effective `page` (clamped) after counting total documents.
+ */
+export async function listReturnLogsPaged(
+  input: ListReturnLogsPagedInput,
+): Promise<{
+  items: ReturnLogListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  const pageSize = Math.min(100, Math.max(1, Math.floor(input.pageSize) || 25));
   const client = await clientPromise;
   const col = client
     .db(kokobayDbName)
     .collection<ReturnLogMongo>(RETURN_LOGS_COLLECTION);
+
+  const q: Filter<ReturnLogMongo> = {};
+  if (input.createdAtRange !== null) {
+    q.createdAt = {
+      $gte: input.createdAtRange.gte,
+      $lte: input.createdAtRange.lte,
+    };
+  }
+  if (input.refundPendingOnly) {
+    q.fullRefundIssued = false;
+  }
+
+  const total = await col.countDocuments(q);
+
+  const maxPage = Math.max(1, Math.ceil(total / pageSize) || 1);
+  const page = Math.min(Math.max(1, input.page), maxPage);
+  const skip = (page - 1) * pageSize;
+
   const docs = await col
-    .find({})
-    .sort({ createdAt: -1 })
-    .limit(Math.min(500, limit))
+    .find(q)
+    .sort(returnLogsSort(input.sort, input.order))
+    .skip(skip)
+    .limit(pageSize)
     .toArray();
-  return docs.map((d) => ({
-    returnUid: d.returnUid,
-    orderRef: d.orderRef,
-    createdAt: d.createdAt.toISOString(),
-    lineCount: d.lineCount,
-    totalRefundGbp: d.totalRefundGbp,
-    customerEmailSent: d.customerEmailSent,
-    fullRefundIssued: d.fullRefundIssued,
-  }));
+
+  return {
+    items: docs.map(mapDocToListItem),
+    total,
+    page,
+    pageSize,
+  };
 }
 
 export async function getReturnLogByUid(

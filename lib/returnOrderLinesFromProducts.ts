@@ -95,3 +95,33 @@ export async function getThumbnailsBySkus(
   }
   return m;
 }
+
+/**
+ * Unit price in GBP (from `unitPricePence`) per SKU, `0` if the product is missing.
+ */
+export async function getUnitPricesBySkus(
+  skus: string[],
+): Promise<Map<string, number>> {
+  const uniq = [...new Set(skus.map((s) => String(s).trim()).filter(Boolean))];
+  const m = new Map<string, number>();
+  if (uniq.length === 0) return m;
+
+  const client = await clientPromise;
+  const col = client.db(kokobayDbName).collection("products");
+  const docs = await col
+    .find(
+      { sku: { $in: uniq } },
+      { projection: { sku: 1, unitPricePence: 1 } },
+    )
+    .toArray();
+  for (const d of docs) {
+    const sku = String((d as { sku?: string }).sku ?? "").trim();
+    if (!sku) continue;
+    const pence = Math.max(0, Math.round(Number((d as { unitPricePence?: number }).unitPricePence) || 0));
+    m.set(sku, pence / 100);
+  }
+  for (const s of uniq) {
+    if (!m.has(s)) m.set(s, 0);
+  }
+  return m;
+}

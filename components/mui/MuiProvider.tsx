@@ -5,7 +5,7 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 const muiTheme = createTheme({
   shape: { borderRadius: 12 },
   typography: {
-    fontFamily: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
+    fontFamily: "var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif",
   },
   components: {
     MuiDialog: {

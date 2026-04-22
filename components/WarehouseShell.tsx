@@ -43,10 +43,13 @@ function getParentHref(pathname: string, search: URLSearchParams): string {
   return "/";
 }
 
+const CUSTOMER_RETURNS_PATH = "/returns/form";
+
 export function WarehouseShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isHome = pathname === "/";
+  const isCustomerReturnsForm = pathname === CUSTOMER_RETURNS_PATH;
 
   const goBack = useCallback(() => {
     const sp =
@@ -56,6 +59,19 @@ export function WarehouseShell({ children }: { children: React.ReactNode }) {
     const next = getParentHref(pathname, sp);
     router.push(next);
   }, [pathname, router]);
+
+  if (isCustomerReturnsForm) {
+    return (
+      <div className="flex min-h-full flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center border-b border-zinc-200 bg-background/95 px-4 backdrop-blur dark:border-zinc-800">
+          <span className="min-w-0 text-sm font-normal tracking-[0.18em] text-foreground sm:text-base">
+            KOKO BAY RETURNS
+          </span>
+        </header>
+        <main className="flex min-h-0 flex-1 flex-col">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -89,7 +105,7 @@ export function WarehouseShell({ children }: { children: React.ReactNode }) {
         <div className="shrink-0">
           <Link
             href="/"
-            className="text-sm font-semibold tracking-tight text-foreground sm:text-base"
+            className="text-sm font-normal tracking-[0.18em] text-foreground sm:text-base"
           >
             Kokobay Unit
           </Link>

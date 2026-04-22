@@ -11,8 +11,38 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Sans and mono: Instrument Sans for everything, including `font-mono` usage */
+  --font-sans: var(--font-instrument-sans);
+  --font-mono: var(--font-instrument-sans);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  th {
+    /* Override Tailwind font-*, tracking-* utilities on the same node */
+    font-weight: 400 !important;
+    letter-spacing: 0.18em !important;
+  }
+
+  /* Clickable affordance: hand cursor on native controls and links */
+  a[href],
+  button:not(:disabled),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled,
+  [type="button"]:disabled,
+  [type="submit"]:disabled,
+  [type="reset"]:disabled {
+    cursor: not-allowed;
+  }
 }
 
 html {
@@ -22,5 +52,5 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
 }

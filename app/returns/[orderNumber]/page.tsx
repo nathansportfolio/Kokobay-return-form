@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OrderReturnLines } from "@/components/OrderReturnLines";
-import { getReturnPageLinesAndResume } from "@/lib/returnPageContext";
+import {
+  getReturnPageLinesAndResume,
+  type ReturnPageFormContext,
+} from "@/lib/returnPageContext";
 
 type PageProps = {
   params: Promise<{ orderNumber: string }>;
@@ -27,11 +30,13 @@ export default async function OrderReturnPage({ params }: PageProps) {
   let resume: Awaited<
     ReturnType<typeof getReturnPageLinesAndResume>
   >["resume"] = null;
+  let formContext: ReturnPageFormContext = { kind: "noFormOnFile" };
   let loadError: string | null = null;
   try {
     const r = await getReturnPageLinesAndResume(label);
     lines = r.lines;
     resume = r.resume;
+    formContext = r.formContext;
   } catch {
     loadError = "Could not load products. Check MongoDB and try again.";
   }
@@ -48,6 +53,36 @@ export default async function OrderReturnPage({ params }: PageProps) {
         </p>
       </div>
 
+      {!loadError && formContext.kind === "customerForm" ? (
+        <div
+          className="rounded-lg border border-sky-200 bg-sky-50/90 px-4 py-3 text-sm dark:border-sky-900/50 dark:bg-sky-950/40"
+          role="status"
+        >
+          <p className="font-medium text-sky-950 dark:text-sky-100">
+            Customer return form found
+          </p>
+          <p className="mt-1.5 text-sky-900/90 dark:text-sky-200/90">
+            Lines and reasons below are loaded from their online submission
+            (parcel posted {formContext.datePosted}
+            {formContext.submittedAtIso
+              ? ` · received ${new Date(formContext.submittedAtIso).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" })}`
+              : null}
+            ). {formContext.customerName} · {formContext.customerEmail}
+          </p>
+        </div>
+      ) : null}
+
+      {!loadError && formContext.kind === "noFormOnFile" && lines.length > 0 ? (
+        <div
+          className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30"
+          role="status"
+        >
+          <p className="font-medium text-amber-950 dark:text-amber-100">
+            No customer return form on file
+          </p>
+        </div>
+      ) : null}
+
       {loadError ? (
         <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
       ) : lines.length === 0 ? (
@@ -63,11 +98,16 @@ export default async function OrderReturnPage({ params }: PageProps) {
           <Link href="/returns" className="font-medium underline">
             try another order
           </Link>
-          .
+          .{" "}
+          {!loadError && formContext.kind === "noFormOnFile" ? (
+            <span className="block pt-2 text-zinc-500">
+              No customer return form for this order was found either.
+            </span>
+          ) : null}
         </p>
       ) : (
         <OrderReturnLines
-          key={`${label}::${resume?.returnUid ?? "new"}`}
+          key={`${label}::${resume?.returnUid ?? resume?.customerFormSubmissionUid ?? "new"}`}
           orderLabel={label}
           lines={lines}
           resume={resume}
