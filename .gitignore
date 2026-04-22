@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+# pnpm is the only supported package manager (see packageManager in package.json)
+package-lock.json
+yarn.lock
 /.pnp
 .pnp.*
 .yarn/*
