@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
 import { formatGbp } from "@/lib/kokobayOrderLines";
 import {
@@ -66,6 +66,18 @@ export function CustomerReturnForm() {
   const [datePosted, setDatePosted] = useState("");
   const [submitBusy, setSubmitBusy] = useState(false);
   const [successUid, setSuccessUid] = useState<string | null>(null);
+  const orderLoadedAnchorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!lines?.length) return;
+    const id = requestAnimationFrame(() => {
+      orderLoadedAnchorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [lines]);
 
   const onLoadOrder = useCallback(async () => {
     const o = orderInput.trim();
@@ -284,7 +296,11 @@ export function CustomerReturnForm() {
 
       {lines && orderRef ? (
         <>
-          <section className="space-y-3 border-t border-zinc-200 pt-4 sm:pt-6" aria-label="Return lines">
+          <section
+            ref={orderLoadedAnchorRef}
+            className="scroll-mt-4 space-y-3 border-t border-zinc-200 pt-4 sm:scroll-mt-6 sm:pt-6"
+            aria-label="Return lines"
+          >
             <h2 className="text-base font-semibold">Items you are returning</h2>
             <p className="text-sm text-zinc-500">
               Tick each item you are sending back, then choose a reason.
