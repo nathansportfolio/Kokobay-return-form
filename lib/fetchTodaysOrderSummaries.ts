@@ -5,6 +5,7 @@ import {
   orderTotalPence,
   unitsToPick,
 } from "@/lib/warehouseOrderPricing";
+import { getCompletedOrderNumbersSetForDay } from "@/lib/completedPicklist";
 import {
   WAREHOUSE_TZ,
   calendarDateKeyInTz,
@@ -19,6 +20,8 @@ export type TodaysOrderSummary = {
   totalFormatted: string;
   /** Short text for “what to pick”, not the full BOM. */
   pickPreview: string;
+  /** `true` if this order was included in a completed pick for this warehouse day. */
+  picked: boolean;
 };
 
 function buildPickPreview(items: WarehouseOrderLine[], maxParts = 3): string {
@@ -31,13 +34,13 @@ function buildPickPreview(items: WarehouseOrderLine[], maxParts = 3): string {
 
 export async function fetchTodaysOrderSummaries(): Promise<{
   dayKey: string;
-  timeZone: string;
   orders: TodaysOrderSummary[];
 }> {
   const client = await clientPromise;
   const db = client.db(kokobayDbName);
   const now = new Date();
   const dayKey = calendarDateKeyInTz(now, WAREHOUSE_TZ);
+  const pickedSet = await getCompletedOrderNumbersSetForDay(dayKey);
 
   const raw = await db
     .collection("orders")
@@ -76,8 +79,9 @@ export async function fetchTodaysOrderSummaries(): Promise<{
       unitsToPick: unitsToPick(items),
       totalFormatted: formatGbp(orderTotalPence(items)),
       pickPreview: buildPickPreview(items),
+      picked: pickedSet.has(orderNumber),
     });
   }
 
-  return { dayKey, timeZone: WAREHOUSE_TZ, orders };
+  return { dayKey, orders };
 }

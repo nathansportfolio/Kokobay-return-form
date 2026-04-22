@@ -4,7 +4,8 @@ import { buildMockOrdersFromProducts } from "@/lib/warehouseMockOrders";
 
 /**
  * POST /api/warehouse/seed-mock-orders
- * Upserts 30 mock orders (1–10 lines each). SKUs and locations come from `products`.
+ * Upserts 30 mock orders (2–5 line items each; mean ~2–3). SKUs and locations
+ * come from `products`.
  * Run seed-mock-products first so `products` is populated.
  */
 export async function POST() {
@@ -16,7 +17,17 @@ export async function POST() {
     const products = await productsCol
       .find(
         { sku: { $regex: /^KB-MOCK-/ } },
-        { projection: { sku: 1, name: 1, row: 1, bin: 1, unitPricePence: 1, _id: 0 } },
+        {
+          projection: {
+            sku: 1,
+            name: 1,
+            color: 1,
+            thumbnailImageUrl: 1,
+            location: 1,
+            unitPricePence: 1,
+            _id: 0,
+          },
+        },
       )
       .toArray();
 
@@ -31,14 +42,28 @@ export async function POST() {
       );
     }
 
-    const normalized = products.map((p) => ({
-      sku: String(p.sku),
-      name: String(p.name ?? ""),
-      row: String(p.row ?? ""),
-      bin: String(p.bin ?? ""),
-      unitPricePence:
-        typeof p.unitPricePence === "number" ? p.unitPricePence : undefined,
-    }));
+    const normalized = products.map((p) => {
+      const doc = p as unknown as {
+        sku: unknown;
+        name: unknown;
+        color?: unknown;
+        thumbnailImageUrl?: unknown;
+        location?: unknown;
+        unitPricePence?: unknown;
+      };
+      return {
+        sku: String(doc.sku),
+        name: String(doc.name ?? ""),
+        color: doc.color != null ? String(doc.color) : undefined,
+        thumbnailImageUrl:
+          doc.thumbnailImageUrl != null
+            ? String(doc.thumbnailImageUrl)
+            : undefined,
+        location: String(doc.location ?? "").trim() || "U-20-F3",
+        unitPricePence:
+          typeof doc.unitPricePence === "number" ? doc.unitPricePence : undefined,
+      };
+    });
 
     const ordersCol = db.collection("orders");
     await ordersCol.createIndex({ orderNumber: 1 }, { unique: true });

@@ -2,8 +2,11 @@ export type WarehouseOrderLine = {
   sku: string;
   quantity: number;
   name: string;
-  row: string;
-  bin: string;
+  /** Copied from product at order build time, when available. */
+  color?: string;
+  thumbnailImageUrl?: string;
+  /** e.g. `B-04-C3` (see `kokobayLocationFormat`) */
+  location: string;
   /** GB pence; optional on older seeded docs — summaries use a stable fallback. */
   unitPricePence?: number;
 };
@@ -19,14 +22,25 @@ export type WarehouseOrder = {
 type ProductPick = {
   sku: string;
   name: string;
-  row: string;
-  bin: string;
+  color?: string;
+  thumbnailImageUrl?: string;
+  location: string;
   unitPricePence?: number;
 };
 
-/** Deterministic: each value in 1..10 inclusive, varied across 30 orders. */
+/**
+ * 30 line counts, each 2–5 (max five lines per order). Heavier on 2–3 so the
+ * average is ~2–3; a few 4s and 5s. Shuffled for variety across order numbers.
+ */
 export function lineCountsForThirtyOrders(): number[] {
-  return Array.from({ length: 30 }, (_, i) => ((i * 11 + 3) % 10) + 1);
+  const multiset: number[] = [
+    ...Array(14).fill(2),
+    ...Array(10).fill(3),
+    ...Array(4).fill(4),
+    ...Array(2).fill(5),
+  ];
+  shuffleInPlace(multiset, 90_001);
+  return multiset;
 }
 
 function shuffleInPlace<T>(arr: T[], seed: number): void {
@@ -65,8 +79,9 @@ export function buildMockOrdersFromProducts(
         sku: p.sku,
         quantity: 1 + ((o + k * 5) % 3),
         name: p.name,
-        row: p.row,
-        bin: p.bin,
+        color: p.color,
+        thumbnailImageUrl: p.thumbnailImageUrl,
+        location: p.location,
         unitPricePence: p.unitPricePence,
       });
     }

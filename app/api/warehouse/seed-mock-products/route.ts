@@ -4,8 +4,9 @@ import { buildMockWarehouseProducts } from "@/lib/warehouseMockProducts";
 
 /**
  * POST /api/warehouse/seed-mock-products
- * Inserts ~60 mock women's products with warehouse row/bin into MongoDB (`kokobay` DB).
- * Idempotent for SKU: replaces documents with the same `sku` (KB-MOCK-001 …).
+ * Inserts 200 mock women’s products: colour, womens-wear Unsplash thumbnail,
+ * `B-04-C3` address (Mongo `kokobay` DB).
+ * Idempotent for SKU: replaces by `sku` (KB-MOCK-001 … KB-MOCK-200).
  */
 export async function POST() {
   try {

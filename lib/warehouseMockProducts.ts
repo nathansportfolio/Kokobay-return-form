@@ -1,15 +1,22 @@
+import { randomKokobayLocationForIndex } from "@/lib/kokobayLocationFormat";
+
 export type WarehouseProduct = {
   sku: string;
   name: string;
   category: string;
-  /** e.g. "Row 2" */
-  row: string;
-  /** e.g. "Bin 4c" */
-  bin: string;
+  /** Display / filter colour, e.g. womens wear palette. */
+  color: string;
+  /** 256px-class thumbnail; may repeat across SKUs. */
+  thumbnailImageUrl: string;
+  /**
+   * e.g. `B-04-C3` = Aisle B, Bay 04, Shelf C (3rd of six), Bin 1–3.
+   * @see `kokobayLocationFormat`
+   */
+  location: string;
   /** Unit sell price for mock orders / summaries (GB pence). */
   unitPricePence: number;
   quantityAvailable: number;
-  seedTag: "kokobay-mock-v1";
+  seedTag: "kokobay-mock-v3";
   createdAt: Date;
 };
 
@@ -99,38 +106,75 @@ const PRODUCT_STEMS = [
   "Beanie",
 ] as const;
 
-function locationForIndex(i: number): { row: string; bin: string } {
-  const rowNum = (i % 8) + 1;
-  const binSlot = i % 24;
-  const letters = "ABCDEFGH";
-  const letter = letters[Math.floor(binSlot / 3)] ?? "A";
-  const num = (binSlot % 3) + 1;
-  const suffix = i % 2 === 0 ? "c" : "a";
-  return {
-    row: `Row ${rowNum}`,
-    bin: `Bin ${letter}${num}${suffix}`,
-  };
-}
+const MOCK_COUNT = 200;
 
-/** Exactly 60 mock women's warehouse SKUs with row/bin locations. */
+/** Common womens-wear / apparel colours for mock data. */
+const WOMENS_WEAR_COLOURS = [
+  "Black",
+  "Navy",
+  "Cream",
+  "Blush",
+  "Dusty rose",
+  "Sage",
+  "Charcoal",
+  "Burgundy",
+  "Ivory",
+  "Stone",
+  "Mocha",
+  "Forest green",
+  "Lilac",
+  "Oat",
+  "Terracotta",
+  "Teal",
+  "Camel",
+  "Silver grey",
+  "Coral",
+  "Midnight blue",
+  "Cocoa",
+  "Aqua",
+] as const;
+
+/**
+ * Unsplash: womens / fashion (cropped 256) — same URL may be reused; OK for mock.
+ */
+const WOMENS_WEAR_THUMBNAILS: string[] = [
+  "https://images.unsplash.com/photo-1525507118888-4db3a9397070?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1496747611176-843222e1a57a?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1509631179647-0177331693ae?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1483988355255-087617d45ee1?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1504194104404-43360c07e3f2?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1445205170230-053b83016050?w=256&h=256&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1475180098004-ca77a66827be?w=256&h=256&fit=crop&q=80",
+];
+
+/** 200 mock women's products with `B-04-C3`-style locations (Aisles A–U, bins 1–3). */
 export function buildMockWarehouseProducts(): WarehouseProduct[] {
   const out: WarehouseProduct[] = [];
   const now = new Date();
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < MOCK_COUNT; i++) {
     const stem = PRODUCT_STEMS[i % PRODUCT_STEMS.length];
     const cat = WOMENS_CATEGORIES[i % WOMENS_CATEGORIES.length];
-    const { row, bin } = locationForIndex(i);
+    const color = WOMENS_WEAR_COLOURS[i % WOMENS_WEAR_COLOURS.length];
+    const location = randomKokobayLocationForIndex(i);
     const sku = `KB-MOCK-${String(i + 1).padStart(3, "0")}`;
     const unitPricePence = 1299 + ((i * 173) % 8000);
+    const thumbnailImageUrl =
+      WOMENS_WEAR_THUMBNAILS[i % WOMENS_WEAR_THUMBNAILS.length]!;
     out.push({
       sku,
-      name: `${stem} (${cat})`,
+      name: `${stem} — ${color}`,
+      color,
+      thumbnailImageUrl,
       category: cat,
-      row,
-      bin,
+      location,
       unitPricePence,
       quantityAvailable: 12 + (i % 40),
-      seedTag: "kokobay-mock-v1",
+      seedTag: "kokobay-mock-v3",
       createdAt: now,
     });
   }

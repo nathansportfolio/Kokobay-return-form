@@ -26,7 +26,7 @@ export default function PicklistsPage() {
           Open today’s pick lists
         </span>
         <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Five orders per list, one stop at a time in walk order (row → bin)
+          Five orders per list, walk order: aisle → bay → shelf → bin
         </span>
       </Link>
     </div>

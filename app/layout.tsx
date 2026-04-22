@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppToaster } from "@/components/AppToaster";
+import { MuiProvider } from "@/components/mui/MuiProvider";
 import { WarehouseShell } from "@/components/WarehouseShell";
 import "./globals.css";
 
@@ -16,10 +17,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Kokobay Warehouse",
-    template: "%s | Kokobay Warehouse",
+    default: "Kokobay Unit",
+    template: "%s | Kokobay Unit",
   },
-  description: "Internal warehouse tools for Kokobay",
+  description: "Internal warehouse tools for Kokobay Unit",
 };
 
 export default function RootLayout({
@@ -33,8 +34,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full bg-white text-zinc-900 antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <WarehouseShell>{children}</WarehouseShell>
-        <AppToaster />
+        <MuiProvider>
+          <WarehouseShell>{children}</WarehouseShell>
+          <AppToaster />
+        </MuiProvider>
       </body>
     </html>
   );
