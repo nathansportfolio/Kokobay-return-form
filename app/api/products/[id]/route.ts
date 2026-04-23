@@ -1,5 +1,5 @@
 import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
-import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import type { ShopifySingleProductResponse } from "@/types/shopify";
 
 export const dynamic = "force-dynamic";

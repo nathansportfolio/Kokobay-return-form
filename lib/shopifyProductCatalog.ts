@@ -1,5 +1,4 @@
 import type { Db, Filter } from "mongodb";
-import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import { fetchAllShopifyProducts } from "@/lib/fetchAllShopifyProducts";
 import { WAREHOUSE_TZ, calendarDateKeyInTz } from "@/lib/warehouseLondonDay";
 import {
@@ -412,29 +411,6 @@ export async function ensureProductCatalogSyncedForWarehouseDay(
       r.error,
     );
   }
-}
-
-/**
- * Fires a daily product-catalog sync without blocking. Use for Shopify
- * “live” routes (`/api/products`, `/api/orders`, …) so the HTTP response can
- * return right away; Mongo is updated in parallel. If already synced for
- * today (London), does nothing. On failure, logs and keeps existing data.
- */
-export function runProductCatalogSyncInBackgroundIfStale(): void {
-  if (!process.env.SHOPIFY_STORE?.trim()) {
-    return;
-  }
-  void (async () => {
-    try {
-      const c = await clientPromise;
-      await ensureProductCatalogSyncedForWarehouseDay(c.db(kokobayDbName));
-    } catch (e) {
-      console.error(
-        "[shopify product catalog] background auto-sync",
-        e instanceof Error ? e.message : e,
-      );
-    }
-  })();
 }
 
 /**

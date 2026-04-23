@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
-import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import { isShopifyWarehouseDataEnabled } from "@/lib/shopifyWarehouseDayOrders";
 import {
   getPickListOrderDayKey,

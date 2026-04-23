@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import {
   fetchReturnOrderFromShopify,
   shopifyOrderDisplayFromLookup,

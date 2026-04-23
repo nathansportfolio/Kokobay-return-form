@@ -1,5 +1,5 @@
 import { fetchAllShopifyProducts } from "@/lib/fetchAllShopifyProducts";
-import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import { shopifyAdminGet } from "@/lib/shopifyAdminApi";
 import type { ShopifyProduct, ShopifyProductsResponse } from "@/types/shopify";
 

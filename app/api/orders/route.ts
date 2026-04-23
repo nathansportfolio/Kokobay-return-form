@@ -1,5 +1,5 @@
 import { shopifyAdminGet } from "@/lib/shopifyAdminApi";
-import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import type { ShopifyOrdersResponse } from "@/types/shopify";
 
 const ORDERS_PATH = "orders.json?status=any&limit=250";

@@ -3,7 +3,7 @@ import {
   insertCustomerReturnForm,
   validateCustomerReturnForm,
 } from "@/lib/customerReturnFormSubmission";
-import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import { fetchReturnOrderFromShopify } from "@/lib/shopifyReturnOrderLookup";
 
 /**
