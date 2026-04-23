@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import {
+  ensureProductCatalogSyncedForWarehouseDay,
   getAllProductCatalog,
   getProductCatalogBySkus,
   getProductCatalogCountAndLatestSync,
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
     const noCache = { headers: { "Cache-Control": "private, no-store" } };
     const client = await clientPromise;
     const db = client.db(kokobayDbName);
+    await ensureProductCatalogSyncedForWarehouseDay(db);
     const p = request.nextUrl.searchParams;
     if (p.get("meta") === "1") {
       const m = await getProductCatalogCountAndLatestSync(db);

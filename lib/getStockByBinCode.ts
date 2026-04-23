@@ -8,10 +8,7 @@ export type StockAtLocation = {
   variantId: number;
 };
 
-/**
- * All `stock` rows indexed by `binCode` (e.g. `A-04-C`), for the warehouse
- * layout page. Multiple variants can share a bin after seeding.
- */
+/** Stock rows indexed by `binCode` (e.g. `A-04-C`) for the layout page. */
 export async function getStockByBinCode(): Promise<
   Record<string, StockAtLocation[]>
 > {

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
   title: "Racking map",
   description: "How to read rack, bay, and level codes on the racking",

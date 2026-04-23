@@ -1,10 +1,12 @@
 import { shopifyAdminGet } from "@/lib/shopifyAdminApi";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
 import type { ShopifyOrdersResponse } from "@/types/shopify";
 
 const ORDERS_PATH = "orders.json?status=any&limit=250";
 
 export async function GET() {
   try {
+    runProductCatalogSyncInBackgroundIfStale();
     if (!process.env.SHOPIFY_STORE?.trim()) {
       return Response.json(
         { error: "SHOPIFY_STORE is not configured" },

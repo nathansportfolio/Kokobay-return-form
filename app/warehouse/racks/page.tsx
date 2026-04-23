@@ -20,7 +20,7 @@ export default async function WarehouseRacksPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Warehouse layout</h1>
         <p className="mt-3 text-sm text-red-600 dark:text-red-400">{data.error}</p>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Check MongoDB connection and <code className="text-xs">MONGODB_URI</code>.
+          Check the database connection in your environment.
         </p>
       </div>
     );

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
 import {
   fetchReturnOrderFromShopify,
   shopifyOrderDisplayFromLookup,
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    runProductCatalogSyncInBackgroundIfStale();
     const result = await fetchReturnOrderFromShopify(order);
     if (result.ok) {
       return NextResponse.json({

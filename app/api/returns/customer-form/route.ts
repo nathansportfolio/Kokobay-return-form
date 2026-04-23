@@ -3,6 +3,7 @@ import {
   insertCustomerReturnForm,
   validateCustomerReturnForm,
 } from "@/lib/customerReturnFormSubmission";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
 import { fetchReturnOrderFromShopify } from "@/lib/shopifyReturnOrderLookup";
 
 /**
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: v.error }, { status: 400 });
   }
   if (process.env.SHOPIFY_STORE?.trim()) {
+    runProductCatalogSyncInBackgroundIfStale();
     const shopify = await fetchReturnOrderFromShopify(v.data.orderRef);
     if (!shopify.ok) {
       if (shopify.error === "not_found") {

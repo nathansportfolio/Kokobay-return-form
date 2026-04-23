@@ -1,4 +1,5 @@
 import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
 import type { ShopifySingleProductResponse } from "@/types/shopify";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export async function GET(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
+    runProductCatalogSyncInBackgroundIfStale();
     if (!process.env.SHOPIFY_STORE?.trim()) {
       return Response.json(
         { error: "SHOPIFY_STORE is not set" },

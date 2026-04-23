@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+/** No live data: links only — can be prerendered and cached. */
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
   title: "Picklists",
   description: "Warehouse picklists",

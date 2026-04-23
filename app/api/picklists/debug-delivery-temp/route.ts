@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
+import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/shopifyProductCatalog";
 import { isShopifyWarehouseDataEnabled } from "@/lib/shopifyWarehouseDayOrders";
 import {
   getPickListOrderDayKey,
@@ -27,6 +28,8 @@ export async function GET(request: Request) {
       { status: 400 },
     );
   }
+
+  runProductCatalogSyncInBackgroundIfStale();
 
   const { searchParams } = new URL(request.url);
   const dayKeyParam = String(searchParams.get("dayKey") ?? "").trim();

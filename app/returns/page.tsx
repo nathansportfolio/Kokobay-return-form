@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ReturnsOrderForm } from "@/components/ReturnsOrderForm";
 
+/** Server-rendered shell; form is a client island — safe to prerender. */
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
   title: "Returns",
   description: "Process warehouse returns",

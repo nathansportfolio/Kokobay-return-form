@@ -8,6 +8,8 @@ import DialogTitle from "@mui/material/DialogTitle";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type MouseEvent } from "react";
 import { toast } from "sonner";
+import { AddProductsToBinDialog } from "@/components/AddProductsToBinDialog";
+import { EditBinStockDialog } from "@/components/EditBinStockDialog";
 import { ConfirmDialog } from "@/components/mui/ConfirmDialog";
 import type { BinsLayoutRack } from "@/lib/getBinsLayoutTree";
 import type { StockAtLocation } from "@/lib/getStockByBinCode";
@@ -225,6 +227,8 @@ function LevelChip({
   editUnlocked,
   isPending,
   onDelete,
+  onAddProducts,
+  onEditBin,
 }: {
   code: string;
   level: string;
@@ -233,6 +237,8 @@ function LevelChip({
   editUnlocked: boolean;
   isPending: boolean;
   onDelete: () => void;
+  onAddProducts: () => void;
+  onEditBin: () => void;
 }) {
   const n = level.toUpperCase().charCodeAt(0) - "A".charCodeAt(0) + 1;
   return (
@@ -255,7 +261,7 @@ function LevelChip({
                   ? "h-2 w-2 shrink-0 rounded-full bg-emerald-500 shadow-sm ring-2 ring-emerald-500/30"
                   : "h-2 w-2 shrink-0 rounded-full bg-zinc-300 dark:bg-zinc-600"
               }
-              title={isOccupied ? "Stock flag (bins)" : "Empty slot"}
+              title={isOccupied ? "Has stock" : "No stock"}
             />
             <span className="text-zinc-400 transition group-open/level:rotate-180 dark:text-zinc-500">
               <svg
@@ -280,19 +286,37 @@ function LevelChip({
         </span>
       </summary>
       <div className="space-y-2 border-t border-zinc-100 bg-zinc-50/90 px-2.5 py-2.5 text-left dark:border-zinc-700/80 dark:bg-zinc-950/50">
-        {editUnlocked ? (
-          <div
-            className="flex flex-wrap items-center gap-1.5"
-            onClick={btnRowProps(() => {})}
+        <div
+          className="flex flex-wrap items-center gap-1.5"
+          onClick={btnRowProps(() => {})}
+        >
+          <button
+            type="button"
+            disabled={isPending}
+            className="min-w-0 flex-1 rounded-md border border-zinc-300/80 bg-white px-2 py-1.5 text-[0.7rem] font-medium text-foreground shadow-sm hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-800/80 sm:flex-none"
+            onClick={btnRowProps(onAddProducts)}
           >
+            Add
+          </button>
+          {editUnlocked && stockLines.length > 0 ? (
             <button
               type="button"
               disabled={isPending}
-              className="rounded-md border border-red-300/80 bg-red-50 px-2 py-1 text-[0.7rem] font-medium text-red-800 hover:bg-red-100/90 disabled:opacity-50 dark:border-red-800/50 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-900/50"
+              className="rounded-md border border-zinc-300/80 bg-white px-2 py-1.5 text-[0.7rem] font-medium text-foreground shadow-sm hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-800/80"
+              onClick={btnRowProps(onEditBin)}
+            >
+              Edit
+            </button>
+          ) : null}
+          {editUnlocked ? (
+            <button
+              type="button"
+              disabled={isPending}
+              className="rounded-md border border-red-300/80 bg-red-50 px-2 py-1.5 text-[0.7rem] font-medium text-red-800 hover:bg-red-100/90 disabled:opacity-50 dark:border-red-800/50 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-900/50"
               onClick={btnRowProps(() => {
                 if (
                   !window.confirm(
-                    `Remove bin ${code}?\n\nStock lines at this code will be deleted from Mongo if present.`,
+                    `Remove this bin level (${code})?\n\nAny stock in this location will be removed.`,
                   )
                 ) {
                   return;
@@ -302,25 +326,9 @@ function LevelChip({
             >
               Delete level
             </button>
-          </div>
-        ) : null}
-        {stockLines.length === 0 ? (
-          <p className="text-[0.7rem] leading-snug text-zinc-500 dark:text-zinc-400">
-            No stock rows in Mongo for this code.{" "}
-            {isOccupied
-              ? "The bin may still be marked occupied from a previous seed."
-              : "Seed stock after bins with POST /api/stock/seed."}
-          </p>
-        ) : (
-          <>
-            {stockLines.length > 1 ? (
-              <p className="mb-1.5 rounded border border-amber-300/70 bg-amber-50/90 px-2 py-1.5 text-[0.7rem] leading-snug text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-100">
-                This location has more than one SKU. Older stock seed assigned
-                bins at random, so the same code could be reused. Re-seed with{" "}
-                <code className="text-xs">POST /api/stock/seed</code> to enforce
-                at most one product per bin.
-              </p>
-            ) : null}
+          ) : null}
+        </div>
+        {stockLines.length > 0 ? (
             <ul className="space-y-2.5">
             {stockLines.map((s) => (
               <li
@@ -359,8 +367,13 @@ function LevelChip({
               </li>
             ))}
             </ul>
-          </>
-        )}
+        ) : !editUnlocked ? (
+          <p className="text-[0.7rem] leading-snug text-zinc-500 dark:text-zinc-400">
+            {isOccupied
+              ? "This slot is empty or stock is not shown."
+              : "No stock in this bin."}
+          </p>
+        ) : null}
       </div>
     </details>
   );
@@ -374,6 +387,8 @@ function RackBlock({
   editUnlocked,
   isPending,
   mutate,
+  onAddProducts,
+  onEditBin,
 }: {
   rack: BinsLayoutRack;
   showSectionTitle: boolean;
@@ -382,6 +397,8 @@ function RackBlock({
   editUnlocked: boolean;
   isPending: boolean;
   mutate: (a: LayoutAction, o?: { onSuccess?: () => void }) => void;
+  onAddProducts: (binCode: string) => void;
+  onEditBin: (binCode: string) => void;
 }) {
   const [deleteRackOpen, setDeleteRackOpen] = useState(false);
   const binCount = rack.bays.reduce((n, b) => n + b.levels.length, 0);
@@ -423,8 +440,8 @@ function RackBlock({
                   }
                   title={
                     rackHasStock
-                      ? `Stock in Mongo: ${totalItems} item${totalItems === 1 ? "" : "s"} across this rack`
-                      : "No stock rows in Mongo for bins in this rack"
+                      ? `${totalItems} item${totalItems === 1 ? "" : "s"} in this rack`
+                      : "No items in this rack"
                   }
                 />
                 <span>
@@ -574,7 +591,7 @@ function RackBlock({
                           onClick={btnRowProps(() => {
                             if (
                               !window.confirm(
-                                `Delete bay ${b.bay} on rack ${rack.rack} (all ${b.levels.length} levels and stock at those codes)?`,
+                                `Delete bay ${b.bay} on rack ${rack.rack} and all ${b.levels.length} level${b.levels.length === 1 ? "" : "s"}? Stock in those locations will be removed.`,
                               )
                             ) {
                               return;
@@ -621,6 +638,8 @@ function RackBlock({
                           onDelete={() =>
                             mutate({ action: "deleteLevel", code: cell.code })
                           }
+                          onAddProducts={() => onAddProducts(cell.code)}
+                          onEditBin={() => onEditBin(cell.code)}
                         />
                       ))}
                     </div>
@@ -654,9 +673,7 @@ function RackBlock({
           <span className="font-mono font-medium text-foreground">
             {rack.rack}
           </span>
-          . Stock at those
-          <span className="font-mono"> RACK-BAY-LEVEL </span> codes is
-          removed from the <code className="text-xs">stock</code> collection.{" "}
+          . Any stock in those locations is removed.{" "}
           <span className="text-red-800/90 dark:text-red-200/90">
             This can&apos;t be undone.
           </span>
@@ -679,6 +696,8 @@ export function WarehouseRacksClient({
   const [addRackBayCount, setAddRackBayCount] = useState(4);
   const [addRackLevelCount, setAddRackLevelCount] = useState(6);
   const [addRackModalOpen, setAddRackModalOpen] = useState(false);
+  const [addProductBin, setAddProductBin] = useState<string | null>(null);
+  const [editBinCode, setEditBinCode] = useState<string | null>(null);
 
   const free = totalBins - occupiedCount;
 
@@ -738,11 +757,11 @@ export function WarehouseRacksClient({
               Warehouse layout
             </h1>
             <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
-              Rack → bay → level. Codes are{" "}
+              Rack → bay → level. Each location is{" "}
               <span className="font-mono">RACK-BAY-LEVEL</span> (e.g.{" "}
               <span className="font-mono">A-04-C</span>). Open a level to see
-              SKUs. Green dot = <code className="text-xs">isOccupied</code> on
-              the bin (after stock seed).
+              what&apos;s stored there. A green dot means the slot is marked
+              in use in the layout.
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -805,8 +824,7 @@ export function WarehouseRacksClient({
           </p>
           {!editUnlocked ? (
             <p className="mt-2 text-sm text-amber-900/90 dark:text-amber-200/80">
-              Use the lock control above to unlock layout editing, then you can
-              add a rack without seeding the full warehouse.
+              Unlock layout editing to add a rack, bays, and levels.
             </p>
           ) : null}
           {editUnlocked ? (
@@ -820,15 +838,6 @@ export function WarehouseRacksClient({
               </button>
             </div>
           ) : null}
-          <p className="mt-3 text-sm text-amber-900/90 dark:text-amber-200/90">
-            You can also seed the full <code className="text-xs">bins</code>{" "}
-            set:
-          </p>
-          <pre className="mt-3 overflow-x-auto rounded-lg border border-amber-200/80 bg-white/90 p-3 text-xs text-foreground dark:border-amber-900/50 dark:bg-zinc-950">
-            {`curl -sS -X POST "http://localhost:3000/api/bins" \\
-  -H "Content-Type: application/json" \\
-  -d '{}'`}
-          </pre>
         </div>
       ) : (
         <div className="mt-8 flex flex-col gap-1">
@@ -846,6 +855,8 @@ export function WarehouseRacksClient({
                 editUnlocked={editUnlocked}
                 isPending={isPending}
                 mutate={mutate}
+                onAddProducts={(code) => setAddProductBin(code)}
+                onEditBin={(code) => setEditBinCode(code)}
               />
             );
           })}
@@ -875,13 +886,29 @@ export function WarehouseRacksClient({
         onCreate={submitAddRack}
       />
 
+      <AddProductsToBinDialog
+        open={Boolean(addProductBin)}
+        binCode={addProductBin ?? ""}
+        onClose={() => setAddProductBin(null)}
+        onSuccess={() => router.refresh()}
+      />
+      {editBinCode ? (
+        <EditBinStockDialog
+          key={editBinCode}
+          open
+          binCode={editBinCode}
+          stockLines={stockByCode[editBinCode] ?? []}
+          onClose={() => setEditBinCode(null)}
+          onSuccess={() => router.refresh()}
+        />
+      ) : null}
+
       <p className="mt-10 text-xs text-zinc-500 dark:text-zinc-500">
         {editUnlocked
-          ? "Edits update the bins collection. Stock rows for removed codes are deleted. Add rack assigns the next aisle code in sequence, then bays and levels. "
-          : "Unlock the layout to add a rack, bays, or levels, and to change bin locations. "}
-        SKUs come from the <code>stock</code> collection. Admin links use{" "}
-        <code className="text-[0.65rem]">NEXT_PUBLIC_SHOPIFY_STORE_HANDLE</code>{" "}
-        (see <code className="text-[0.65rem]">.env.example</code>).
+          ? "Layout changes are saved to the server. Deleting a bin, bay, or rack also removes any stock in those places. "
+          : "Unlock the layout to add a rack, bays, or levels, or to place stock. "}
+        <span className="whitespace-nowrap">Shopify admin</span> links use your
+        configured store (see <code className="text-[0.65rem]">.env.example</code>).
       </p>
     </div>
   );

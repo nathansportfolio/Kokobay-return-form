@@ -1,4 +1,5 @@
 import type { MongoClient } from "mongodb";
+import { ensureStockCollectionIndexes } from "@/lib/ensureStockCollectionIndexes";
 import { fetchAllShopifyProducts } from "@/lib/fetchAllShopifyProducts";
 import { kokobayDbName } from "@/lib/mongodb";
 import {
@@ -124,26 +125,7 @@ export async function seedStockFromShopify(
   const coll = stockCollection(db);
   await coll.deleteMany({});
 
-  // `listIndexes` / `indexes()` throws "ns does not exist" if the collection was
-  // never created (first seed). In that case there is no old binCode index to drop.
-  try {
-    for (const spec of await coll.indexes()) {
-      const k = spec.key as Record<string, number>;
-      if (k && Object.keys(k).length === 1 && k.binCode === 1) {
-        try {
-          if (spec.name && spec.name !== "_id_") {
-            await coll.dropIndex(spec.name);
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-  } catch {
-    /* no collection yet, or no indexes to reconcile */
-  }
-  await coll.createIndex({ binCode: 1 }, { unique: true });
-  await coll.createIndex({ variantId: 1 }, { unique: true });
+  await ensureStockCollectionIndexes(client);
   const ins = await coll.insertMany(stockRows, { ordered: false });
   const inserted = ins.insertedCount;
 

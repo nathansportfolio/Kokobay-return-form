@@ -3,7 +3,8 @@ import { OperationsCtaGrid } from "@/components/home/OperationsCtaGrid";
 import { getHomepageDashboardStats } from "@/lib/homepageDashboard";
 import { formatDayKeyAsOrdinalEnglish } from "@/lib/warehouseLondonDay";
 
-export const dynamic = "force-dynamic";
+/** Regenerate the dashboard on a short interval (ISR) instead of every request. */
+export const revalidate = 20;
 
 function StatFigure({
   ok,
