@@ -10,6 +10,7 @@ import {
 } from "@/lib/returnOrderLinesFromProducts";
 import type { ShopifyOrderDisplay } from "@/lib/shopifyReturnOrderLookup";
 import {
+  enrichKokobayOrderLinesWithShopify,
   fetchReturnOrderFromShopify,
   fetchShopifyOrderDisplay,
   shopifyOrderDisplayFromLookup,
@@ -117,7 +118,7 @@ export async function getReturnPageLinesAndResume(
     ]);
 
     const byLine: ReturnPageResume["byLine"] = {};
-    const lines: KokobayOrderLine[] = form.items.map((i) => {
+    let lines: KokobayOrderLine[] = form.items.map((i) => {
       const { disposition } = mapCustomerFormReasonToWarehouse(i.reasonValue);
       byLine[i.lineId] = { reason: i.reasonValue, disposition };
       return {
@@ -129,6 +130,10 @@ export async function getReturnPageLinesAndResume(
         imageUrl: thumbs.get(i.sku) ?? "",
       } satisfies KokobayOrderLine;
     });
+
+    if (process.env.SHOPIFY_STORE?.trim()) {
+      lines = await enrichKokobayOrderLinesWithShopify(key, lines);
+    }
 
     const shopifyOrder = process.env.SHOPIFY_STORE?.trim()
       ? await fetchShopifyOrderDisplay(key)

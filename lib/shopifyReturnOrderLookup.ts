@@ -231,6 +231,70 @@ export async function fetchReturnOrderFromShopify(
   };
 }
 
+/**
+ * Fills unit price and image URLs for lines loaded from a customer return form
+ * (which only has SKU/title) by matching `KokobayOrderLine.id` to Shopify
+ * `line_item.id` and reusing the same product-image logic as
+ * {@link fetchReturnOrderFromShopify}. When Mongo has no `products` row for
+ * synthetic `V{variant_id}` SKUs, this is the only way images and prices show
+ * in the warehouse UI.
+ */
+export async function enrichKokobayOrderLinesWithShopify(
+  orderQuery: string,
+  lines: KokobayOrderLine[],
+): Promise<KokobayOrderLine[]> {
+  if (!process.env.SHOPIFY_STORE?.trim() || lines.length === 0) {
+    return lines;
+  }
+  const order = await findShopifyOrderByQuery(orderQuery);
+  if (!order) {
+    return lines;
+  }
+  const withQty = order.line_items.filter((li) => (li.quantity ?? 0) > 0);
+  if (withQty.length === 0) {
+    return lines;
+  }
+  const productMap = await fetchShopifyProductsForLineItemImages(
+    withQty.map((li) => li.product_id),
+  );
+  const skus = [
+    ...new Set(
+      withQty.map((li) => {
+        const s = li.sku?.trim();
+        if (s) return s;
+        return `V${li.variant_id}`;
+      }),
+    ),
+  ];
+  const shopifyByLine = lineItemImageUrlsFromProductMap(withQty, productMap);
+  const mongoThumbs = await getThumbnailsBySkus(skus);
+  const byLineItemId = new Map<
+    string,
+    { unitPrice: number; imageUrl: string }
+  >();
+  for (const li of withQty) {
+    const id = String(li.id);
+    const displaySku = li.sku?.trim() || `V${li.variant_id}`;
+    const fromShop = shopifyByLine.get(id) ?? "";
+    const fromMongo = mongoThumbs.get(displaySku) ?? "";
+    const imageUrl = (fromShop || fromMongo).trim();
+    const unitPrice = Math.max(
+      0,
+      Number.parseFloat(String(li.price)) || 0,
+    );
+    byLineItemId.set(id, { unitPrice, imageUrl });
+  }
+  return lines.map((l) => {
+    const s = byLineItemId.get(l.id);
+    if (!s) return l;
+    return {
+      ...l,
+      unitPrice: s.unitPrice,
+      imageUrl: s.imageUrl || l.imageUrl,
+    };
+  });
+}
+
 /** Strip line payload from a successful return lookup — for page-level metadata. */
 export function shopifyOrderDisplayFromLookup(
   s: Extract<ShopifyReturnOrderResult, { ok: true }>,
