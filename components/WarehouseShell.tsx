@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useTopLoader } from "nextjs-toploader";
 import { useCallback } from "react";
 import { useSiteAccessRole } from "@/hooks/useSiteAccessRole";
 import { clearSiteAccessFromBrowser } from "@/lib/siteAccess";
@@ -76,6 +77,7 @@ const CUSTOMER_RETURNS_PATH = "/returns/form";
 export function WarehouseShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { start: startTopLoader } = useTopLoader();
   const siteAccessRole = useSiteAccessRole();
   const isHome = pathname === "/";
   const isLogin = pathname === "/login";
@@ -91,14 +93,20 @@ export function WarehouseShell({ children }: { children: React.ReactNode }) {
         ? new URLSearchParams(window.location.search)
         : new URLSearchParams();
     const next = getParentHref(pathname, sp);
-    router.push(next);
-  }, [pathname, router]);
+    startTopLoader();
+    requestAnimationFrame(() => {
+      router.push(next);
+    });
+  }, [pathname, router, startTopLoader]);
 
   const logout = useCallback(() => {
     clearSiteAccessFromBrowser();
-    router.push("/login");
-    router.refresh();
-  }, [router]);
+    startTopLoader();
+    requestAnimationFrame(() => {
+      router.push("/login");
+      router.refresh();
+    });
+  }, [router, startTopLoader]);
 
   if (isCustomerReturnsForm) {
     return (
