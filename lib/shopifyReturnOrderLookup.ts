@@ -1,9 +1,12 @@
 import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
 import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
+import { displaySkuForShopifyLineItem } from "@/lib/shopifyLineItemSku";
+import { lineItemTitle } from "@/lib/shopifyLineItemTitle";
 import {
   fetchShopifyProductsForLineItemImages,
   lineItemImageUrlsFromProductMap,
 } from "@/lib/shopifyLineItemImage";
+import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
 import { getThumbnailsBySkus } from "@/lib/returnOrderLinesFromProducts";
 import type { ShopifyLineItem, ShopifyOrder } from "@/types/shopify";
 
@@ -18,13 +21,6 @@ function normalizeOrderNameForShopify(input: string): string {
     return `#${t}`;
   }
   return t;
-}
-
-function lineItemTitle(li: ShopifyLineItem): string {
-  const t = (li.title ?? "").trim() || "Item";
-  const vt = li.variant_title?.trim();
-  if (!vt || vt === "Default Title") return t;
-  return `${t} – ${vt}`;
 }
 
 /**
@@ -191,13 +187,7 @@ export async function fetchReturnOrderFromShopify(
     withQty.map((li) => li.product_id),
   );
   const skus = [
-    ...new Set(
-      withQty.map((li) => {
-        const s = li.sku?.trim();
-        if (s) return s;
-        return `V${li.variant_id}`;
-      }),
-    ),
+    ...new Set(withQty.map((li) => displaySkuForShopifyLineItem(li))),
   ];
   const shopifyByLine = lineItemImageUrlsFromProductMap(
     withQty,
@@ -205,7 +195,7 @@ export async function fetchReturnOrderFromShopify(
   );
   const thumbs = await getThumbnailsBySkus(skus);
   const lines: KokobayOrderLine[] = withQty.map((li) => {
-    const displaySku = li.sku?.trim() || `V${li.variant_id}`;
+    const displaySku = displaySkuForShopifyLineItem(li);
     const lineId = String(li.id);
     const fromShop = shopifyByLine.get(lineId) ?? "";
     const fromMongo = thumbs.get(displaySku) ?? "";
@@ -258,23 +248,17 @@ export async function enrichKokobayOrderLinesWithShopify(
     withQty.map((li) => li.product_id),
   );
   const skus = [
-    ...new Set(
-      withQty.map((li) => {
-        const s = li.sku?.trim();
-        if (s) return s;
-        return `V${li.variant_id}`;
-      }),
-    ),
+    ...new Set(withQty.map((li) => displaySkuForShopifyLineItem(li))),
   ];
   const shopifyByLine = lineItemImageUrlsFromProductMap(withQty, productMap);
   const mongoThumbs = await getThumbnailsBySkus(skus);
   const byLineItemId = new Map<
     string,
-    { unitPrice: number; imageUrl: string }
+    { unitPrice: number; imageUrl: string; sku: string }
   >();
   for (const li of withQty) {
     const id = String(li.id);
-    const displaySku = li.sku?.trim() || `V${li.variant_id}`;
+    const displaySku = displaySkuForShopifyLineItem(li);
     const fromShop = shopifyByLine.get(id) ?? "";
     const fromMongo = mongoThumbs.get(displaySku) ?? "";
     const imageUrl = (fromShop || fromMongo).trim();
@@ -282,15 +266,18 @@ export async function enrichKokobayOrderLinesWithShopify(
       0,
       Number.parseFloat(String(li.price)) || 0,
     );
-    byLineItemId.set(id, { unitPrice, imageUrl });
+    byLineItemId.set(id, { unitPrice, imageUrl, sku: displaySku });
   }
   return lines.map((l) => {
     const s = byLineItemId.get(l.id);
-    if (!s) return l;
+    if (!s) {
+      return { ...l, sku: lineSkuForWarehouseUi(l) };
+    }
     return {
       ...l,
       unitPrice: s.unitPrice,
       imageUrl: s.imageUrl || l.imageUrl,
+      sku: s.sku,
     };
   });
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
 import { formatGbp } from "@/lib/kokobayOrderLines";
+import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
 import {
   CUSTOMER_FORM_REASON_SELECT_OPTIONS,
   CUSTOMER_FORM_REASON_UNSET,
@@ -379,7 +380,7 @@ export function CustomerReturnForm() {
                         <div className="min-w-0">
                           <p className="font-medium leading-snug text-foreground">{line.title}</p>
                           <p className="mt-0.5 font-mono text-xs leading-relaxed text-zinc-500">
-                            {line.sku} · Qty {line.quantity} · {formatGbp(
+                            {lineSkuForWarehouseUi(line)} · Qty {line.quantity} · {formatGbp(
                               line.unitPrice * line.quantity,
                             )}{" "}
                             line

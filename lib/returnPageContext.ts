@@ -8,6 +8,7 @@ import {
   getThumbnailsBySkus,
   getUnitPricesBySkus,
 } from "@/lib/returnOrderLinesFromProducts";
+import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
 import type { ShopifyOrderDisplay } from "@/lib/shopifyReturnOrderLookup";
 import {
   enrichKokobayOrderLinesWithShopify,
@@ -94,8 +95,12 @@ export async function getReturnPageLinesAndResume(
     const shopifyOrder = process.env.SHOPIFY_STORE?.trim()
       ? await fetchShopifyOrderDisplay(key)
       : null;
+    const linesForUi = lines.map((l) => ({
+      ...l,
+      sku: lineSkuForWarehouseUi(l),
+    }));
     return {
-      lines,
+      lines: linesForUi,
       resume: {
         source: "returnLog",
         returnUid: last.returnUid,
@@ -134,12 +139,16 @@ export async function getReturnPageLinesAndResume(
     if (process.env.SHOPIFY_STORE?.trim()) {
       lines = await enrichKokobayOrderLinesWithShopify(key, lines);
     }
+    const linesForUi = lines.map((l) => ({
+      ...l,
+      sku: lineSkuForWarehouseUi(l),
+    }));
 
     const shopifyOrder = process.env.SHOPIFY_STORE?.trim()
       ? await fetchShopifyOrderDisplay(key)
       : null;
     return {
-      lines,
+      lines: linesForUi,
       resume: {
         source: "customerForm",
         customerFormSubmissionUid: form.submissionUid,

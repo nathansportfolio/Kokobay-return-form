@@ -2,9 +2,12 @@ import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import type { OrderForPick } from "@/lib/fetchTodaysPickLists";
 import { randomKokobayLocationForIndex } from "@/lib/kokobayLocationFormat";
+import { displaySkuForShopifyLineItem } from "@/lib/shopifyLineItemSku";
+import { lineItemTitle } from "@/lib/shopifyLineItemTitle";
 import type { ShopifyLineItem, ShopifyOrder, ShopifyOrdersResponse } from "@/types/shopify";
 import type { WarehouseOrderLine } from "@/lib/warehouseMockOrders";
 import type { WarehouseProduct } from "@/lib/warehouseMockProducts";
+import { loadBinCodeByVariantId } from "@/lib/loadBinCodeByVariantId";
 import {
   WAREHOUSE_TZ,
   getWarehouseDayCreatedAtQueryBoundsUtc,
@@ -60,13 +63,6 @@ async function loadMongoBySkus(skus: string[]): Promise<MongoBySku> {
   return m;
 }
 
-function lineItemTitle(li: ShopifyLineItem): string {
-  const t = (li.title ?? "").trim() || "Item";
-  const vt = li.variant_title?.trim();
-  if (!vt || vt === "Default Title") return t;
-  return `${t} – ${vt}`;
-}
-
 /**
  * Placeholder bin / aisle code for the walk (not real WMS). Stable per
  * order+line so sorting does not shift between page loads in the 60s cache.
@@ -92,11 +88,15 @@ function shopifyOrderStatusLabel(o: ShopifyOrder): string {
 function toWarehouseLines(
   o: ShopifyOrder,
   m: MongoBySku,
+  binByVariantId: Map<number, string>,
 ): WarehouseOrderLine[] {
   const withQty = o.line_items.filter((li) => (li.quantity ?? 0) > 0);
   return withQty.map((li) => {
-    const sku = (li.sku && String(li.sku).trim()) || `V${li.variant_id}`;
-    const location = mockLocationForLine(o, li);
+    const sku = displaySkuForShopifyLineItem(li);
+    const vid = Number(li.variant_id);
+    const fromStock =
+      Number.isFinite(vid) && binByVariantId.get(vid)?.trim();
+    const location = fromStock || mockLocationForLine(o, li);
     const row = m.get(sku);
     const pence = Math.max(
       0,
@@ -118,7 +118,9 @@ function toWarehouseLines(
  * Requests orders whose `created_at` falls within the full warehouse `dayKey`
  * (London) via Shopify query params, paginating past 250 so “today’s” set is
  * not truncated to the store’s 250 most-recent. Lines and prices from Shopify;
- * bin location is mock. Optional Mongo `products` for display fields by SKU.
+ * `stock.binCode` when the variant is present in Mongo `stock` (from
+ * `POST /api/stock/seed`); else mock location. Optional `products` for
+ * display fields by SKU.
  */
 export async function getTodaysShopifyOrderForPicks(
   dayKey: string,
@@ -181,19 +183,25 @@ export async function getTodaysShopifyOrderForPicks(
   );
 
   const allSkus: string[] = [];
+  const allVariantIds: number[] = [];
   for (const o of inDay) {
     for (const li of o.line_items) {
       if ((li.quantity ?? 0) <= 0) continue;
-      allSkus.push(
-        (li.sku && String(li.sku).trim()) || `V${li.variant_id}`,
-      );
+      allSkus.push(displaySkuForShopifyLineItem(li));
+      const v = li.variant_id;
+      if (typeof v === "number" && Number.isFinite(v)) {
+        allVariantIds.push(v);
+      }
     }
   }
-  const m = await loadMongoBySkus(allSkus);
+  const [m, binByVariantId] = await Promise.all([
+    loadMongoBySkus(allSkus),
+    loadBinCodeByVariantId(allVariantIds),
+  ]);
 
   return inDay.map((o) => ({
     orderNumber: o.name,
     status: shopifyOrderStatusLabel(o),
-    items: toWarehouseLines(o, m),
+    items: toWarehouseLines(o, m, binByVariantId),
   }));
 }

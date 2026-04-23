@@ -20,45 +20,79 @@ export type ParsedKokobayLocation = {
   shelfLetter: string;
   /** 1 = A, … 6 = F (shelf “number” in plain language) */
   shelfLevel: number;
-  /** 1–3 in current constraints */
+  /** Slot: legacy 1–3, or v2 left/right 1–2. */
   bin: number;
 };
 
+/** Legacy mock / catalog: `B-04-C3` = aisle, bay, shelf+slot (1–3). */
 const LINE_RE = /^([A-Ua-u])-(\d{1,2})-([A-Fa-f])([1-3])$/;
+/** Seeded `bins` / `stock`: `A-01-A-1` = rack, bay (2-digit), level A–F, position 1|2. */
+const BIN_V2_RE =
+  /^([A-Ua-u])-(\d{1,2})-([A-Fa-f])-([12])$/i;
 
 export function parseKokobayLocation(
   s: string,
 ): ParsedKokobayLocation | null {
   const t = s.trim();
-  const m = LINE_RE.exec(t);
-  if (!m) return null;
-  const aisle = m[1].toUpperCase();
-  const bay = parseInt(m[2], 10);
-  const shelfLetter = m[3].toUpperCase();
-  const bin = parseInt(m[4], 10);
-  if (!AISLE_RE.test(aisle) || !/^\d{1,2}$/.test(m[2]) || bay < 1 || bay > 99) {
-    return null;
+  const m1 = LINE_RE.exec(t);
+  if (m1) {
+    const aisle = m1[1]!.toUpperCase();
+    const bay = parseInt(m1[2]!, 10);
+    const shelfLetter = m1[3]!.toUpperCase();
+    const bin = parseInt(m1[4]!, 10);
+    if (!AISLE_RE.test(aisle) || !/^\d{1,2}$/.test(m1[2]!) || bay < 1 || bay > 99) {
+      return null;
+    }
+    if (!SHELF_RE.test(shelfLetter)) return null;
+    const shelfLevel = shelfLetter.charCodeAt(0) - "A".charCodeAt(0) + 1;
+    return {
+      raw: t,
+      aisle,
+      bay,
+      shelfLetter,
+      shelfLevel,
+      bin,
+    };
   }
-  if (!SHELF_RE.test(shelfLetter)) return null;
-  const shelfLevel = shelfLetter.charCodeAt(0) - "A".charCodeAt(0) + 1;
-  return {
-    raw: t,
-    aisle,
-    bay,
-    shelfLetter,
-    shelfLevel,
-    bin,
-  };
+  const m2 = BIN_V2_RE.exec(t);
+  if (m2) {
+    const aisle = m2[1]!.toUpperCase();
+    const bay = parseInt(m2[2]!, 10);
+    const shelfLetter = m2[3]!.toUpperCase();
+    const position = parseInt(m2[4]!, 10);
+    if (!AISLE_RE.test(aisle) || bay < 1 || bay > 99) {
+      return null;
+    }
+    if (!SHELF_RE.test(shelfLetter) || (position !== 1 && position !== 2)) {
+      return null;
+    }
+    const shelfLevel = shelfLetter.charCodeAt(0) - "A".charCodeAt(0) + 1;
+    return {
+      raw: t,
+      aisle,
+      bay,
+      shelfLetter,
+      shelfLevel,
+      /** Left/right position on the level (1–2); reuses `bin` in sort / badge. */
+      bin: position,
+    };
+  }
+  return null;
 }
 
 /**
  * Human-readable title, aligned with: Aisle, Bay, Shelf n (letter), Bin.
  * e.g. Aisle B, Bay 04, Shelf 3 (C), Bin 3
+ * For v2 codes (A-01-A-1): … Position 1|2
  */
 export function kokobayLocationTitle(s: string): string {
   const p = parseKokobayLocation(s);
   if (!p) return s;
   const bayPadded = String(p.bay).padStart(2, "0");
+  const t = s.trim();
+  if (BIN_V2_RE.test(t)) {
+    return `Aisle ${p.aisle}, Bay ${bayPadded}, Level ${p.shelfLetter} (${p.shelfLevel}), Position ${p.bin}`;
+  }
   return `Aisle ${p.aisle}, Bay ${bayPadded}, Shelf ${p.shelfLevel} (${p.shelfLetter}), Bin ${p.bin}`;
 }
 

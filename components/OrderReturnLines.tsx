@@ -12,6 +12,7 @@ import {
 } from "@/lib/customerReturnFormReasons";
 import { mapCustomerFormReasonToWarehouse } from "@/lib/customerFormToWarehouseReturn";
 import { reasonValueForSharedReturnSelect } from "@/lib/returnReasonForSelect";
+import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
 import type { ReturnPageResume } from "@/lib/returnLogTypes";
 import {
   shopifyOrderAdminUrlByOrderId,
@@ -573,7 +574,7 @@ export function OrderReturnLines({
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-foreground">{line.title}</p>
                       <p className="mt-0.5 font-mono text-xs text-zinc-500">
-                        {line.sku} · Qty {line.quantity}
+                        {lineSkuForWarehouseUi(line)} · Qty {line.quantity}
                       </p>
                       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                         {formatGbp(line.unitPrice)} each ·{" "}
