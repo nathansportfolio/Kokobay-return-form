@@ -5,7 +5,10 @@ import { seedStockFromShopify } from "@/lib/seedStockFromShopify";
 /**
  * POST /api/stock/seed
  * Replaces the `stock` collection: fetches all Shopify product variants, assigns
- * each to a random `bins` code, random quantity 1–20, updates `isOccupied` on bins.
+ * each to a **unique** `bins.code` (at most one SKU per bin; bins are
+ * shuffled for randomness). Random quantity 1–20, updates `isOccupied` on
+ * bins. Excess variants (if more SKUs than bin cells) are omitted; see
+ * `variantsSkippedNoEmptyBin` in the JSON body.
  * Requires: bins seeded (`POST /api/bins`) and `SHOPIFY_*` env.
  */
 export async function POST() {

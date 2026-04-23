@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ConfirmDialog } from "@/components/mui/ConfirmDialog";
 import type { OrderAssembly, PickStep } from "@/lib/fetchTodaysPickLists";
+import {
+  PICKLIST_LIST_KIND_STANDARD,
+  type PicklistListKind,
+} from "@/lib/picklistListKind";
 
 type Props = {
   dayKey: string;
@@ -15,6 +19,7 @@ type Props = {
   orderNumbers: string[];
   steps: PickStep[];
   assembly: OrderAssembly[];
+  listKind?: PicklistListKind;
 };
 
 export function PicklistMarkCompleteButton({
@@ -24,7 +29,9 @@ export function PicklistMarkCompleteButton({
   orderNumbers,
   steps,
   assembly,
+  listKind: listKindIn,
 }: Props) {
+  const listKind = listKindIn ?? PICKLIST_LIST_KIND_STANDARD;
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,6 +57,7 @@ export function PicklistMarkCompleteButton({
           totalItemsQty,
           orderCount,
           durationMs: 0,
+          listKind,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -68,6 +76,7 @@ export function PicklistMarkCompleteButton({
   }, [
     assembly,
     dayKey,
+    listKind,
     orderCount,
     orderNumbers,
     pickListNumber,

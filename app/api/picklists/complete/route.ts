@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { insertCompletedPicklist } from "@/lib/completedPicklist";
 import type { OrderAssembly, PickStep } from "@/lib/fetchTodaysPickLists";
+import {
+  PICKLIST_LIST_KIND_STANDARD,
+  PICKLIST_LIST_KIND_UK_PREMIUM,
+  type PicklistListKind,
+} from "@/lib/picklistListKind";
 
 type Body = {
   dayKey?: string;
@@ -13,7 +18,20 @@ type Body = {
   orderCount?: number;
   /** Milliseconds from opening the walk to pressing Finish. */
   durationMs?: number;
+  /** Omitted = standard (yesterday’s order day); `uk_premium` = UK Premium NDD list. */
+  listKind?: string;
 };
+
+function parseListKind(raw: unknown): PicklistListKind {
+  const s = String(raw ?? "").trim();
+  if (s === "uk_premium" || s === PICKLIST_LIST_KIND_UK_PREMIUM) {
+    return PICKLIST_LIST_KIND_UK_PREMIUM;
+  }
+  if (s === "" || s === "standard" || s === PICKLIST_LIST_KIND_STANDARD) {
+    return PICKLIST_LIST_KIND_STANDARD;
+  }
+  return PICKLIST_LIST_KIND_STANDARD;
+}
 
 function isPickStepArray(x: unknown): x is PickStep[] {
   if (!Array.isArray(x)) return false;
@@ -84,6 +102,7 @@ export async function POST(request: Request) {
   const orderCount = Number(body.orderCount);
   const durationRaw = body.durationMs;
   const durationMs = Number(durationRaw);
+  const listKind = parseListKind(body.listKind);
 
   if (!dayKey || !/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) {
     return NextResponse.json(
@@ -141,6 +160,7 @@ export async function POST(request: Request) {
       totalItemsQty,
       orderCount,
       durationMs: Number.isFinite(durationMs) && durationMs >= 0 ? Math.floor(durationMs) : 0,
+      listKind,
     });
     return NextResponse.json({ ok: true, picklistUid });
   } catch (e) {

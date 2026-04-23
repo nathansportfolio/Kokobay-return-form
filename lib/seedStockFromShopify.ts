@@ -10,8 +10,13 @@ import type { ShopifyProduct, ShopifyVariant } from "@/types/shopify";
 
 const BINS_COLLECTION = "bins";
 
-function pickRandomBin(binCodes: string[]): string {
-  return binCodes[Math.floor(Math.random() * binCodes.length)]!;
+/** Random permutation — each bin used at most once. */
+function shuffleInPlace<T>(a: T[]): T[] {
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i]!, a[j]!] = [a[j]!, a[i]!];
+  }
+  return a;
 }
 
 function randomQuantity(): number {
@@ -36,14 +41,20 @@ type SeedResult =
       inserted: number;
       variantCount: number;
       binCodeCount: number;
+      /** Bins that received a variant (same as `inserted` with unique bin assignment). */
       distinctBinsWithStock: number;
+      /** Variants with no row because every bin was already used. */
+      variantsSkippedNoEmptyBin: number;
     }
   | { ok: false; error: string };
 
 /**
  * Replaces all `stock` documents: loads every product variant from Shopify, assigns
- * each to a random bin, sets `isOccupied` on `bins` from which bins hold stock.
- * The `bins` collection must be populated first (e.g. POST /api/bins).
+ * each variant to a **distinct** bin (at most one SKU per `binCode`), random
+ * quantity 1–20, and sets `isOccupied` on `bins` that hold stock. If there are
+ * more variants than bin locations, the remainder are not inserted (see
+ * `variantsSkippedNoEmptyBin`). The `bins` collection must be populated first
+ * (e.g. POST /api/bins) with `RACK-BAY-LEVEL` `code` strings.
  */
 export async function seedStockFromShopify(
   client: MongoClient,
@@ -76,23 +87,35 @@ export async function seedStockFromShopify(
   }
 
   const now = new Date();
-  const stockRows: StockDocument[] = [];
+  type Pv = { p: ShopifyProduct; v: ShopifyVariant };
+  const pairs: Pv[] = [];
   for (const p of shop.products) {
     for (const v of p.variants ?? []) {
       if (!Number.isFinite(v.id) || !Number.isFinite(p.id)) {
         continue;
       }
-      const binCode = pickRandomBin(binCodes);
-      stockRows.push({
-        binCode,
-        productId: p.id,
-        variantId: v.id,
-        sku: variantSku(v),
-        quantity: randomQuantity(),
-        updatedAt: now,
-      });
+      pairs.push({ p, v });
     }
   }
+  pairs.sort((a, b) => a.p.id - b.p.id || a.v.id - b.v.id);
+
+  const freeBins = shuffleInPlace([...binCodes]);
+  const stockRows: StockDocument[] = [];
+  for (const { p, v } of pairs) {
+    if (freeBins.length === 0) {
+      break;
+    }
+    const binCode = freeBins.pop()!;
+    stockRows.push({
+      binCode,
+      productId: p.id,
+      variantId: v.id,
+      sku: variantSku(v),
+      quantity: randomQuantity(),
+      updatedAt: now,
+    });
+  }
+  const variantsSkippedNoEmptyBin = pairs.length - stockRows.length;
 
   if (stockRows.length === 0) {
     return { ok: false, error: "No variants to place in bins" };
@@ -100,7 +123,26 @@ export async function seedStockFromShopify(
 
   const coll = stockCollection(db);
   await coll.deleteMany({});
-  await coll.createIndex({ binCode: 1 });
+
+  // `listIndexes` / `indexes()` throws "ns does not exist" if the collection was
+  // never created (first seed). In that case there is no old binCode index to drop.
+  try {
+    for (const spec of await coll.indexes()) {
+      const k = spec.key as Record<string, number>;
+      if (k && Object.keys(k).length === 1 && k.binCode === 1) {
+        try {
+          if (spec.name && spec.name !== "_id_") {
+            await coll.dropIndex(spec.name);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* no collection yet, or no indexes to reconcile */
+  }
+  await coll.createIndex({ binCode: 1 }, { unique: true });
   await coll.createIndex({ variantId: 1 }, { unique: true });
   const ins = await coll.insertMany(stockRows, { ordered: false });
   const inserted = ins.insertedCount;
@@ -120,5 +162,6 @@ export async function seedStockFromShopify(
     variantCount: stockRows.length,
     binCodeCount: binCodes.length,
     distinctBinsWithStock: withStock.size,
+    variantsSkippedNoEmptyBin,
   };
 }

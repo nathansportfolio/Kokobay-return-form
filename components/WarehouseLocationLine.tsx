@@ -1,22 +1,19 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import {
-  kokobayLocationTitle,
-  parseKokobayLocation,
-} from "@/lib/kokobayLocationFormat";
+import { kokobayLocationTitle, parseKokobayLocation } from "@/lib/kokobayLocationFormat";
 import { NEUTRAL_BADGE, SEP, shelfBinBadgeStyle } from "@/lib/warehouseLocationCodes";
 
 /**
- * e.g. `A-08-B1` as three parts: [A] · [08] · [B1] — only the shelf+bin (B1) is
- * on a green → darker green scale; aisle and bay are neutral chips.
+ * Three parts: rack, bay, level (coloured letter). Legacy `B-04-C3` is still
+ * supported; the slot digit is not shown in the chip but is used for sort.
  */
 export function WarehouseLocationLine({ location }: { location: string }) {
   const p = parseKokobayLocation(location);
   const shelfBinStyle: CSSProperties = p
-    ? shelfBinBadgeStyle(p.shelfLetter, p.bin)
+    ? shelfBinBadgeStyle(p.shelfLetter, 1)
     : { backgroundColor: "hsl(146 50% 36%)", color: "white" };
-  const shelfBinLabel = p ? `${p.shelfLetter.toUpperCase()}${p.bin}` : "—";
+  const shelfBinLabel = p ? p.shelfLetter.toUpperCase() : "—";
   const title = kokobayLocationTitle(location);
 
   if (!p) {

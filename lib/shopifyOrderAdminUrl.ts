@@ -16,6 +16,21 @@ function buildAdminOrderUrl(shopifyOrderId: string): string {
 }
 
 /**
+ * e.g. `https://admin.shopify.com/store/koko-bay/products/14974895686018/variants/55166849253762`
+ * Uses `NEXT_PUBLIC_SHOPIFY_STORE_HANDLE` (same as order admin links).
+ */
+export function shopifyProductVariantAdminUrl(
+  productId: number | string,
+  variantId: number | string,
+): string {
+  const p = String(productId).trim();
+  const v = String(variantId).trim();
+  return `https://admin.shopify.com/store/${storeHandle()}/products/${encodeURIComponent(
+    p,
+  )}/variants/${encodeURIComponent(v)}`;
+}
+
+/**
  * Use when you have the real Shopify order id (from API `order.id`). Prefer
  * `shopifyOrderId` string on app `Order` to avoid large-integer precision issues.
  */

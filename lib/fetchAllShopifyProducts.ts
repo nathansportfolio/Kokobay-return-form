@@ -14,40 +14,48 @@ export async function fetchAllShopifyProducts(): Promise<
   if (!process.env.SHOPIFY_STORE?.trim()) {
     return { ok: false, error: "SHOPIFY_STORE is not set" };
   }
-  const products: ShopifyProduct[] = [];
-  let sinceId: number | undefined;
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const q = new URLSearchParams();
-    q.set("limit", "250");
-    if (sinceId != null) {
-      q.set("since_id", String(sinceId));
-    }
-    const { ok, data, status } =
-      await shopifyAdminGetNoCache<ShopifyProductsResponse>(
-        `products.json?${q.toString()}`,
-      );
-    if (!ok) {
-      if (products.length === 0) {
-        return {
-          ok: false,
-          error: `Shopify products request failed (HTTP ${status})`,
-        };
+  try {
+    const products: ShopifyProduct[] = [];
+    let sinceId: number | undefined;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const q = new URLSearchParams();
+      q.set("limit", "250");
+      if (sinceId != null) {
+        q.set("since_id", String(sinceId));
       }
-      break;
+      const { ok, data, status } =
+        await shopifyAdminGetNoCache<ShopifyProductsResponse>(
+          `products.json?${q.toString()}`,
+        );
+      if (!ok) {
+        if (products.length === 0) {
+          return {
+            ok: false,
+            error: `Shopify products request failed (HTTP ${status})`,
+          };
+        }
+        break;
+      }
+      const batch = data?.products ?? [];
+      if (batch.length === 0) {
+        break;
+      }
+      products.push(...batch);
+      if (batch.length < 250) {
+        break;
+      }
+      const last = batch[batch.length - 1]!;
+      if (typeof last.id !== "number" || !Number.isFinite(last.id)) {
+        break;
+      }
+      sinceId = last.id;
     }
-    const batch = data?.products ?? [];
-    if (batch.length === 0) {
-      break;
-    }
-    products.push(...batch);
-    if (batch.length < 250) {
-      break;
-    }
-    const last = batch[batch.length - 1]!;
-    if (typeof last.id !== "number" || !Number.isFinite(last.id)) {
-      break;
-    }
-    sinceId = last.id;
+    return { ok: true, products };
+  } catch (e) {
+    const message =
+      e instanceof Error
+        ? e.message
+        : "Shopify products could not be loaded (token or network error?)";
+    return { ok: false, error: message };
   }
-  return { ok: true, products };
 }

@@ -3,7 +3,7 @@ import { STOCK_COLLECTION, type StockDocument } from "@/lib/warehouseStockTypes"
 
 /**
  * `stock` rows: one row per `variantId` (unique). Maps Shopify variant id →
- * `binCode` (e.g. A-01-A-1) for pick-list placement.
+ * `binCode` (e.g. `A-01-A`) for pick-list placement.
  */
 export async function loadBinCodeByVariantId(
   variantIds: number[],

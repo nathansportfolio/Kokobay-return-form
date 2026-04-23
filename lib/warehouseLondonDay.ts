@@ -3,6 +3,36 @@ import { DateTime } from "luxon";
 export const WAREHOUSE_TZ = "Europe/London";
 
 /**
+ * YYYY-MM-DD in `timeZone` for the wall-clock day offset from “now” in that zone
+ * (e.g. -1 = yesterday in London for pick-list order batches).
+ */
+export function calendarDateKeyWithOffsetInTz(
+  timeZone: string,
+  offsetDays: number,
+): string {
+  return DateTime.now()
+    .setZone(timeZone)
+    .plus({ days: offsetDays })
+    .toFormat("yyyy-MM-dd");
+}
+
+/**
+ * London warehouse calendar day for **which Shopify/Mongo orders** the pick list uses:
+ * the **previous** calendar day (ship today what came in yesterday).
+ */
+export function getPickListOrderDayKey(): string {
+  return calendarDateKeyWithOffsetInTz(WAREHOUSE_TZ, -1);
+}
+
+/**
+ * **Today** in `Europe/London` as `YYYY-MM-DD` (wall clock). Used for
+ * UK Premium / NDD: orders placed the same day before 14:00 London.
+ */
+export function getTodayCalendarDateKeyInLondon(): string {
+  return calendarDateKeyInTz(new Date(), WAREHOUSE_TZ);
+}
+
+/**
  * Full warehouse calendar day in UTC, for Shopify `created_at_min` / `created_at_max`
  * (inclusive of that entire London wall-clock day, including GMT/BST).
  */

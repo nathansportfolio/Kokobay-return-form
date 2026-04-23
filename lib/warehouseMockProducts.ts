@@ -9,8 +9,8 @@ export type WarehouseProduct = {
   /** 256px-class thumbnail; may repeat across SKUs. */
   thumbnailImageUrl: string;
   /**
-   * e.g. `B-04-C3` = Aisle B, Bay 04, Shelf C (3rd of six), Bin 1–3.
-   * @see `kokobayLocationFormat`
+   * Place code: `A-02-D` = rack, bay, level (see `parseKokobayLocation`).
+   * @see `randomKokobayLocationForIndex` / `POST /api/bins`
    */
   location: string;
   /** Unit sell price for mock orders / summaries (GB pence). */
@@ -152,7 +152,7 @@ const WOMENS_WEAR_THUMBNAILS: string[] = [
   "https://images.unsplash.com/photo-1475180098004-ca77a66827be?w=256&h=256&fit=crop&q=80",
 ];
 
-/** 200 mock women's products with `B-04-C3`-style locations (Aisles A–U, bins 1–3). */
+/** 200 mock women's products with the same v2 layout as `POST /api/bins` (A–U racks). */
 export function buildMockWarehouseProducts(): WarehouseProduct[] {
   const out: WarehouseProduct[] = [];
   const now = new Date();

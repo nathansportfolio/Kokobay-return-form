@@ -10,11 +10,16 @@ import {
   getTodaysShopifyOrderForPicks,
   isShopifyWarehouseDataEnabled,
 } from "@/lib/shopifyWarehouseDayOrders";
+import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import {
   WAREHOUSE_TZ,
   calendarDateKeyInTz,
+  getPickListOrderDayKey,
   isOrderOnWarehouseDay,
 } from "@/lib/warehouseLondonDay";
+
+/** Which warehouse calendar day the summaries refer to. */
+export type OrderSummariesDayMode = "calendar" | "pickList";
 
 export type TodaysOrderSummary = {
   orderNumber: string;
@@ -30,20 +35,33 @@ export type TodaysOrderSummary = {
 
 function buildPickPreview(items: WarehouseOrderLine[], maxParts = 3): string {
   if (items.length === 0) return "—";
-  const parts = items.slice(0, maxParts).map((l) => `${l.sku} ×${l.quantity}`);
+  const parts = items
+    .slice(0, maxParts)
+    .map(
+      (l) => `${formatKokobaySkuDisplay(l.sku)} ×${l.quantity}`,
+    );
   const rest = items.length - maxParts;
   if (rest > 0) parts.push(`+${rest} more`);
   return parts.join(" · ");
 }
 
-export async function fetchTodaysOrderSummaries(): Promise<{
+/**
+ * @param dayMode
+ *   - `calendar` — current London warehouse day (e.g. `/orders/today`).
+ *   - `pickList` — day whose orders the pick list walks (**yesterday** in London: ship today, pick orders from the prior day).
+ */
+export async function fetchTodaysOrderSummaries(
+  dayMode: OrderSummariesDayMode = "calendar",
+): Promise<{
   dayKey: string;
   orders: TodaysOrderSummary[];
   /** `shopify` when `SHOPIFY_STORE` is set; `sample` is legacy Mongo `orders` seed. */
   dataSource: "shopify" | "sample";
 }> {
-  const now = new Date();
-  const dayKey = calendarDateKeyInTz(now, WAREHOUSE_TZ);
+  const dayKey =
+    dayMode === "pickList"
+      ? getPickListOrderDayKey()
+      : calendarDateKeyInTz(new Date(), WAREHOUSE_TZ);
   const pickedSet = await getCompletedOrderNumbersSetForDay(dayKey);
 
   if (isShopifyWarehouseDataEnabled()) {

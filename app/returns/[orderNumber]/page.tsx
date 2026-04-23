@@ -6,17 +6,26 @@ import {
   type ReturnPageFormContext,
   type ReturnPageBareLineSource,
 } from "@/lib/returnPageContext";
+import { resolveOrderRefFromPathSegment } from "@/lib/orderRefAliases";
 import { fetchShopifyOrderDisplay } from "@/lib/shopifyReturnOrderLookup";
 
 type PageProps = {
   params: Promise<{ orderNumber: string }>;
 };
 
+function labelFromRouteParam(orderNumber: string) {
+  try {
+    return resolveOrderRefFromPathSegment(decodeURIComponent(orderNumber));
+  } catch {
+    return resolveOrderRefFromPathSegment(orderNumber);
+  }
+}
+
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { orderNumber } = await params;
-  const label = decodeURIComponent(orderNumber);
+  const label = labelFromRouteParam(orderNumber);
   if (process.env.SHOPIFY_STORE?.trim()) {
     const d = await fetchShopifyOrderDisplay(label);
     if (d) {
@@ -46,7 +55,7 @@ function formatShopifyTime(iso: string) {
 
 export default async function OrderReturnPage({ params }: PageProps) {
   const { orderNumber } = await params;
-  const label = decodeURIComponent(orderNumber);
+  const label = labelFromRouteParam(orderNumber);
 
   let lines: Awaited<ReturnType<typeof getReturnPageLinesAndResume>>["lines"] =
     [];

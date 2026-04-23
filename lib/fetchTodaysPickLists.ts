@@ -1,19 +1,33 @@
 import {
   countCompletedPicklistsForDay,
-  getCompletedOrderNumbersSetForDay,
+  getCompletedOrderNumbersSetForPicklistContext,
 } from "@/lib/completedPicklist";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import type { WarehouseOrderLine } from "@/lib/warehouseMockOrders";
 import {
   WAREHOUSE_TZ,
-  calendarDateKeyInTz,
+  getPickListOrderDayKey,
+  getTodayCalendarDateKeyInLondon,
   isOrderOnWarehouseDay,
 } from "@/lib/warehouseLondonDay";
-import { compareKokobayLocation } from "@/lib/kokobayLocationFormat";
+import {
+  PICKLIST_LIST_KIND_STANDARD,
+  PICKLIST_LIST_KIND_UK_PREMIUM,
+} from "@/lib/picklistListKind";
+import {
+  compareKokobayLocation,
+  parseKokobayLocation,
+} from "@/lib/kokobayLocationFormat";
+import {
+  isFirstPhysicalRunAisleIndex,
+  rackCodeToIndex,
+} from "@/lib/warehouseRackLayout";
 import {
   getTodaysShopifyOrderForPicks,
+  getUkPremiumShopifyOrdersForPicks,
   isShopifyWarehouseDataEnabled,
 } from "@/lib/shopifyWarehouseDayOrders";
+import { withPickableLinesOnly } from "@/lib/warehousePickableLine";
 
 export const DEFAULT_ORDERS_PER_PICK_LIST = 5;
 const MIN_ORDERS_PER_PICK = 1;
@@ -90,9 +104,67 @@ function chunkOrders<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+const DEFAULT_LINE_LOCATION = "U-20-F3";
+
+type WarehouseRun = "A_I" | "J_U" | "split";
+
+/**
+ * A – I and J – U are separate physical runs. Prefer a pick list of N orders
+ * that all sit in the same run when the order’s stock does not straddle the
+ * boundary. Orders that use both runs are batched after single-run orders.
+ */
+function lineLocationForPick(line: { location?: string }): string {
+  return String(line.location ?? "").trim() || DEFAULT_LINE_LOCATION;
+}
+
+function orderWarehouseRun(ord: OrderForPick): WarehouseRun {
+  if (!ord.items.length) {
+    return "J_U";
+  }
+  let hasA_I = false;
+  let hasJ_U = false;
+  for (const line of ord.items) {
+    const p = parseKokobayLocation(lineLocationForPick(line));
+    const aisle = p?.aisle ?? "U";
+    const n = rackCodeToIndex(aisle) || 21;
+    if (isFirstPhysicalRunAisleIndex(n)) {
+      hasA_I = true;
+    } else {
+      hasJ_U = true;
+    }
+  }
+  if (hasA_I && hasJ_U) return "split";
+  if (hasJ_U) return "J_U";
+  return "A_I";
+}
+
+/**
+ * Splits the day’s queue (already sorted) into A–I chunks, then J–U, then
+ * straddled orders, each chunk no larger than `size`.
+ */
+function chunkOrdersByWarehouseRun(
+  orders: OrderForPick[],
+  size: number,
+): OrderForPick[][] {
+  const a_i: OrderForPick[] = [];
+  const j_u: OrderForPick[] = [];
+  const sp: OrderForPick[] = [];
+  for (const o of orders) {
+    const r = orderWarehouseRun(o);
+    if (r === "A_I") a_i.push(o);
+    else if (r === "J_U") j_u.push(o);
+    else sp.push(o);
+  }
+  return [
+    ...chunkOrders(a_i, size),
+    ...chunkOrders(j_u, size),
+    ...chunkOrders(sp, size),
+  ];
+}
+
 /**
  * One stop per SKU+location, quantities merged across the batch; walk order is
- * aisle → bay → shelf (A–F) → bin → SKU.
+ * rack → bay → level (legacy `B-04-C3` also uses slot) → SKU.
  */
 function addLineColor(set: Set<string>, line: WarehouseOrderLine) {
   const c = line.color?.trim();
@@ -128,8 +200,7 @@ function buildSortedSteps(orders: OrderForPick[]): PickStep[] {
 
   for (const ord of orders) {
     for (const line of ord.items) {
-      const lineLoc = line as { location?: string };
-      const location = String(lineLoc.location ?? "").trim() || "U-20-F3";
+      const location = lineLocationForPick(line);
       const sku = String(line.sku);
       const key = `${location}\t${sku}`;
       const prev = map.get(key);
@@ -212,8 +283,7 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
   batches: TodaysPickListBatch[];
   dataSource: "shopify" | "sample";
 }> {
-  const now = new Date();
-  const dayKey = calendarDateKeyInTz(now, WAREHOUSE_TZ);
+  const dayKey = getPickListOrderDayKey();
 
   let allTodays: OrderForPick[] = [];
   if (isShopifyWarehouseDataEnabled()) {
@@ -255,6 +325,8 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
     }
   }
 
+  allTodays = withPickableLinesOnly(allTodays);
+
   allTodays.sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
 
   const size = clampOrdersPerList(ordersPerList);
@@ -263,13 +335,16 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
   const dayOrderCount = allTodays.length;
 
   const [completedSet, completedPicklistCount] = await Promise.all([
-    getCompletedOrderNumbersSetForDay(dayKey),
-    countCompletedPicklistsForDay(dayKey),
+    getCompletedOrderNumbersSetForPicklistContext(
+      dayKey,
+      PICKLIST_LIST_KIND_STANDARD,
+    ),
+    countCompletedPicklistsForDay(dayKey, PICKLIST_LIST_KIND_STANDARD),
   ]);
 
   const todays = allTodays.filter((o) => !completedSet.has(o.orderNumber));
 
-  const groups = chunkOrders(todays, size);
+  const groups = chunkOrdersByWarehouseRun(todays, size);
   const batches: TodaysPickListBatch[] = groups.map((group, idx) => {
     const batchIndex = idx + 1;
     return {
@@ -289,5 +364,72 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
     dayOrderCount,
     batches,
     dataSource: isShopifyWarehouseDataEnabled() ? "shopify" : "sample",
+  };
+}
+
+/**
+ * **UK Premium / NDD (Shopify only):** orders on **today** (London) with
+ * **UK Premium Delivery (1-2 working days)**, `created_at` on that day **before 14:00** London.
+ */
+export async function fetchUkPremiumPickLists(ordersPerList: number): Promise<{
+  dayKey: string;
+  ordersPerList: number;
+  totalPicklistsForDay: number;
+  completedPicklistCount: number;
+  dayOrderCount: number;
+  batches: TodaysPickListBatch[];
+  dataSource: "shopify" | "empty";
+}> {
+  const dayKey = getTodayCalendarDateKeyInLondon();
+  if (!isShopifyWarehouseDataEnabled()) {
+    return {
+      dayKey,
+      ordersPerList: clampOrdersPerList(ordersPerList),
+      totalPicklistsForDay: 0,
+      completedPicklistCount: 0,
+      dayOrderCount: 0,
+      batches: [],
+      dataSource: "empty",
+    };
+  }
+
+  let allTodays: OrderForPick[] = await getUkPremiumShopifyOrdersForPicks();
+  allTodays = withPickableLinesOnly(allTodays);
+  allTodays.sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
+
+  const size = clampOrdersPerList(ordersPerList);
+  const totalPicklistsForDay =
+    allTodays.length === 0 ? 0 : chunkOrders(allTodays, size).length;
+  const dayOrderCount = allTodays.length;
+
+  const [completedSet, completedPicklistCount] = await Promise.all([
+    getCompletedOrderNumbersSetForPicklistContext(
+      dayKey,
+      PICKLIST_LIST_KIND_UK_PREMIUM,
+    ),
+    countCompletedPicklistsForDay(dayKey, PICKLIST_LIST_KIND_UK_PREMIUM),
+  ]);
+
+  const todays = allTodays.filter((o) => !completedSet.has(o.orderNumber));
+  const groups = chunkOrdersByWarehouseRun(todays, size);
+  const batches: TodaysPickListBatch[] = groups.map((group, idx) => {
+    const batchIndex = idx + 1;
+    return {
+      batchIndex,
+      displayPickListNumber: completedPicklistCount + batchIndex,
+      orderNumbers: group.map((o) => o.orderNumber),
+      steps: buildSortedSteps(group),
+      assembly: buildAssemblyByOrder(group),
+    };
+  });
+
+  return {
+    dayKey,
+    ordersPerList: size,
+    totalPicklistsForDay,
+    completedPicklistCount,
+    dayOrderCount,
+    batches,
+    dataSource: "shopify",
   };
 }

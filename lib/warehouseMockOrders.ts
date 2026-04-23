@@ -9,6 +9,11 @@ export type WarehouseOrderLine = {
   location: string;
   /** GB pence; optional on older seeded docs — summaries use a stable fallback. */
   unitPricePence?: number;
+  /**
+   * From Shopify `line_items.requires_shipping`. `false` = not picked from
+   * racks (e.g. digital, fee). Omitted = legacy / mock, treated as shippable.
+   */
+  requiresShipping?: boolean;
 };
 
 export type WarehouseOrder = {

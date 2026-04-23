@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getReturnLogByUid } from "@/lib/returnLog";
 import { formatGbp } from "@/lib/kokobayOrderLines";
+import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { WAREHOUSE_TZ, formatDateAsOrdinalInTimeZone } from "@/lib/warehouseLondonDay";
 
 export const dynamic = "force-dynamic";
@@ -92,7 +93,10 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
           <li key={l.lineId} className="pl-0.5">
             <p className="font-medium text-foreground">{l.title}</p>
             <p className="mt-0.5 font-mono text-xs text-zinc-500">
-              {l.sku} · Qty {l.quantity} · {formatGbp(l.lineTotalGbp)} included
+              {formatKokobaySkuDisplay(l.sku)} · Qty {l.quantity} · {formatGbp(
+                l.lineTotalGbp,
+              )}{" "}
+              included
             </p>
             <p className="mt-1 text-zinc-600 dark:text-zinc-400">
               <span className="text-zinc-500">Reason: </span>

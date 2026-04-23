@@ -54,3 +54,20 @@ body {
   color: var(--foreground);
   font-family: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Room around tiled labels when using browser Print (e.g. warehouse barcodes) */
+@media print {
+  @page {
+    margin: 10mm;
+  }
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  /* Order labels: 40% scale; grid layout is in the component (hairline borders there) */
+  .picklist-order-labels-print {
+    zoom: 0.4;
+  }
+}

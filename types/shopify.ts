@@ -3,9 +3,14 @@ export interface ShopifyProductsResponse {
   products: ShopifyProduct[];
 }
 
+/** REST Admin API: GET /admin/api/{version}/products/{id}.json */
+export interface ShopifySingleProductResponse {
+  product: ShopifyProduct;
+}
+
 /**
- * Product resource (subset aligned with typical REST payloads; Shopify may
- * return extra fields at runtime).
+ * Product fields we use in the app and persist in Mongo (Admin REST; may include
+ * extra fields at runtime — prefer `toShopifyProductForMongo` when writing).
  */
 export interface ShopifyProduct {
   id: number;
@@ -14,57 +19,41 @@ export interface ShopifyProduct {
   vendor: string;
   product_type: string;
   created_at: string;
-  handle: string;
   updated_at: string;
-  published_at: string | null;
-  template_suffix: string | null;
-  published_scope: string;
+  published_at: string;
+  handle: string;
   tags: string;
-  status: "active" | "draft" | "archived";
-  admin_graphql_api_id: string;
+  status: string;
 
   variants: ShopifyVariant[];
   options: ShopifyOption[];
   images: ShopifyImage[];
-  image: ShopifyImage | null;
+  image?: ShopifyImage;
 }
 
 export interface ShopifyVariant {
   id: number;
   product_id: number;
   title: string;
+  /** e.g. `"12.00"` (Shopify `price` string) */
   price: string;
-  position: number;
 
-  inventory_policy: string;
-  compare_at_price: string | null;
+  option1: string;
+  option2?: string | null;
+  option3?: string | null;
 
-  option1: string | null;
-  option2: string | null;
-  option3: string | null;
+  sku: string | null;
+  barcode: string | null;
+
+  inventory_quantity: number;
 
   created_at: string;
   updated_at: string;
-
-  taxable: boolean;
-  barcode: string | null;
-
-  fulfillment_service: string;
-
-  grams: number;
-  inventory_management: string | null;
-  requires_shipping: boolean;
-
-  sku: string | null;
-  weight: number;
-  weight_unit: string;
-
-  inventory_item_id: number;
-  inventory_quantity: number;
-  old_inventory_quantity: number;
-
-  admin_graphql_api_id: string;
-  image_id: number | null;
+  /**
+   * REST-only: links variant to `images` entry; not stored in Mongo if absent.
+   * @see `lib/shopifyLineItemImage`, `buildCatalogProductRows`
+   */
+  image_id?: number | null;
 }
 
 export interface ShopifyOption {
@@ -77,20 +66,19 @@ export interface ShopifyOption {
 
 export interface ShopifyImage {
   id: number;
-  alt: string | null;
-  position: number;
   product_id: number;
-
-  created_at: string;
-  updated_at: string;
-
+  src: string;
+  alt: string;
   width: number;
   height: number;
-
-  src: string;
-
-  variant_ids: number[];
-  admin_graphql_api_id: string;
+  /**
+   * REST: which variant(s) this image is attached to; not always present on
+   * stored documents if stripped.
+   */
+  variant_ids?: number[];
+  position?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 /** REST Admin API: GET /admin/api/{version}/orders.json (wrapped list). */

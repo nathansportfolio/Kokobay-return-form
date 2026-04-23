@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { formatGbp } from "@/lib/kokobayOrderLines";
+import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { getWarehouseProductCatalog } from "@/lib/warehouseProductCatalog";
 
 export const dynamic = "force-dynamic";
@@ -110,7 +111,7 @@ export default async function ProductsPage() {
                   )}
                 </td>
                 <td className="px-2 py-2 font-mono text-xs sm:px-3 sm:text-sm">
-                  {r.sku}
+                  {formatKokobaySkuDisplay(r.sku)}
                 </td>
                 <td className="min-w-[8rem] px-2 py-2 sm:px-3">
                   {r.productTitle}

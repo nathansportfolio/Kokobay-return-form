@@ -1,17 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { PicklistHowToFindProductsButton } from "@/components/PicklistHowToFindProductsButton";
 import { PicklistMarkCompleteButton } from "@/components/PicklistMarkCompleteButton";
 import { PicklistOrdersPerListSelect } from "@/components/PicklistOrdersPerListSelect";
 import { WarehouseLocationLine } from "@/components/WarehouseLocationLine";
 import { fetchTodaysPickLists, parseOrdersPerListParam } from "@/lib/fetchTodaysPickLists";
+import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
+import {
+  PICK_LIST_TB_ACTION,
+  PICK_LIST_TB_PRINT_TODAY,
+  PICK_LIST_TB_SECONDARY,
+  PICK_LIST_TOOLBAR_WRAP,
+} from "@/components/picklist/pickListToolbarClasses";
+import { formatDayKeyAsOrdinalEnglish } from "@/lib/warehouseLondonDay";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Today’s pick lists",
-  description: "Batched pick walks for today’s warehouse orders",
+  description: "Batched pick walks: orders from the previous warehouse day (London), picked today",
 };
 
 type PageProps = {
@@ -50,32 +59,65 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
   } = payload;
   const completedQuery = new URLSearchParams();
   completedQuery.set("ordersPerList", String(appliedOrdersPerList));
+  const printQuery = new URLSearchParams();
+  printQuery.set("ordersPerList", String(appliedOrdersPerList));
   const showProgress =
     totalPicklistsForDay > 0 || completedPicklistCount > 0;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-4 pb-12 sm:p-6">
       <div className="flex flex-col gap-3 sm:gap-4">
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="min-w-0 flex-1 text-2xl font-semibold leading-tight tracking-tight text-foreground">
+        <div className="flex flex-col gap-2.5">
+          <h1 className="min-w-0 text-2xl font-semibold leading-tight tracking-tight text-foreground">
             Today’s pick lists
           </h1>
-          <Link
-            href={`/picklists/today/completed?${completedQuery.toString()}`}
-            className="shrink-0 pt-0.5 text-sm font-medium text-foreground underline decoration-zinc-400 underline-offset-2 hover:decoration-foreground"
-          >
-            View completed
-          </Link>
+          <div className={PICK_LIST_TOOLBAR_WRAP}>
+            <PicklistHowToFindProductsButton />
+            <Link
+              href="/picklists"
+              className={`${PICK_LIST_TB_ACTION} ${PICK_LIST_TB_SECONDARY}`}
+            >
+              All types
+            </Link>
+            <Link
+              href={`/picklists/today/completed?${completedQuery.toString()}`}
+              className={`${PICK_LIST_TB_ACTION} ${PICK_LIST_TB_SECONDARY}`}
+            >
+              View completed
+            </Link>
+            <Link
+              href={`/picklists/today/print?${printQuery.toString()}`}
+              className={`${PICK_LIST_TB_ACTION} ${PICK_LIST_TB_PRINT_TODAY}`}
+            >
+              Print all order labels
+            </Link>
+          </div>
         </div>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          <span className="font-medium text-foreground">Order day (London):</span>{" "}
+          <span className="text-foreground">
+            {formatDayKeyAsOrdinalEnglish(dayKey)}
+          </span>
+          . Picks are <span className="font-medium text-foreground">yesterday’s orders</span> (ship
+          today, pick the prior calendar day in the warehouse).{" "}
+          <Link className="underline" href="/orders/today">
+            Today’s orders
+          </Link>{" "}
+          (same Shopify store) is the <span className="font-medium">current</span> warehouse day.
+        </p>
         {dataSource === "shopify" ? (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            <span className="font-medium text-foreground">Today’s orders are from Shopify</span>{" "}
-            (same list as <Link className="underline" href="/orders/today">Today’s orders</Link>).
-            Bin and walk order use <span className="text-foreground">mock location codes</span> for
-            now. Thumbnails and colour may still come from <code className="text-xs">products</code> in
-            Mongo when the SKU exists.
+            <span className="font-medium text-foreground">Shopify</span> — bin and walk order use{" "}
+            <span className="text-foreground">mock location codes</span> for now. Thumbnails and
+            colour may come from <code className="text-xs">products</code> in Mongo when the SKU
+            exists.
           </p>
-        ) : null}
+        ) : (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <span className="font-medium text-foreground">Sample Mongo</span> <code>orders</code>{" "}
+            for that order day only.
+          </p>
+        )}
         {showProgress && (
           <p
             className="text-sm text-zinc-600 dark:text-zinc-400"
@@ -148,7 +190,7 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
                   </h2>
                   <Link
                     href={`/picklists/today/walk?list=${batch.batchIndex}&ordersPerList=${appliedOrdersPerList}`}
-                    className="shrink-0 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800/80 dark:hover:bg-zinc-800"
+                    className="shrink-0 rounded-lg border-2 border-sky-600/80 bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:border-sky-700 hover:bg-sky-700 dark:border-sky-500 dark:bg-sky-600 dark:hover:border-sky-400 dark:hover:bg-sky-500"
                   >
                     Start Picklist
                   </Link>
@@ -185,7 +227,7 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
                                 SKU:{" "}
                               </span>
                               <span className="font-medium text-foreground">
-                                {s.sku}
+                                {formatKokobaySkuDisplay(s.sku)}
                               </span>
                             </p>
                           ) : null}
@@ -260,7 +302,7 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
                             <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
                               {!isVariantIdPlaceholderSku(line.sku) ? (
                                 <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400 sm:text-sm">
-                                  {line.sku}
+                                  {formatKokobaySkuDisplay(line.sku)}
                                 </span>
                               ) : null}
                               <span className="tabular-nums font-medium text-foreground">

@@ -1,4 +1,5 @@
 import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
+import { resolveOrderRefFromPathSegment } from "@/lib/orderRefAliases";
 import { mapCustomerFormReasonToWarehouse } from "@/lib/customerFormToWarehouseReturn";
 import { getLatestCustomerReturnFormForOrder } from "@/lib/customerReturnFormSubmission";
 import { getLatestReturnLogForOrder } from "@/lib/returnLog";
@@ -60,7 +61,7 @@ export async function getReturnPageLinesAndResume(
   bareLineSource: ReturnPageBareLineSource;
   shopifyOrder: ShopifyOrderDisplay | null;
 }> {
-  const key = orderRef.trim();
+  const key = resolveOrderRefFromPathSegment(orderRef);
   if (!key) {
     return {
       lines: [],
@@ -76,7 +77,7 @@ export async function getReturnPageLinesAndResume(
     const skus = [...new Set(last.lines.map((l) => l.sku))];
     const thumbs = await getThumbnailsBySkus(skus);
 
-    const lines: KokobayOrderLine[] = last.lines.map((l) => ({
+    let lines: KokobayOrderLine[] = last.lines.map((l) => ({
       id: l.lineId,
       sku: l.sku,
       title: l.title,
@@ -84,6 +85,10 @@ export async function getReturnPageLinesAndResume(
       unitPrice: l.unitPrice,
       imageUrl: thumbs.get(l.sku) ?? "",
     }));
+
+    if (process.env.SHOPIFY_STORE?.trim()) {
+      lines = await enrichKokobayOrderLinesWithShopify(key, lines);
+    }
 
     const byLine: ReturnPageResume["byLine"] = Object.fromEntries(
       last.lines.map((l) => [

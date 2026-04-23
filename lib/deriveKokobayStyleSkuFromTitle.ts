@@ -1,8 +1,12 @@
 /**
  * Builds a compact SKU from a line display title:
- *   [NAME(4)]-[COLOR(2+2)]-[SIZE]
+ *   [NAME(4)]-[COLOR(4)]-[SIZE]
  *
- * Example: "The cowl maxi - blue & purple floral – 4" → COWL-BLPU-4
+ * Name and colour segments: first two letters per word; if the segment is
+ * still shorter than 4, continue with more letters from the first word, then
+ * the second, until 4.
+ *
+ * Example: "The cowl maxi - blue & purple floral – 4" → STBI-BLPU-4
  * Splits on spaced em/en/ASCII hyphens, then: name, optional multi-part colour, size.
  */
 
@@ -17,23 +21,62 @@ function firstWord(s: string): string {
   return m ? m[1]! : s.trim();
 }
 
+function isStopWord(w: string): boolean {
+  return ["the", "a", "an"].includes(w.toLowerCase());
+}
+
+/**
+ * 4 characters from `raw`: 2 from each word in order, then (if &lt; 4) more
+ * letters from the first word, then the second, etc. Pads to 4 with X only
+ * if still short.
+ */
+function firstTwoPerWordPadded4(
+  raw: string,
+  options?: { stripLeadArticle?: boolean },
+): string {
+  let s = raw.trim();
+  if (options?.stripLeadArticle) {
+    s = s.replace(/^(the|a|an)\s+/i, "").trim();
+  }
+  const words = s
+    .split(/\s+/)
+    .map((w) => lettersOnly(w))
+    .filter((w) => w.length > 0);
+  const significant = words.filter((w) => !isStopWord(w));
+  const toUse = significant.length > 0 ? significant : words;
+  if (toUse.length === 0) {
+    return "ITEM";
+  }
+
+  let out = "";
+  for (const w of toUse) {
+    if (out.length >= 4) break;
+    const u = w.toUpperCase();
+    if (!u) continue;
+    const need = 4 - out.length;
+    const pair = u.length >= 2 ? u.slice(0, 2) : (u + "X").toUpperCase();
+    out += pair.slice(0, need < 2 ? need : 2);
+  }
+  if (out.length < 4) {
+    for (const w of toUse) {
+      if (out.length >= 4) break;
+      const u = w.toUpperCase();
+      for (let i = 2; i < u.length && out.length < 4; i++) {
+        out += u[i]!;
+      }
+    }
+  }
+  if (out.length < 4) {
+    return out.toUpperCase().padEnd(4, "X").slice(0, 4);
+  }
+  return out.slice(0, 4);
+}
+
 function twoOfWord(word: string): string {
   const a = lettersOnly(word);
   if (a.length >= 2) return a.slice(0, 2).toUpperCase();
   if (a.length === 1) return (a + "X").toUpperCase();
   return "XX";
-}
-
-/** 2+2 from a single colour word, e.g. "lemon" → LEMO, "strawberry" → STRA */
-function twoPlusTwoInWord(word: string): string {
-  const a = lettersOnly(word).toUpperCase();
-  if (a.length >= 4) {
-    return a.slice(0, 2) + a.slice(2, 4);
-  }
-  if (a.length > 0) {
-    return a.padEnd(4, "X").slice(0, 4);
-  }
-  return "XXXX";
 }
 
 function isLikelySizeSegment(s: string): boolean {
@@ -49,23 +92,7 @@ function isLikelySizeSegment(s: string): boolean {
 }
 
 function namePart4(firstSegment: string): string {
-  const stripped = firstSegment
-    .replace(/^(the|a|an)\s+/i, "")
-    .trim();
-  const words = stripped.split(/\s+/).filter(Boolean);
-  for (const w of words) {
-    const a = lettersOnly(w);
-    if (a.length >= 4) {
-      return a.slice(0, 4).toUpperCase();
-    }
-  }
-  for (const w of words) {
-    const a = lettersOnly(w);
-    if (a.length > 0) {
-      return a.toUpperCase().padEnd(4, "X").slice(0, 4);
-    }
-  }
-  return "ITEM";
+  return firstTwoPerWordPadded4(firstSegment, { stripLeadArticle: true });
 }
 
 function colorPart4(colorSegment: string): string {
@@ -87,8 +114,7 @@ function colorPart4(colorSegment: string): string {
       ).slice(0, 4);
     }
   }
-  const w = firstWord(s);
-  return twoPlusTwoInWord(w);
+  return firstTwoPerWordPadded4(firstWord(s), { stripLeadArticle: false });
 }
 
 function normalizeSize(raw: string): string {
@@ -96,8 +122,9 @@ function normalizeSize(raw: string): string {
 }
 
 /**
- * Returns a SKU like `COWL-BLPU-4`, or `null` if the title is too empty to
- * format (caller should use `V{variant_id}`).
+ * Returns a SKU like `STBI-SAGE-10` or (two-tone colour) `COMA-BLPU-4`, or
+ * `null` if the title is too empty to format (caller should use
+ * `V{variant_id}`).
  */
 export function deriveKokobayStyleSkuFromTitle(title: string): string | null {
   const t = String(title).trim();
@@ -112,6 +139,22 @@ export function deriveKokobayStyleSkuFromTitle(title: string): string | null {
     const [a, b] = parts;
     if (!a || !b) return null;
     if (isLikelySizeSegment(b)) {
+      // Titles like "The starfish bikini top- sage – 10" only produce two
+      // top-level parts (tight "top- sage" is not a spaced em/en dash);
+      // split the name segment on inner dashes so the colour (e.g. sage) is not lost.
+      const subParts = a
+        .split(/[-–—]/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (subParts.length >= 2) {
+        const nameSeg = subParts.slice(0, -1).join(" - ");
+        const colorSeg = subParts[subParts.length - 1] ?? "";
+        if (nameSeg && colorSeg) {
+          return `${namePart4(nameSeg)}-${colorPart4(colorSeg)}-${normalizeSize(
+            b,
+          )}`;
+        }
+      }
       return `${namePart4(a)}-XXXX-${normalizeSize(b)}`;
     }
     return `${namePart4(a)}-${colorPart4(b)}-OS`;

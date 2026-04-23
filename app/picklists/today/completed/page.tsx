@@ -4,16 +4,15 @@ import { CompletedPicklistsClient } from "@/components/CompletedPicklistsClient"
 import { listCompletedPicklistsForDay } from "@/lib/completedPicklist";
 import { parseOrdersPerListParam } from "@/lib/fetchTodaysPickLists";
 import {
-  WAREHOUSE_TZ,
-  calendarDateKeyInTz,
   formatDayKeyAsOrdinalEnglish,
+  getPickListOrderDayKey,
 } from "@/lib/warehouseLondonDay";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Completed pick lists",
-  description: "View and undo pick lists completed today (warehouse day)",
+  description: "View and undo pick lists for the current pick run (yesterday’s order day, London)",
 };
 
 type PageProps = {
@@ -23,8 +22,7 @@ type PageProps = {
 export default async function CompletedPicklistsPage({ searchParams }: PageProps) {
   const sp = (await searchParams) ?? {};
   const ordersPerList = parseOrdersPerListParam(sp.ordersPerList);
-  const now = new Date();
-  const dayKey = calendarDateKeyInTz(now, WAREHOUSE_TZ);
+  const dayKey = getPickListOrderDayKey();
 
   let rows: Awaited<ReturnType<typeof listCompletedPicklistsForDay>>;
   try {

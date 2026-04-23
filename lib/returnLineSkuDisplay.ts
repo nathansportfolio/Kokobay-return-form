@@ -1,5 +1,6 @@
 import { deriveKokobayStyleSkuFromTitle } from "@/lib/deriveKokobayStyleSkuFromTitle";
 import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
+import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
 
 /**
@@ -12,8 +13,9 @@ export function lineSkuForWarehouseUi(
 ): string {
   const sku = String(line.sku ?? "").trim();
   if (!isVariantIdPlaceholderSku(sku)) {
-    return sku;
+    return formatKokobaySkuDisplay(sku);
   }
   const t = String(line.title ?? "").trim();
-  return deriveKokobayStyleSkuFromTitle(t) ?? sku;
+  const core = deriveKokobayStyleSkuFromTitle(t) ?? sku;
+  return formatKokobaySkuDisplay(core);
 }

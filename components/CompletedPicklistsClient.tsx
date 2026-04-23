@@ -21,12 +21,14 @@ export type PicklistListRow = {
 type Props = {
   rows: PicklistListRow[];
   ordersPerList: number;
+  /** e.g. `/picklists/today` or `/picklists/uk-premium` (no query). */
+  listPathBase?: string;
 };
 
-function buildListHref(ordersPerList: number) {
+function makeListListHref(ordersPerList: number, listPathBase: string) {
   const p = new URLSearchParams();
   p.set("ordersPerList", String(ordersPerList));
-  return `/picklists/today?${p.toString()}`;
+  return `${listPathBase}?${p.toString()}`;
 }
 
 function formatCompletedDate(iso: string) {
@@ -56,7 +58,13 @@ function RowActions({
   );
 }
 
-export function CompletedPicklistsClient({ rows, ordersPerList }: Props) {
+export function CompletedPicklistsClient({
+  rows,
+  ordersPerList,
+  listPathBase: listPathBaseIn,
+}: Props) {
+  const listPathBase = listPathBaseIn ?? "/picklists/today";
+  const listHref = (n: number) => makeListListHref(n, listPathBase);
   const router = useRouter();
   const [undoTarget, setUndoTarget] = useState<PicklistListRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -187,7 +195,7 @@ export function CompletedPicklistsClient({ rows, ordersPerList }: Props) {
       </div>
       <p className="text-xs text-zinc-500">
         <a
-          href={buildListHref(ordersPerList)}
+          href={listHref(ordersPerList)}
           className="font-medium text-foreground underline"
         >
           Back to today’s pick lists

@@ -63,7 +63,7 @@ function pickLocation(
       return {
         line: raw,
         fromDb: true,
-        bin: String(parsed.bin),
+        bin: parsed.bin > 0 ? String(parsed.bin) : "—",
         locationLine: kokobayLocationTitle(raw),
       };
     }
@@ -76,7 +76,7 @@ function pickLocation(
   return {
     line: gen,
     fromDb: false,
-    bin: p2 ? String(p2.bin) : "—",
+    bin: p2 && p2.bin > 0 ? String(p2.bin) : "—",
     locationLine: kokobayLocationTitle(gen),
   };
 }

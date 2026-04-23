@@ -8,8 +8,10 @@ const PARAM = "ordersPerList";
 
 export function PicklistOrdersPerListSelect({
   value,
+  listPath = "/picklists/today",
 }: {
   value: number;
+  listPath?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -19,9 +21,9 @@ export function PicklistOrdersPerListSelect({
       const next = e.target.value;
       const p = new URLSearchParams(searchParams.toString());
       p.set(PARAM, next);
-      router.push(`/picklists/today?${p.toString()}`);
+      router.push(`${listPath}?${p.toString()}`);
     },
-    [router, searchParams],
+    [listPath, router, searchParams],
   );
 
   return (

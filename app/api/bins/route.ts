@@ -1,12 +1,35 @@
 import { NextResponse } from "next/server";
+import { getBinsLayoutTree } from "@/lib/getBinsLayoutTree";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import { generateBins } from "@/lib/generateBins";
 
 const COLLECTION = "bins";
 
 /**
+ * GET /api/bins
+ * Returns racks → bays → levels with `isOccupied` (same tree as the warehouse
+ * layout page; read-only).
+ */
+export async function GET() {
+  try {
+    const data = await getBinsLayoutTree();
+    if (!data.ok) {
+      return NextResponse.json(data, { status: 500 });
+    }
+    return NextResponse.json(data);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return NextResponse.json(
+      { ok: false, error: message, racks: [] },
+      { status: 500 },
+    );
+  }
+}
+
+/**
  * POST /api/bins
  * Regenerates the full `bins` set in the Kokobay MongoDB (replaces previous rows).
+ * Codes: `[RACK]-[BAY]-[LEVEL]` (e.g. `A-13-F`), see `lib/generateBins.ts`.
  */
 export async function POST() {
   try {

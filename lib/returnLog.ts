@@ -189,6 +189,17 @@ export async function listReturnLogsPaged(
   };
 }
 
+/** Counts logged returns where a full refund has not been recorded yet. */
+export async function countReturnLogsPendingFullRefund(): Promise<number> {
+  const client = await clientPromise;
+  const col = client
+    .db(kokobayDbName)
+    .collection<ReturnLogMongo>(RETURN_LOGS_COLLECTION);
+  return col.countDocuments(
+    { fullRefundIssued: false } as Filter<ReturnLogMongo>,
+  );
+}
+
 export async function getReturnLogByUid(
   returnUid: string,
 ): Promise<ReturnLogMongo | null> {

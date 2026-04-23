@@ -3,8 +3,8 @@ import { lineItemTitle } from "@/lib/shopifyLineItemTitle";
 import type { ShopifyLineItem } from "@/types/shopify";
 
 /**
- * Merchant SKU if set; else a compact generated code from the line title
- * (`COWL-BLPU-4`); if that is not possible, `V` + `variant_id` (legacy).
+ * Merchant SKU if set; else a compact generated code from the line title; if
+ * that is not possible, `V` + `variant_id` (legacy).
  */
 export function displaySkuForShopifyLineItem(
   li: Pick<

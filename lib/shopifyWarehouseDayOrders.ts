@@ -1,5 +1,6 @@
 import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
+import { ensureProductCatalogSyncedForWarehouseDay } from "@/lib/shopifyProductCatalog";
 import type { OrderForPick } from "@/lib/fetchTodaysPickLists";
 import { randomKokobayLocationForIndex } from "@/lib/kokobayLocationFormat";
 import { displaySkuForShopifyLineItem } from "@/lib/shopifyLineItemSku";
@@ -10,9 +11,12 @@ import type { WarehouseProduct } from "@/lib/warehouseMockProducts";
 import { loadBinCodeByVariantId } from "@/lib/loadBinCodeByVariantId";
 import {
   WAREHOUSE_TZ,
+  getTodayCalendarDateKeyInLondon,
   getWarehouseDayCreatedAtQueryBoundsUtc,
   isOrderOnWarehouseDay,
 } from "@/lib/warehouseLondonDay";
+import { UK_PREMIUM_NDD_LINE_TITLE } from "@/lib/shopifyShippingLineTitles";
+import { DateTime } from "luxon";
 
 const PICK_PAGE_LIM = 250;
 const PICK_MAX_PAGES = 32;
@@ -66,6 +70,7 @@ async function loadMongoBySkus(skus: string[]): Promise<MongoBySku> {
 /**
  * Placeholder bin / aisle code for the walk (not real WMS). Stable per
  * order+line so sorting does not shift between page loads in the 60s cache.
+ * Same `RACK-BAY-LEVEL` shape as `POST /api/bins` / `stock.binCode` when present.
  */
 function mockLocationForLine(order: ShopifyOrder, li: ShopifyLineItem): string {
   const oId = typeof order.id === "number" && Number.isFinite(order.id) ? order.id : 0;
@@ -110,21 +115,18 @@ function toWarehouseLines(
       thumbnailImageUrl: row?.thumbnailImageUrl?.trim() || undefined,
       location,
       unitPricePence: pence,
+      requiresShipping: li.requires_shipping,
     } satisfies WarehouseOrderLine;
   });
 }
 
 /**
- * Requests orders whose `created_at` falls within the full warehouse `dayKey`
- * (London) via Shopify query params, paginating past 250 so “today’s” set is
- * not truncated to the store’s 250 most-recent. Lines and prices from Shopify;
- * `stock.binCode` when the variant is present in Mongo `stock` (from
- * `POST /api/stock/seed`); else mock location. Optional `products` for
- * display fields by SKU.
+ * All Shopify orders whose `created_at` falls in the full London `dayKey`
+ * window (one calendar day, paginated).
  */
-export async function getTodaysShopifyOrderForPicks(
+export async function getShopifyOrdersInWarehouseDay(
   dayKey: string,
-): Promise<OrderForPick[]> {
+): Promise<ShopifyOrder[]> {
   const { createdAtMin, createdAtMax } = getWarehouseDayCreatedAtQueryBoundsUtc(
     dayKey,
   );
@@ -143,8 +145,6 @@ export async function getTodaysShopifyOrderForPicks(
     }
     const path = `orders.json?${q.toString()}`;
 
-    // Not `shopifyAdminGet` — Next data cache has a 2MB cap; a full day of
-    // orders can exceed that and 500 the page.
     const { ok, data } = await shopifyAdminGetNoCache<ShopifyOrdersResponse>(
       path,
     );
@@ -181,6 +181,105 @@ export async function getTodaysShopifyOrderForPicks(
       (a.order_number - b.order_number) ||
       String(a.id).localeCompare(String(b.id)),
   );
+  return inDay;
+}
+
+function normShipTitle(s: string): string {
+  return s.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function orderHasShippingLineTitle(
+  o: ShopifyOrder,
+  exactTitle: string,
+): boolean {
+  const w = normShipTitle(exactTitle);
+  for (const sl of o.shipping_lines ?? []) {
+    const t = (sl as { title?: string }).title;
+    if (normShipTitle(String(t ?? "")) === w) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * `created` must be on the same London `dayKey` and before 14:00:00.000
+ * (warehouse wall clock) — for “ordered before 2pm same day”.
+ */
+export function orderPlacedInLondonOnDayBefore14(
+  created: Date,
+  dayKey: string,
+): boolean {
+  if (Number.isNaN(created.getTime())) return false;
+  const d = DateTime.fromJSDate(created, { zone: "utc" }).setZone(
+    WAREHOUSE_TZ,
+  );
+  if (d.toFormat("yyyy-MM-dd") !== dayKey) return false;
+  const h14 = d.startOf("day").set({ hour: 14, minute: 0, second: 0, millisecond: 0 });
+  return d < h14;
+}
+
+/**
+ * “Next day / UK premium” set: `UK Premium Delivery (1-2 working days)`,
+ * order placed the **same** London day **strictly before** 14:00.
+ */
+export async function getUkPremiumShopifyOrdersForPicks(): Promise<
+  OrderForPick[]
+> {
+  const client = await clientPromise;
+  await ensureProductCatalogSyncedForWarehouseDay(
+    client.db(kokobayDbName),
+  );
+
+  const dayKey = getTodayCalendarDateKeyInLondon();
+  const raw = await getShopifyOrdersInWarehouseDay(dayKey);
+  const filtered = raw.filter(
+    (o) =>
+      orderPlacedInLondonOnDayBefore14(new Date(o.created_at), dayKey) &&
+      orderHasShippingLineTitle(o, UK_PREMIUM_NDD_LINE_TITLE),
+  );
+
+  const allSkus: string[] = [];
+  const allVariantIds: number[] = [];
+  for (const o of filtered) {
+    for (const li of o.line_items) {
+      if ((li.quantity ?? 0) <= 0) continue;
+      allSkus.push(displaySkuForShopifyLineItem(li));
+      const v = li.variant_id;
+      if (typeof v === "number" && Number.isFinite(v)) {
+        allVariantIds.push(v);
+      }
+    }
+  }
+  const [m, binByVariantId] = await Promise.all([
+    loadMongoBySkus(allSkus),
+    loadBinCodeByVariantId(allVariantIds),
+  ]);
+
+  return filtered.map((o) => ({
+    orderNumber: o.name,
+    status: shopifyOrderStatusLabel(o),
+    items: toWarehouseLines(o, m, binByVariantId),
+  }));
+}
+
+/**
+ * Requests orders whose `created_at` falls within the full warehouse `dayKey`
+ * (London) via Shopify query params, paginating past 250 so “today’s” set is
+ * not truncated to the store’s 250 most-recent. Lines and prices from Shopify;
+ * `stock.binCode` when the variant is present in Mongo `stock` (from
+ * `POST /api/stock/seed`); else mock location. Optional `products` for
+ * display fields by SKU.
+ */
+export async function getTodaysShopifyOrderForPicks(
+  dayKey: string,
+): Promise<OrderForPick[]> {
+  const client = await clientPromise;
+  await ensureProductCatalogSyncedForWarehouseDay(
+    client.db(kokobayDbName),
+  );
+  const inDay = await getShopifyOrdersInWarehouseDay(dayKey);
+  if (inDay.length === 0) return [];
 
   const allSkus: string[] = [];
   const allVariantIds: number[] = [];

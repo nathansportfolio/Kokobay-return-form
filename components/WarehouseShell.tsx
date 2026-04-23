@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback } from "react";
+import { useSiteAccessRole } from "@/hooks/useSiteAccessRole";
+import { clearSiteAccessFromBrowser } from "@/lib/siteAccess";
 
 /**
  * One step up the app hierarchy (not the browser history stack), until home.
@@ -26,7 +28,10 @@ function getParentHref(pathname: string, search: URLSearchParams): string {
     path === "/orders/today" ||
     path === "/orders/shopify" ||
     path === "/floor-map" ||
-    path === "/products"
+    path === "/racking-map" ||
+    path === "/products" ||
+    path === "/warehouse/racks" ||
+    path === "/warehouse/barcodes"
   ) {
     return "/";
   }
@@ -37,12 +42,30 @@ function getParentHref(pathname: string, search: URLSearchParams): string {
   if (path === "/picklists/today") {
     return "/picklists";
   }
-  if (path === "/picklists/today/walk" || path === "/picklists/today/completed") {
+  if (path === "/picklists/uk-premium") {
+    return "/picklists";
+  }
+  if (
+    path === "/picklists/today/walk" ||
+    path === "/picklists/today/completed" ||
+    path === "/picklists/today/print"
+  ) {
     const p = new URLSearchParams();
     const o = search.get("ordersPerList");
     if (o) p.set("ordersPerList", o);
     const q = p.toString();
     return q ? `/picklists/today?${q}` : "/picklists/today";
+  }
+  if (
+    path === "/picklists/uk-premium/walk" ||
+    path === "/picklists/uk-premium/completed" ||
+    path === "/picklists/uk-premium/print"
+  ) {
+    const p = new URLSearchParams();
+    const o = search.get("ordersPerList");
+    if (o) p.set("ordersPerList", o);
+    const q = p.toString();
+    return q ? `/picklists/uk-premium?${q}` : "/picklists/uk-premium";
   }
 
   return "/";
@@ -53,7 +76,13 @@ const CUSTOMER_RETURNS_PATH = "/returns/form";
 export function WarehouseShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const siteAccessRole = useSiteAccessRole();
   const isHome = pathname === "/";
+  const isLogin = pathname === "/login";
+  const isBarcodesPage = pathname === "/warehouse/barcodes";
+  const isPicklistOrderLabelsPrint =
+    pathname === "/picklists/today/print" ||
+    pathname === "/picklists/uk-premium/print";
   const isCustomerReturnsForm = pathname === CUSTOMER_RETURNS_PATH;
 
   const goBack = useCallback(() => {
@@ -64,6 +93,12 @@ export function WarehouseShell({ children }: { children: React.ReactNode }) {
     const next = getParentHref(pathname, sp);
     router.push(next);
   }, [pathname, router]);
+
+  const logout = useCallback(() => {
+    clearSiteAccessFromBrowser();
+    router.push("/login");
+    router.refresh();
+  }, [router]);
 
   if (isCustomerReturnsForm) {
     return (
@@ -78,9 +113,26 @@ export function WarehouseShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  if (isLogin) {
+    return (
+      <div className="flex min-h-full flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-center border-b border-zinc-200 bg-background/95 px-4 backdrop-blur dark:border-zinc-800">
+          <span className="min-w-0 text-sm font-normal tracking-[0.18em] text-foreground sm:text-base">
+            Kokobay Unit
+          </span>
+        </header>
+        <main className="flex min-h-0 flex-1 flex-col items-center sm:pt-4">{children}</main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-background/95 px-4 backdrop-blur dark:border-zinc-800">
+      <header
+        className={`sticky top-0 z-30 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-background/95 px-4 py-1.5 backdrop-blur dark:border-zinc-800${
+          isBarcodesPage || isPicklistOrderLabelsPrint ? " print:hidden" : ""
+        }`}
+      >
         <div className="flex min-w-0 flex-1 items-center justify-start">
           {!isHome ? (
             <button
@@ -107,17 +159,44 @@ export function WarehouseShell({ children }: { children: React.ReactNode }) {
             </button>
           ) : null}
         </div>
-        <div className="shrink-0">
+        <div className="flex shrink-0 flex-col items-center justify-center gap-0.5 py-0.5">
           <Link
             href="/"
-            className="text-sm font-normal tracking-[0.18em] text-foreground sm:text-base"
+            className="text-sm font-normal leading-tight tracking-[0.18em] text-foreground sm:text-base"
           >
             Kokobay Unit
           </Link>
+          {siteAccessRole === "admin" ? (
+            <span
+              className="text-[0.65rem] font-light uppercase leading-none tracking-[0.2em] text-red-600"
+              aria-label="Admin session"
+            >
+              ADMIN
+            </span>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+          {siteAccessRole != null ? (
+            <button
+              type="button"
+              onClick={logout}
+              className="shrink-0 rounded-lg px-2.5 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            >
+              Log out
+            </button>
+          ) : null}
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1 flex-col">{children}</main>
+      <main
+        className={
+          isBarcodesPage || isPicklistOrderLabelsPrint
+            ? "flex min-h-0 flex-1 flex-col print:min-h-0 print:flex-none"
+            : "flex min-h-0 flex-1 flex-col"
+        }
+      >
+        {children}
+      </main>
     </div>
   );
 }
