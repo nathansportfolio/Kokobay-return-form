@@ -7,6 +7,7 @@ import {
   stockCollection,
   STOCK_COLLECTION,
 } from "@/lib/warehouseStockTypes";
+import { catalogSkuForVariant } from "@/lib/shopifyCanonicalVariantSku";
 import type { ShopifyProduct, ShopifyVariant } from "@/types/shopify";
 
 const BINS_COLLECTION = "bins";
@@ -22,16 +23,6 @@ function shuffleInPlace<T>(a: T[]): T[] {
 
 function randomQuantity(): number {
   return 1 + Math.floor(Math.random() * 20);
-}
-
-function variantSku(
-  v: Pick<ShopifyVariant, "id" | "sku" | "title">,
-): string {
-  const s = v.sku?.trim();
-  if (s) {
-    return s;
-  }
-  return `V${v.id}`;
 }
 
 type SeedResult =
@@ -111,7 +102,7 @@ export async function seedStockFromShopify(
       binCode,
       productId: p.id,
       variantId: v.id,
-      sku: variantSku(v),
+      sku: catalogSkuForVariant(v).sku,
       quantity: randomQuantity(),
       updatedAt: now,
     });

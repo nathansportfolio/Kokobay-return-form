@@ -1,10 +1,14 @@
-import { deriveKokobayStyleSkuFromTitle } from "@/lib/deriveKokobayStyleSkuFromTitle";
-import { lineItemTitle } from "@/lib/shopifyLineItemTitle";
+import { catalogSkuForShopifyLineItem } from "@/lib/shopifyCanonicalVariantSku";
 import type { ShopifyLineItem } from "@/types/shopify";
 
 /**
- * Merchant SKU if set; else a compact generated code from the line title; if
- * that is not possible, `V` + `variant_id` (legacy).
+ * Warehouse `sku` string for a line item — same rules as
+ * {@link catalogSkuForVariant} / the product catalog: merchant `line_item.sku`
+ * when set, else `KOKO-VAR-{variant_id}`. No title-based codes (they collided
+ * for e.g. tops vs bottoms in the same style).
+ *
+ * If `variant_id` is missing and there is no merchant sku, returns
+ * `KOKO-VAR-0` (or adjust upstream data).
  */
 export function displaySkuForShopifyLineItem(
   li: Pick<
@@ -12,8 +16,5 @@ export function displaySkuForShopifyLineItem(
     "id" | "variant_id" | "sku" | "title" | "variant_title"
   >,
 ): string {
-  const s = li.sku?.trim();
-  if (s) return s;
-  const t = lineItemTitle(li);
-  return deriveKokobayStyleSkuFromTitle(t) ?? `V${li.variant_id}`;
+  return catalogSkuForShopifyLineItem(li);
 }

@@ -2,13 +2,25 @@ import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import { ensureProductCatalogSyncedForWarehouseDay } from "@/lib/shopifyProductCatalog";
 import type { OrderForPick } from "@/lib/fetchTodaysPickLists";
+import { allKokobayLayoutBinCodes } from "@/lib/generateBins";
 import { randomKokobayLocationForIndex } from "@/lib/kokobayLocationFormat";
+import {
+  fetchShopifyProductsForLineItemImages,
+  lineItemImageUrlsFromProductMap,
+} from "@/lib/shopifyLineItemImage";
+import {
+  colourValueFromLineDisplayName,
+  isLikelySizeOnlyToken,
+} from "@/lib/shopifyProductCatalog";
+import { splitSizeFromColourParens } from "@/lib/splitSizeFromColourParens";
 import { displaySkuForShopifyLineItem } from "@/lib/shopifyLineItemSku";
 import { lineItemTitle } from "@/lib/shopifyLineItemTitle";
+import { sizeFromShopifyLineItem } from "@/lib/variantTitleSizeLabel";
 import type { ShopifyLineItem, ShopifyOrder, ShopifyOrdersResponse } from "@/types/shopify";
 import type { WarehouseOrderLine } from "@/lib/warehouseMockOrders";
 import type { WarehouseProduct } from "@/lib/warehouseMockProducts";
 import { loadBinCodeByVariantId } from "@/lib/loadBinCodeByVariantId";
+import { DEFAULT_PRODUCT_PLACE_LOCATION } from "@/lib/shopifyProductCatalog";
 import {
   WAREHOUSE_TZ,
   getTodayCalendarDateKeyInLondon,
@@ -18,15 +30,53 @@ import {
 import { UK_PREMIUM_NDD_LINE_TITLE } from "@/lib/shopifyShippingLineTitles";
 import { DateTime } from "luxon";
 
+/**
+ * First/last for labels; order: customer, then shipping, then billing.
+ */
+export function displayCustomerNameParts(
+  o: ShopifyOrder,
+): { firstName: string; lastName: string } {
+  const c = o.customer;
+  if (c) {
+    const f = String(c.first_name ?? "").trim();
+    const l = String(c.last_name ?? "").trim();
+    if (f || l) {
+      return { firstName: f, lastName: l };
+    }
+  }
+  const ship = o.shipping_address;
+  if (ship) {
+    const f = String(ship.first_name ?? "").trim();
+    const l = String(ship.last_name ?? "").trim();
+    if (f || l) {
+      return { firstName: f, lastName: l };
+    }
+  }
+  const bill = o.billing_address;
+  if (bill) {
+    const f = String(bill.first_name ?? "").trim();
+    const l = String(bill.last_name ?? "").trim();
+    if (f || l) {
+      return { firstName: f, lastName: l };
+    }
+  }
+  return { firstName: "", lastName: "" };
+}
+
 const PICK_PAGE_LIM = 250;
 const PICK_MAX_PAGES = 32;
 
-/** Enrich pick lines with catalog fields only — not bin (mock below). */
+/** Enrich pick lines: Mongo `products` (name, colour, thumb, **location**), then stock bins. */
 type MongoBySku = Map<
   string,
   Pick<
     WarehouseProduct,
-    "sku" | "name" | "unitPricePence" | "color" | "thumbnailImageUrl"
+    | "sku"
+    | "name"
+    | "unitPricePence"
+    | "color"
+    | "thumbnailImageUrl"
+    | "location"
   >
 >;
 
@@ -53,6 +103,7 @@ async function loadMongoBySkus(skus: string[]): Promise<MongoBySku> {
             unitPricePence: 1,
             color: 1,
             thumbnailImageUrl: 1,
+            location: 1,
           },
         },
       )
@@ -67,16 +118,60 @@ async function loadMongoBySkus(skus: string[]): Promise<MongoBySku> {
   return m;
 }
 
+/** Resolve variant/product images for line items; keys are `String(line_item.id)`. */
+async function lineItemImageUrlByLineId(
+  orders: ShopifyOrder[],
+): Promise<Map<string, string>> {
+  const lineItems: Pick<ShopifyLineItem, "id" | "product_id" | "variant_id">[] =
+    [];
+  const productIds = new Set<number>();
+  for (const o of orders) {
+    for (const li of o.line_items ?? []) {
+      if ((li.quantity ?? 0) <= 0) continue;
+      lineItems.push({
+        id: li.id,
+        product_id: li.product_id,
+        variant_id: li.variant_id,
+      });
+      if (typeof li.product_id === "number" && li.product_id > 0) {
+        productIds.add(li.product_id);
+      }
+    }
+  }
+  if (lineItems.length === 0) return new Map();
+  const byProduct = await fetchShopifyProductsForLineItemImages([
+    ...productIds,
+  ]);
+  return lineItemImageUrlsFromProductMap(lineItems, byProduct);
+}
+
+/** Deterministic 0…2³²-1 from a string; used so the same SKU always gets the same fallback bin. */
+function indexFromString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return h >>> 0;
+}
+
 /**
- * Placeholder bin / aisle code for the walk (not real WMS). Stable per
- * order+line so sorting does not shift between page loads in the 60s cache.
- * Same `RACK-BAY-LEVEL` shape as `POST /api/bins` / `stock.binCode` when present.
+ * When neither `stock.binCode` nor `products.location` is set. Picks a cell from
+ * the same full layout as `POST /api/bins` using `variantId`+SKU to avoid
+ * the frequent collisions of {@link randomKokobayLocationForIndex} with SKU-only
+ * (different variants could read the same code, e.g. `B-01-C`).
+ * Shape: `RACK-BAY-LEVEL` like `stock.binCode`.
  */
-function mockLocationForLine(order: ShopifyOrder, li: ShopifyLineItem): string {
-  const oId = typeof order.id === "number" && Number.isFinite(order.id) ? order.id : 0;
-  const liId = Number.isFinite(li.id) ? li.id : 0;
-  const i = (oId * 1_000_000 + (liId % 1_000_000)) % 10_000_000;
-  return randomKokobayLocationForIndex(i);
+function mockLocationForUnstockedLine(sku: string, variantId: number): string {
+  const s =
+    Number.isFinite(variantId) && variantId > 0
+      ? `v:${variantId}\t${String(sku).trim()}`
+      : `sku:${String(sku).trim()}`;
+  const h = (indexFromString(s) * 0x9e3779b9) >>> 0;
+  const codes = allKokobayLayoutBinCodes();
+  if (codes.length > 0) {
+    return codes[h % codes.length]!;
+  }
+  return randomKokobayLocationForIndex(h);
 }
 
 function shopifyOrderStatusLabel(o: ShopifyOrder): string {
@@ -94,6 +189,7 @@ function toWarehouseLines(
   o: ShopifyOrder,
   m: MongoBySku,
   binByVariantId: Map<number, string>,
+  lineImageByLineId: Map<string, string>,
 ): WarehouseOrderLine[] {
   const withQty = o.line_items.filter((li) => (li.quantity ?? 0) > 0);
   return withQty.map((li) => {
@@ -101,8 +197,43 @@ function toWarehouseLines(
     const vid = Number(li.variant_id);
     const fromStock =
       Number.isFinite(vid) && binByVariantId.get(vid)?.trim();
-    const location = fromStock || mockLocationForLine(o, li);
     const row = m.get(sku);
+    const rawLoc = row?.location?.trim() ?? "";
+    // Synced `products` default every new row to the same code — that is not a
+    // real unique bin. Ignore it so we fall back to per-SKU placement (or
+    // `stock` when the variant is assigned a bin by POST /api/stock/seed).
+    const fromProductLoc =
+      rawLoc.length > 0 && rawLoc !== DEFAULT_PRODUCT_PLACE_LOCATION
+        ? rawLoc
+        : null;
+    const location =
+      typeof fromStock === "string" && fromStock
+        ? fromStock
+        : fromProductLoc
+          ? fromProductLoc
+          : mockLocationForUnstockedLine(sku, Number.isFinite(vid) && vid > 0 ? vid : 0);
+    const fromShopify = lineImageByLineId.get(String(li.id))?.trim();
+    const lineDisplayName =
+      row?.name?.trim() ||
+      (typeof (li as { name?: string }).name === "string"
+        ? (li as { name: string }).name.trim()
+        : "") ||
+      lineItemTitle(li);
+    const fromMongo = row?.color?.trim();
+    const fromTitle = colourValueFromLineDisplayName(lineDisplayName);
+    const mongoSane =
+      fromMongo &&
+      fromMongo !== "—" &&
+      !isLikelySizeOnlyToken(fromMongo);
+    let lineColor: string | undefined = (mongoSane ? fromMongo : fromTitle) || undefined;
+    let size: string | undefined = sizeFromShopifyLineItem(li, lineColor);
+    if (lineColor) {
+      const { colour, sizeFromParens } = splitSizeFromColourParens(lineColor);
+      lineColor = colour || undefined;
+      if (sizeFromParens && !size) {
+        size = sizeFromParens;
+      }
+    }
     const pence = Math.max(
       0,
       Math.round(Number.parseFloat(String(li.price) || "0") * 100) || 0,
@@ -110,9 +241,13 @@ function toWarehouseLines(
     return {
       sku,
       quantity: Math.max(1, Math.trunc(Number(li.quantity) || 0)),
-      name: row?.name?.trim() || lineItemTitle(li),
-      color: row?.color?.trim(),
-      thumbnailImageUrl: row?.thumbnailImageUrl?.trim() || undefined,
+      name: lineDisplayName,
+      color: lineColor,
+      ...(size ? { size } : {}),
+      thumbnailImageUrl:
+        (fromShopify && fromShopify.length > 0
+          ? fromShopify
+          : row?.thumbnailImageUrl?.trim()) || undefined,
       location,
       unitPricePence: pence,
       requiresShipping: li.requires_shipping,
@@ -251,16 +386,23 @@ export async function getUkPremiumShopifyOrdersForPicks(): Promise<
       }
     }
   }
-  const [m, binByVariantId] = await Promise.all([
+  const [m, binByVariantId, lineImageByLineId] = await Promise.all([
     loadMongoBySkus(allSkus),
     loadBinCodeByVariantId(allVariantIds),
+    lineItemImageUrlByLineId(filtered),
   ]);
 
-  return filtered.map((o) => ({
-    orderNumber: o.name,
-    status: shopifyOrderStatusLabel(o),
-    items: toWarehouseLines(o, m, binByVariantId),
-  }));
+  return filtered.map((o) => {
+    const { firstName, lastName } = displayCustomerNameParts(o);
+    return {
+      orderNumber: o.name,
+      status: shopifyOrderStatusLabel(o),
+      items: toWarehouseLines(o, m, binByVariantId, lineImageByLineId),
+      ...(firstName || lastName
+        ? { customerFirstName: firstName, customerLastName: lastName }
+        : {}),
+    } satisfies OrderForPick;
+  });
 }
 
 /**
@@ -268,8 +410,9 @@ export async function getUkPremiumShopifyOrdersForPicks(): Promise<
  * (London) via Shopify query params, paginating past 250 so “today’s” set is
  * not truncated to the store’s 250 most-recent. Lines and prices from Shopify;
  * `stock.binCode` when the variant is present in Mongo `stock` (from
- * `POST /api/stock/seed`); else mock location. Optional `products` for
- * display fields by SKU.
+ * `POST /api/stock/seed`); else Mongo `products.location` for that SKU; else
+ * a deterministic per-SKU placeholder (same bin for the same SKU on every
+ * order). `products` also supplies display fields by SKU.
  */
 export async function getTodaysShopifyOrderForPicks(
   dayKey: string,
@@ -293,14 +436,21 @@ export async function getTodaysShopifyOrderForPicks(
       }
     }
   }
-  const [m, binByVariantId] = await Promise.all([
+  const [m, binByVariantId, lineImageByLineId] = await Promise.all([
     loadMongoBySkus(allSkus),
     loadBinCodeByVariantId(allVariantIds),
+    lineItemImageUrlByLineId(inDay),
   ]);
 
-  return inDay.map((o) => ({
-    orderNumber: o.name,
-    status: shopifyOrderStatusLabel(o),
-    items: toWarehouseLines(o, m, binByVariantId),
-  }));
+  return inDay.map((o) => {
+    const { firstName, lastName } = displayCustomerNameParts(o);
+    return {
+      orderNumber: o.name,
+      status: shopifyOrderStatusLabel(o),
+      items: toWarehouseLines(o, m, binByVariantId, lineImageByLineId),
+      ...(firstName || lastName
+        ? { customerFirstName: firstName, customerLastName: lastName }
+        : {}),
+    } satisfies OrderForPick;
+  });
 }

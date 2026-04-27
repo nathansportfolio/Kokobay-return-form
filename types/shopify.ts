@@ -143,10 +143,15 @@ export interface ShopifyLineItem {
   product_id: number;
   variant_id: number;
 
+  /** Full display name on the order line (e.g. `… - white - 12`); not always in thin types. */
+  name?: string;
   title: string;
   variant_title: string | null;
   /** Present on REST line items; used for warehouse / returns. */
   sku: string | null;
+
+  /** e.g. `[{ name: "Size", value: "10" }]` on some stores. */
+  properties?: { name: string; value: string }[];
 
   quantity: number;
   price: string;

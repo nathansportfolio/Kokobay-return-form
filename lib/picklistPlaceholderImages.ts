@@ -1,6 +1,6 @@
 /**
  * Unsplash: women’s fashion (256 crop). Used when a line has no thumbnail or load fails.
- * @see next.config `images.unsplash.com` allowlist
+ * @see next.config `images.unsplash.com` and `cdn.shopify.com` allowlists
  */
 const WOMENS_FASHION_PLACEHOLDER_IMAGES: readonly string[] = [
   "https://images.unsplash.com/photo-1525507118888-4db3a9397070?w=256&h=256&fit=crop&q=80",
@@ -36,12 +36,23 @@ export function womensFashionPlaceholderForStep(step: PlaceholderKey): string {
 
 type ReturnLineKey = { lineId: string; sku: string };
 
+type AssemblyLineKey = { orderNumber: string; lineIndex: number; sku: string };
+
 /**
  * Women’s / girls’ clothing–style Unsplash art for returns when a line image is missing
  * or fails. Stable per `lineId`+`sku`.
  */
 export function womensFashionPlaceholderForReturnLine(key: ReturnLineKey): string {
   const s = `${key.lineId}\t${key.sku}`;
+  const i = hash32(s) % WOMENS_FASHION_PLACEHOLDER_IMAGES.length;
+  return WOMENS_FASHION_PLACEHOLDER_IMAGES[i]!;
+}
+
+/** Post-pick assembly list when a line has no product image. */
+export function womensFashionPlaceholderForAssemblyLine(
+  key: AssemblyLineKey,
+): string {
+  const s = `${key.orderNumber}\t${key.lineIndex}\t${key.sku}`;
   const i = hash32(s) % WOMENS_FASHION_PLACEHOLDER_IMAGES.length;
   return WOMENS_FASHION_PLACEHOLDER_IMAGES[i]!;
 }

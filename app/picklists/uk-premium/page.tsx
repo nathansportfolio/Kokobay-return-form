@@ -10,16 +10,22 @@ import { PICKLIST_LIST_KIND_UK_PREMIUM } from "@/lib/picklistListKind";
 import {
   fetchUkPremiumPickLists,
   parseOrdersPerListParam,
+  pickStepForOrdersLabel,
 } from "@/lib/fetchTodaysPickLists";
 import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
+import { AssemblyOrdersPanel } from "@/components/picklist/AssemblyOrdersPanel";
+import { PicklistColorSwatch } from "@/components/picklist/PicklistColorSwatch";
 import {
   PICK_LIST_TB_ACTION,
   PICK_LIST_TB_PRINT_UK,
   PICK_LIST_TB_SECONDARY,
   PICK_LIST_TOOLBAR_WRAP,
 } from "@/components/picklist/pickListToolbarClasses";
+import { formatDisplayColour } from "@/lib/formatDisplayColour";
 import { formatDayKeyAsOrdinalEnglish } from "@/lib/warehouseLondonDay";
+import { PicklistRefreshButton } from "@/components/PicklistRefreshButton";
+import { PicklistPicksConsoleLogger } from "@/components/PicklistPicksConsoleLogger";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +78,7 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-4 pb-12 sm:p-6">
+      <PicklistPicksConsoleLogger dayKey={dayKey} batches={batches} />
       <div className="flex flex-col gap-3 sm:gap-4">
         <div className="flex flex-col gap-2.5">
           <h1 className="min-w-0 text-2xl font-semibold leading-tight tracking-tight text-foreground">
@@ -79,6 +86,9 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
           </h1>
           <div className={PICK_LIST_TOOLBAR_WRAP}>
             <PicklistHowToFindProductsButton />
+            <PicklistRefreshButton
+              title="Re-fetch from Shopify and Mongo (e.g. after re-seeding stock or editing locations)"
+            />
             <Link
               href={`${LIST}/completed?${completedQuery.toString()}`}
               className={`${PICK_LIST_TB_ACTION} ${PICK_LIST_TB_SECONDARY}`}
@@ -228,18 +238,36 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
                             <p className="mt-1.5 text-sm leading-snug text-zinc-700 dark:text-zinc-300">
                               {s.name}
                             </p>
-                            {s.color ? (
-                              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                                <span className="text-zinc-500">Colour: </span>
-                                {s.color}
+                            <p className="mt-1 flex min-h-[1.25rem] items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                              <PicklistColorSwatch hex={s.colorHex} />
+                              {s.color ? (
+                                <>
+                                  <span className="text-zinc-500">Colour: </span>
+                                  {formatDisplayColour(s.color)}
+                                </>
+                              ) : (
+                                <span className="text-zinc-500">Colour: —</span>
+                              )}
+                            </p>
+                            {s.size ? (
+                              <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
+                                <span className="text-zinc-500">Size: </span>
+                                {s.size}
                               </p>
                             ) : null}
                             <p className="mt-1.5 text-xs text-zinc-500">
-                              For:{" "}
+                              <span className="text-zinc-500">For: </span>
                               <span className="font-mono text-zinc-600 dark:text-zinc-400">
-                                {s.forOrders.join(", ")}
+                                {pickStepForOrdersLabel(s)}
                               </span>
                             </p>
+                            {(s.sourceLineItemCount ?? 1) > 1 ? (
+                              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                                {s.forOrders.length > 1
+                                  ? `This stop serves ${s.forOrders.length} orders. Pick ${s.quantity} in total. The title is from the first line only — use order assembly to split by product.`
+                                  : `Pick ${s.quantity} in total: ${s.sourceLineItemCount ?? 1} product lines in this list share this location and SKU (e.g. top and bottoms) — the title is from the first; assembly lists each row.`}
+                              </p>
+                            ) : null}
                           </div>
                           <div
                             className="flex shrink-0 flex-col items-center gap-0.5 rounded-md border-2 border-zinc-900 bg-zinc-900 px-2 py-1.5 text-center dark:border-amber-500/90 dark:bg-amber-500"
@@ -276,33 +304,12 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
 
                 <div className="border-t border-dashed border-amber-200/80 px-4 py-4 dark:border-zinc-700 sm:px-5">
                   <h3 className="text-sm font-semibold">Order assembly</h3>
-                  <ul className="mt-3 flex flex-col gap-4">
-                    {batch.assembly.map((o) => (
-                      <li key={o.orderNumber}>
-                        <p className="font-mono text-xs font-semibold sm:text-sm">
-                          {o.orderNumber}
-                        </p>
-                        <ol className="mt-1.5 list-decimal pl-5 text-sm text-zinc-700 dark:text-zinc-300">
-                          {o.lines.map((line) => (
-                            <li key={`${o.orderNumber}-${line.lineIndex}`} className="pl-0.5">
-                              <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
-                                {!isVariantIdPlaceholderSku(line.sku) ? (
-                                  <span className="font-mono text-xs sm:text-sm">
-                                    {formatKokobaySkuDisplay(line.sku)}
-                                  </span>
-                                ) : null}
-                                <span className="font-medium">×{line.quantity}</span>
-                                <span>{line.name}</span>
-                                {line.color ? (
-                                  <span className="text-zinc-500">· {line.color}</span>
-                                ) : null}
-                              </span>
-                            </li>
-                          ))}
-                        </ol>
-                      </li>
-                    ))}
-                  </ul>
+                  <AssemblyOrdersPanel
+                    orders={batch.assembly}
+                    showDoneToggle
+                    listClassName="mt-3 flex flex-col gap-4"
+                    orderCardClassName="rounded-lg border border-dotted border-amber-200/90 bg-amber-50/40 p-3 sm:p-4 dark:border-zinc-600 dark:bg-zinc-900/40"
+                  />
                 </div>
                 <PicklistMarkCompleteButton
                   dayKey={dayKey}

@@ -43,6 +43,12 @@ function isPickStepArray(x: unknown): x is PickStep[] {
     if (typeof o.name !== "string") return false;
     if (typeof o.location !== "string") return false;
     if (typeof o.quantity !== "number") return false;
+    if (
+      o.sourceLineItemCount !== undefined &&
+      typeof o.sourceLineItemCount !== "number"
+    ) {
+      return false;
+    }
     if (!Array.isArray(o.forOrders)) return false;
     for (const fo of o.forOrders) {
       if (typeof fo !== "string") return false;
@@ -54,6 +60,21 @@ function isPickStepArray(x: unknown): x is PickStep[] {
     ) {
       return false;
     }
+    if (o.colorHex !== undefined && typeof o.colorHex !== "string") {
+      return false;
+    }
+    if (o.size !== undefined && typeof o.size !== "string") {
+      return false;
+    }
+    if (o.forOrderLineRowCounts !== undefined) {
+      if (!Array.isArray(o.forOrderLineRowCounts)) return false;
+      for (const row of o.forOrderLineRowCounts) {
+        if (!row || typeof row !== "object") return false;
+        const e = row as Record<string, unknown>;
+        if (typeof e.orderNumber !== "string") return false;
+        if (typeof e.lineRows !== "number") return false;
+      }
+    }
   }
   return true;
 }
@@ -64,6 +85,18 @@ function isOrderAssemblyArray(x: unknown): x is OrderAssembly[] {
     if (!a || typeof a !== "object") return false;
     const o = a as Record<string, unknown>;
     if (typeof o.orderNumber !== "string") return false;
+    if (
+      o.customerFirstName !== undefined &&
+      typeof o.customerFirstName !== "string"
+    ) {
+      return false;
+    }
+    if (
+      o.customerLastName !== undefined &&
+      typeof o.customerLastName !== "string"
+    ) {
+      return false;
+    }
     if (!Array.isArray(o.lines)) return false;
     for (const line of o.lines) {
       if (!line || typeof line !== "object") return false;
@@ -73,6 +106,18 @@ function isOrderAssemblyArray(x: unknown): x is OrderAssembly[] {
       if (typeof l.quantity !== "number") return false;
       if (typeof l.name !== "string") return false;
       if (l.color !== undefined && typeof l.color !== "string") return false;
+      if (
+        l.thumbnailImageUrl !== undefined &&
+        typeof l.thumbnailImageUrl !== "string"
+      ) {
+        return false;
+      }
+      if (l.colorHex !== undefined && typeof l.colorHex !== "string") {
+        return false;
+      }
+      if (l.size !== undefined && typeof l.size !== "string") {
+        return false;
+      }
     }
   }
   return true;

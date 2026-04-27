@@ -4,6 +4,8 @@ export type WarehouseOrderLine = {
   name: string;
   /** Copied from product at order build time, when available. */
   color?: string;
+  /** From Shopify `variant_title` when it encodes a size (e.g. `Apricot / 10`). */
+  size?: string;
   thumbnailImageUrl?: string;
   /** e.g. `B-04-C3` (see `kokobayLocationFormat`) */
   location: string;

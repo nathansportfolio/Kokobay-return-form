@@ -14,6 +14,7 @@ export type OrderLineForLabelPrint = {
   quantity: number;
   name: string;
   color?: string;
+  size?: string;
 };
 
 export type OrderLabelForPrint = {
@@ -36,6 +37,7 @@ function assemblyLineToPrint(line: AssemblyLine): OrderLineForLabelPrint {
     quantity: line.quantity,
     name: line.name,
     color: line.color?.trim() || undefined,
+    size: line.size?.trim() || undefined,
   };
 }
 

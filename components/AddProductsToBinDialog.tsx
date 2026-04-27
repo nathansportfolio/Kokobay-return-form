@@ -8,6 +8,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Skeleton from "@mui/material/Skeleton";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { catalogSkuForVariant } from "@/lib/shopifyCanonicalVariantSku";
 import type { ShopifyProduct, ShopifyVariant } from "@/types/shopify";
 
 type Queued = {
@@ -27,12 +28,6 @@ type FlatVariant = {
   sku: string;
 };
 
-function variantSku(v: Pick<ShopifyVariant, "id" | "sku" | "title">): string {
-  const s = v.sku?.trim();
-  if (s) return s;
-  return `V${v.id}`;
-}
-
 function defaultQuantityFromShopifyOnHand(
   v: Pick<ShopifyVariant, "inventory_quantity">,
 ): number {
@@ -48,7 +43,7 @@ function flattenProducts(products: ShopifyProduct[]): FlatVariant[] {
   for (const p of products) {
     for (const v of p.variants ?? []) {
       if (!Number.isFinite(v.id) || !Number.isFinite(p.id)) continue;
-      out.push({ product: p, variant: v, sku: variantSku(v) });
+      out.push({ product: p, variant: v, sku: catalogSkuForVariant(v).sku });
     }
   }
   return out;

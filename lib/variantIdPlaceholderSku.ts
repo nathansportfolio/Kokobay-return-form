@@ -1,8 +1,10 @@
 /**
- * Matches `toWarehouseLines` in `lib/shopifyWarehouseDayOrders.ts` when Shopify
- * has no SKU: `V` + `variant_id`. UIs can hide that placeholder; real SKUs that
- * match this pattern are indistinguishable here.
- * Also: bad/missing `variant_id` can stringify as `Vnull` / `Vundefined` (not `V` + digits).
+ * Legacy **synthetic** placeholder: `V` + digits only. New code uses
+ * `KOKO-VAR-{variantId}` (see `shopifyCanonicalVariantSku`) — that is a real
+ * internal key, not a “hide me” placeholder.
+ *
+ * UIs can hide `V{…}`; real SKUs that match this pattern are indistinguishable
+ * from legacy placeholders. Bad/missing `variant_id` could yield `Vnull` etc.
  */
 const VARIANT_ID_PLACEHOLDER_SKU = /^V\d+$/u;
 const PLACEHOLDER_SKU_BAD_V_SUFFIX = /^V(nul|undefined|NaN|null)$/iu;

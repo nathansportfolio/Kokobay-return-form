@@ -3,14 +3,22 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { WarehouseLocationLine } from "@/components/WarehouseLocationLine";
-import type { OrderAssembly, PickStep } from "@/lib/fetchTodaysPickLists";
+import {
+  type OrderAssembly,
+  type PickStep,
+  pickStepForOrdersLabel,
+} from "@/lib/picklistShared";
 import {
   PICKLIST_LIST_KIND_STANDARD,
   type PicklistListKind,
 } from "@/lib/picklistListKind";
+import { AssemblyOrdersPanel } from "@/components/picklist/AssemblyOrdersPanel";
+import { PicklistColorSwatch } from "@/components/picklist/PicklistColorSwatch";
 import { womensFashionPlaceholderForStep } from "@/lib/picklistPlaceholderImages";
 import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
+import { formatDisplayColour } from "@/lib/formatDisplayColour";
 import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
 
 type Props = {
@@ -52,13 +60,13 @@ function WalkCurrentProductThumb({
   const src = !primary || usePlaceholder ? placeholder : primary;
 
   return (
-    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800/80">
+    <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800/80 sm:h-32 sm:w-32">
       <Image
         src={src}
         alt={name}
         fill
         className="object-cover"
-        sizes="3rem"
+        sizes="(max-width: 640px) 7rem, 8rem"
         priority={priority}
         onError={() => {
           if (primary) setUsePlaceholder(true);
@@ -114,50 +122,6 @@ function PostPickStatusBar({
   );
 }
 
-function AssemblyOrdersList({ orders }: { orders: OrderAssembly[] }) {
-  if (orders.length === 0) {
-    return (
-      <p className="text-sm text-zinc-500">No assembly lines for this list.</p>
-    );
-  }
-  return (
-    <ul className="flex flex-col gap-5 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-950/40 sm:p-5">
-      {orders.map((o) => (
-        <li key={o.orderNumber}>
-          <p className="font-mono text-xs font-semibold text-foreground sm:text-sm">
-            {o.orderNumber}
-          </p>
-          <ol className="mt-1.5 list-decimal pl-5 text-sm text-zinc-700 dark:text-zinc-300">
-            {o.lines.map((line) => (
-              <li
-                key={`${o.orderNumber}-${line.lineIndex}`}
-                className="pl-0.5"
-              >
-                <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
-                  {!isVariantIdPlaceholderSku(line.sku) ? (
-                    <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400 sm:text-sm">
-                      {formatKokobaySkuDisplay(line.sku)}
-                    </span>
-                  ) : null}
-                  <span className="tabular-nums font-medium text-foreground">
-                    ×{line.quantity}
-                  </span>
-                  <span className="text-zinc-600 dark:text-zinc-400">
-                    {line.name}
-                  </span>
-                  {line.color ? (
-                    <span className="text-zinc-500">· {line.color}</span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 export function PicklistWalkClient({
   steps,
   pickListNumber,
@@ -168,6 +132,7 @@ export function PicklistWalkClient({
   listPathBase: listPathBaseIn,
   listKind: listKindIn,
 }: Props) {
+  const router = useRouter();
   const listPathBase = listPathBaseIn ?? "/picklists/today";
   const listKind = listKindIn ?? PICKLIST_LIST_KIND_STANDARD;
   const listHref = (n: number) => makeListListHref(n, listPathBase);
@@ -182,10 +147,25 @@ export function PicklistWalkClient({
   >(null);
   const walkSessionStartedAt = useRef<number | null>(null);
   const n = steps.length;
+
+  useEffect(() => {
+    // eslint-disable-next-line no-console -- intentional client debug
+    console.log("[kokobay picks walk]", {
+      dayKey,
+      pickListNumber,
+      orderNumbers,
+      steps,
+    });
+  }, [dayKey, pickListNumber, orderNumbers, steps]);
   const current = complete ? null : (steps[index] ?? null);
   const currentSkuIsVariantPlaceholder = current
     ? isVariantIdPlaceholderSku(current.sku)
     : false;
+  const walkLineColour = current?.color?.trim() ?? "";
+  const walkLineSize = current?.size?.trim() ?? "";
+  const walkShowColourLine =
+    walkLineColour.length > 0 && walkLineColour !== "—";
+  const walkShowSize = walkLineSize.length > 0;
   const atStart = !complete && index === 0;
   const atEnd = !complete && index === n - 1;
   const totalItemsQty = steps.reduce((s, st) => s + st.quantity, 0);
@@ -331,7 +311,13 @@ export function PicklistWalkClient({
                 Picked. Build each order from its lines in order, then mark as
                 assembled.
               </p>
-              <AssemblyOrdersList orders={assembly} />
+              <AssemblyOrdersPanel
+                orders={assembly}
+                showDoneToggle
+                includeThumbnails
+                listClassName="flex flex-col gap-5 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-950/40 sm:p-5"
+                orderCardClassName="rounded-lg border border-dotted border-zinc-300 bg-white/60 p-3 sm:p-4 dark:border-zinc-600 dark:bg-zinc-900/40"
+              />
               <button
                 type="button"
                 onClick={() => setPostPickPhase("assembled")}
@@ -443,11 +429,18 @@ export function PicklistWalkClient({
             {orderNumbers.join(" · ")}
           </p>
         </div>
-        <div className="shrink-0 text-right text-xs text-zinc-500">
+        <div className="flex shrink-0 flex-col items-end gap-1 text-right text-xs text-zinc-500">
           <p className="font-medium text-foreground tabular-nums">
             {index + 1} / {n}
           </p>
           <p>stops</p>
+          <button
+            type="button"
+            onClick={() => router.refresh()}
+            className="mt-0.5 text-[11px] font-medium text-sky-700 underline decoration-sky-700/60 hover:text-sky-800 dark:text-sky-400"
+          >
+            Refresh picks
+          </button>
         </div>
       </div>
 
@@ -460,29 +453,68 @@ export function PicklistWalkClient({
           <WarehouseLocationLine location={current.location} />
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              {!currentSkuIsVariantPlaceholder ? (
-                <>
-                  <p className="text-xs text-zinc-500">SKU</p>
-                  <p className="font-mono text-sm font-medium text-foreground sm:text-base">
-                    {formatKokobaySkuDisplay(current.sku)}
-                  </p>
-                </>
-              ) : null}
               <p
-                className={
-                  currentSkuIsVariantPlaceholder
-                    ? "text-sm text-zinc-600 dark:text-zinc-300"
-                    : "mt-1 text-sm text-zinc-600 dark:text-zinc-300"
-                }
+                className="text-base font-medium uppercase leading-snug tracking-wide text-foreground sm:text-lg"
+                lang="en-GB"
               >
                 {current.name}
               </p>
-              {current.color ? (
-                <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-300">
-                  <span className="text-xs text-zinc-500">Colour </span>
-                  {current.color}
-                </p>
+              {(walkShowColourLine || walkShowSize) ? (
+                <div className="mt-0.5 flex flex-col gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                  {walkShowColourLine ? (
+                    <p className="flex min-h-[1.25rem] flex-wrap items-center gap-2.5 text-sm leading-snug">
+                      <PicklistColorSwatch
+                        hex={current.colorHex}
+                        className="self-center"
+                      />
+                      <span>
+                        <span className="sr-only">Colour: </span>
+                        <span className="text-base font-bold text-foreground">
+                          {formatDisplayColour(walkLineColour)}
+                        </span>
+                      </span>
+                    </p>
+                  ) : null}
+                  {walkShowSize ? (
+                    <p
+                      className="flex min-h-[1.25rem] flex-wrap items-baseline gap-x-2.5 border-t border-dotted border-zinc-300/95 pt-3 dark:border-zinc-500/60"
+                      aria-label={`Size ${walkLineSize}`}
+                    >
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        Size
+                      </span>
+                      <span className="text-lg font-bold tabular-nums leading-none text-foreground sm:text-xl">
+                        {walkLineSize}
+                      </span>
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
+              <p
+                className={`flex min-h-[1.25rem] flex-wrap items-baseline gap-x-2.5 ${
+                  walkShowColourLine || walkShowSize ? "mt-1.5" : "mt-2"
+                }`}
+              >
+                <span
+                  className={
+                    current.quantity > 1
+                      ? "text-xs font-medium uppercase tracking-wide text-red-500 dark:text-red-400"
+                      : "text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
+                  }
+                >
+                  Qty
+                </span>
+                <span
+                  className={
+                    current.quantity > 1
+                      ? "text-lg font-bold tabular-nums leading-none text-red-600 sm:text-xl dark:text-red-400"
+                      : "text-lg font-bold tabular-nums leading-none text-foreground sm:text-xl"
+                  }
+                  aria-label={`Quantity to pick at this stop: ${current.quantity}`}
+                >
+                  {current.quantity}
+                </span>
+              </p>
             </div>
             <WalkCurrentProductThumb
               key={`${current.step}-${current.sku}`}
@@ -491,18 +523,29 @@ export function PicklistWalkClient({
               priority={index === 0}
             />
           </div>
-          <div>
-            <p className="text-xs text-zinc-500">Qty to pick at this stop</p>
-            <p className="text-2xl font-extrabold tabular-nums text-foreground sm:text-3xl">
-              {current.quantity}
-            </p>
-          </div>
+          {!currentSkuIsVariantPlaceholder ? (
+            <div>
+              <p className="text-[0.65rem] font-medium uppercase tracking-wider text-zinc-400">
+                SKU
+              </p>
+              <p className="mt-0.5 break-all font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                {formatKokobaySkuDisplay(current.sku)}
+              </p>
+            </div>
+          ) : null}
           {current.forOrders.length > 0 && (
             <p className="text-xs text-zinc-500">
               For:{" "}
               <span className="font-mono text-zinc-600 dark:text-zinc-400">
-                {current.forOrders.join(", ")}
+                {pickStepForOrdersLabel(current)}
               </span>
+            </p>
+          )}
+          {(current.sourceLineItemCount ?? 1) > 1 && (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {current.forOrders.length > 1
+                ? `This stop serves ${current.forOrders.length} orders. Pick ${current.quantity} in total.`
+                : `Pick ${current.quantity} in total: ${current.sourceLineItemCount ?? 1} product lines share this stop (e.g. top and bottoms) — the name is from the first; assembly has each line.`}
             </p>
           )}
         </div>

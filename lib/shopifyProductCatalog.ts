@@ -7,7 +7,13 @@ import {
   toShopifyProductForMongo,
   toShopifyVariantForMongo,
 } from "@/lib/shopifyMongoSnapshot";
+import {
+  SHOPIFY_SYNTHETIC_SKU_PREFIX,
+  catalogSkuForVariant,
+} from "@/lib/shopifyCanonicalVariantSku";
 import type { ShopifyProduct, ShopifyVariant } from "@/types/shopify";
+
+export { SHOPIFY_SYNTHETIC_SKU_PREFIX, catalogSkuForVariant };
 
 const COL = "shopify_product_catalog" as const;
 /** Single-doc metadata: feed timestamp, calendar day (London) for “once per day” auto-sync. */
@@ -15,12 +21,12 @@ export const SHOPIFY_CATALOG_META_COLLECTION = "shopify_product_catalog_meta" as
 const CATALOG_META_ID = "singleton" as const;
 /** `products` rows we create/update from the Shopify feed (safe to remove when not in feed). */
 export const SHOPIFY_PRODUCTS_FEED_SOURCE = "shopify-daily" as const;
-const DEFAULT_PRODUCT_PLACE_LOCATION = "U-20-F3";
 /**
- * When a Shopify variant has no `sku`, we use `KOKO-VAR-{variantId}` as the
- * document key and barcode (globally unique per variant).
+ * Placeholder only — **not** a real fixed bin. Used on first insert into
+ * `products` so rows exist; pick logic must treat this like “no location yet”
+ * (see `shopifyWarehouseDayOrders` / stock `binCode`).
  */
-export const SHOPIFY_SYNTHETIC_SKU_PREFIX = "KOKO-VAR-" as const;
+export const DEFAULT_PRODUCT_PLACE_LOCATION = "U-20-F3";
 
 /**
  * Pairs product option names (e.g. Size, Colour) with this variant’s values.
@@ -59,22 +65,214 @@ export function productVariantOptionsForLabel(
   return out;
 }
 
-export function catalogSkuForVariant(v: Pick<ShopifyVariant, "id" | "sku">): {
-  sku: string;
-  /** Trimmed `variant.sku` from Shopify, or `null` if we use a synthetic `sku`. */
-  shopifySku: string | null;
-} {
-  if (typeof v.id !== "number" || !Number.isFinite(v.id)) {
-    return { sku: `${SHOPIFY_SYNTHETIC_SKU_PREFIX}0`, shopifySku: null };
+/**
+ * True when a product option is meant to be **colour** (not size, etc.), so we
+ * can read the variant’s swatch from the right `option1`–`3` cell.
+ */
+export function isProductOptionNameForColor(optionName: string): boolean {
+  const n = optionName.trim();
+  if (!n) return false;
+  if (/(colorway|shade|couleur|nuance|farbe|nuanc)/i.test(n)) return true;
+  if (/\bcolou?rs?\b/i.test(n)) return true;
+  return false;
+}
+
+/** e.g. Size, UK, Waist — never use as a swatch/print label. */
+export function isProductOptionNameForSize(optionName: string): boolean {
+  const n = optionName.trim();
+  if (!n) return false;
+  if (/(^|\s)(shoe|dress|bust|cup|waist|hip|height|leg|length|inseam|age|kids?)\b/i.test(n)) {
+    return true;
   }
-  const raw = String(v.sku ?? "").trim();
-  if (raw) {
-    return { sku: raw, shopifySku: raw };
+  if (/(ring|bag|hat|belt)\s*size|ring\s*size/i.test(n)) return true;
+  if (/\b(size|length|width|depth|height|fits|fitting)\b/i.test(n)) return true;
+  if (/\b(uk|us|eu)\b/i.test(n) && /\b(size|dress|suit)\b/i.test(n)) return true;
+  if (/\bsizes?\b/i.test(n) && n.length < 20) return true;
+  if (/^uk$|^us$|^eu$/i.test(n)) return true;
+  return false;
+}
+
+/** Print / style text used as the visible “swatch” when Colour isn’t set. */
+export function isProductOptionNameForStyleOrPrint(optionName: string): boolean {
+  const n = optionName.trim();
+  if (!n) return false;
+  if (/\b(print|pattern|style|look|swatch|design|collection)\b/i.test(n)) {
+    return true;
   }
-  return {
-    sku: `${SHOPIFY_SYNTHETIC_SKU_PREFIX}${v.id}`,
-    shopifySku: null,
-  };
+  if (/(material|fabric|finish|denim wash)/i.test(n)) return true;
+  return false;
+}
+
+/**
+ * The variant’s **colour / print** value. Skips size-only tokens (e.g. a
+ * mis-tagged `Colour: 6`) and size option rows; also considers Print/Style.
+ */
+export function variantColorValueFromProductOptions(
+  product: Pick<ShopifyProduct, "options">,
+  variant: Pick<ShopifyVariant, "option1" | "option2" | "option3">,
+): string | null {
+  const pairs = productVariantOptionsForLabel(product, variant);
+  for (const { name, value } of pairs) {
+    if (isProductOptionNameForSize(name)) {
+      continue;
+    }
+    const t = value.trim();
+    if (!t || t.toLowerCase() === "default title") {
+      continue;
+    }
+    if (isLikelySizeOnlyToken(t)) {
+      continue;
+    }
+    if (isProductOptionNameForColor(name)) {
+      return t;
+    }
+  }
+  for (const { name, value } of pairs) {
+    if (isProductOptionNameForSize(name)) {
+      continue;
+    }
+    const t = value.trim();
+    if (!t || t.toLowerCase() === "default title" || isLikelySizeOnlyToken(t)) {
+      continue;
+    }
+    if (isProductOptionNameForStyleOrPrint(name)) {
+      return t;
+    }
+  }
+  return null;
+}
+
+/**
+ * Rejects short tokens that are almost always **size**, not a colour, when
+ * they appear as the last segment of a product title or a variant option.
+ */
+export function isLikelySizeOnlyToken(s: string): boolean {
+  const u = s.trim();
+  if (!u) return true;
+  if (u.length > 80) return true;
+  if (/^(xxs|xs|s|m|l|xl|xxl|xxxl|os|o\/s|one size|one-size|one size|onesize)$/i.test(u)) {
+    return true;
+  }
+  if (/^(xs|s|m|l|xl|xxl|xxxl)\s*\(\s*[\d-]+\s*\)\s*$/i.test(u)) {
+    return true;
+  }
+  if (/^(\d+\s*[-–]\s*\d+)$/.test(u) && u.length < 20) {
+    return true;
+  }
+  if (/^uk\s*[\d.]+\b/i.test(u) && u.length < 20) {
+    return true;
+  }
+  if (/^us\s*[\d.]+/i.test(u) && u.length < 20) {
+    return true;
+  }
+  if (/^eu\s*[\d.]+/i.test(u) && u.length < 20) {
+    return true;
+  }
+  if (/^[\d.]+$/i.test(u) && u.length < 5) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * When colour is not a separate Shopify option, it is often the last segment
+ * of the product title after a dash, e.g. `The amara lace top - black`.
+ */
+/**
+ * Picks a colour (or print name) from a **dashed** product/line name.
+ * Handles `Name - white - 12` (size last) and `Name - black` (single tail).
+ */
+export function colorValueFromProductTitleSuffix(title: string): string | null {
+  const t = String(title).replace(/\s+/g, " ").trim();
+  if (!t) return null;
+
+  const parts = t.split(/\s*[-–—]\s+/).map((s) => s.trim()).filter(Boolean);
+  if (parts.length < 2) {
+    const m = /[-–—]\s*([^-–—]+?)\s*$/i.exec(t);
+    if (m) {
+      const tail = m[1]!.trim();
+      if (tail && !isLikelySizeOnlyToken(tail) && tail.length <= 100) {
+        return tail;
+      }
+    }
+    return null;
+  }
+
+  const last = parts[parts.length - 1]!;
+  if (!isLikelySizeOnlyToken(last) && last.length <= 100) {
+    return last;
+  }
+  if (isLikelySizeOnlyToken(last) && parts.length >= 2) {
+    const prev = parts[parts.length - 2]!;
+    if (!isLikelySizeOnlyToken(prev) && prev.length <= 100) {
+      if (parts.length === 2 && prev.length > 48) {
+        return null;
+      }
+      return prev;
+    }
+  }
+  for (let i = parts.length - 2; i >= 1; i--) {
+    const seg = parts[i]!;
+    if (!isLikelySizeOnlyToken(seg) && seg.length <= 100) {
+      return seg;
+    }
+  }
+  return null;
+}
+
+/**
+ * Picks a print / colour from `The maxi (Mocha Melt / 6)`-style `products.name`
+ * lines. The slash segment in parens is often `print / size`.
+ */
+export function colourValueFromLineDisplayName(lineDisplay: string): string | null {
+  const t = String(lineDisplay).replace(/\s+/g, " ").trim();
+  if (!t) {
+    return null;
+  }
+  const open = t.lastIndexOf("(");
+  const close = t.lastIndexOf(")");
+  if (open >= 0 && close > open) {
+    const inner = t
+      .slice(open + 1, close)
+      .split(/\s*\/\s*/u)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (inner.length >= 2) {
+      const last = inner[inner.length - 1]!;
+      const first = inner.slice(0, -1).join(" / ");
+      if (isLikelySizeOnlyToken(last) && !isLikelySizeOnlyToken(first) && first) {
+        return first;
+      }
+      if (isLikelySizeOnlyToken(first) && !isLikelySizeOnlyToken(last) && last) {
+        return last;
+      }
+    }
+    if (inner.length === 1) {
+      const s = inner[0]!;
+      if (!isLikelySizeOnlyToken(s)) {
+        return s;
+      }
+    }
+  }
+  return colorValueFromProductTitleSuffix(t);
+}
+
+/**
+ * Colour for warehouse UI: from Color/Print options; else `(print / size)` in
+ * the display name, else dashed product title.
+ */
+export function variantColorValueForWarehouse(
+  product: Pick<ShopifyProduct, "options" | "title">,
+  variant: Pick<ShopifyVariant, "option1" | "option2" | "option3" | "title">,
+): string | null {
+  const fromOptions = variantColorValueFromProductOptions(product, variant);
+  if (fromOptions && !isLikelySizeOnlyToken(fromOptions)) {
+    return fromOptions;
+  }
+  return (
+    colourValueFromLineDisplayName(variantDisplayName(product, variant)) ??
+    colorValueFromProductTitleSuffix(String(product.title ?? ""))
+  );
 }
 
 export type ProductCatalogEntry = {
@@ -141,20 +339,15 @@ function variantThumbUrl(p: ShopifyProduct, v: ShopifyVariant): string {
   return p.images[0]?.src ?? "";
 }
 
-function variantDisplayName(p: ShopifyProduct, v: ShopifyVariant): string {
+function variantDisplayName(
+  p: Pick<ShopifyProduct, "title">,
+  v: Pick<ShopifyVariant, "title">,
+): string {
   const t = (v.title ?? "").trim();
   if (t && t !== "Default Title") {
     return `${(p.title ?? "").trim() || "—"} (${t})`;
   }
   return (p.title ?? "").trim() || "—";
-}
-
-function variantColorForFeed(v: ShopifyVariant): string {
-  const a = (v.option1 ?? "").trim();
-  if (a) return a;
-  const b = (v.option2 ?? "").trim();
-  if (b) return b;
-  return (v.option3 ?? "").trim();
 }
 
 type SyncOk = {
@@ -252,7 +445,7 @@ export async function runShopifyProductCatalogSync(
             $set: {
               name,
               category: String(productPicked.product_type ?? "").trim() || "—",
-              color: variantColorForFeed(vPicked) || "—",
+              color: variantColorValueForWarehouse(productPicked, vPicked) || "—",
               thumbnailImageUrl: variantThumbUrl(productPicked, vPicked),
               unitPricePence: pence,
               feedSource: SHOPIFY_PRODUCTS_FEED_SOURCE,

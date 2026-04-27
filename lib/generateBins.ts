@@ -21,6 +21,20 @@ export type BinLocation = {
  * (`RACK_BAY_LEVEL_RE`). 6 levels (A–F); bay counts follow `bayCountForRack`
  * (A: 13, B–I: 4, J–U: 5).
  */
+let _allLayoutBinCodes: string[] | null = null;
+
+/**
+ * Every `RACK-BAY-LEVEL` code in the default layout, sorted. Same set as
+ * `POST /api/bins` — use for stable fallback walk codes when `stock` has no row.
+ */
+export function allKokobayLayoutBinCodes(): string[] {
+  if (_allLayoutBinCodes) return _allLayoutBinCodes;
+  _allLayoutBinCodes = generateBins()
+    .map((b) => b.code)
+    .sort((a, b) => a.localeCompare(b));
+  return _allLayoutBinCodes;
+}
+
 export function generateBins(): BinLocation[] {
   const bins: BinLocation[] = [];
   const rows = KOKO_RACKS.split("");

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useRef } from "react";
+import { formatDisplayColour } from "@/lib/formatDisplayColour";
 import type { PickListLabelBatchForPrint } from "@/lib/picklistOrderLabelPrintData";
 
 /** Hairline for print; reads lighter on screen so border doesn’t dwarf the type */
@@ -158,8 +159,11 @@ export function PicklistOrderLabelsPrint({
                           {line.color ? (
                             <span className="text-zinc-500">
                               {" "}
-                              · {line.color}
+                              · {formatDisplayColour(line.color)}
                             </span>
+                          ) : null}
+                          {line.size ? (
+                            <span className="text-zinc-500"> · {line.size}</span>
                           ) : null}
                         </li>
                       ))}
