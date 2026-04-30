@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { insertReturnLog } from "@/lib/returnLog";
 import { normalizeReturnLineDisposition } from "@/lib/returnLogTypes";
 import { normalizeShopifyOrderIdForStorage } from "@/lib/shopifyOrderAdminUrl";
+import { parseSiteAccessRoleFromCookieHeader } from "@/lib/siteAccess";
 
 type Body = {
   orderRef?: string;
@@ -90,12 +91,16 @@ export async function POST(request: Request) {
   }
 
   const shopifyOrderId = normalizeShopifyOrderIdForStorage(body.shopifyOrderId);
+  const loggedByRole = parseSiteAccessRoleFromCookieHeader(
+    request.headers.get("cookie"),
+  );
 
   try {
     const returnUid = await insertReturnLog({
       orderRef,
       ...(shopifyOrderId ? { shopifyOrderId } : {}),
       lines: linesNormalized as Parameters<typeof insertReturnLog>[0]["lines"],
+      ...(loggedByRole ? { loggedByRole } : {}),
     });
     return NextResponse.json({ ok: true, returnUid });
   } catch (e) {

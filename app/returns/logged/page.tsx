@@ -27,6 +27,7 @@ import {
   returnLineDispositionHandlingPillClass,
   returnLineDispositionListBorderClass,
 } from "@/lib/returnLineDispositionUi";
+import { warehouseSiteRoleAuditDigit } from "@/lib/returnAuditUi";
 import { returnLineHandlingListingLabel } from "@/lib/returnLogTypes";
 import {
   shopifyOrderAdminUrlByOrderId,
@@ -335,7 +336,10 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
           <strong className="font-medium">greyed</strong> and{" "}
           <strong className="font-medium">at the bottom</strong> of this page.{" "}
           <strong className="font-medium">Refund in Shopify</strong> opens Admin refund
-          with stored id or the same live lookup as the return screen.
+          with stored id or the same live lookup as the return screen.{" "}
+          <strong className="font-medium">User</strong> is who logged the return:{" "}
+          <strong className="font-medium">1</strong> = team PIN,{" "}
+          <strong className="font-medium">2</strong> = admin PIN (— if not recorded).
         </p>
       ) : null}
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-1.5">
@@ -562,6 +566,14 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50/90 dark:border-zinc-800 dark:bg-zinc-900/50">
                   {colHeader("date", "Logged")}
+                  {q.refundPending ? (
+                    <th
+                      className="w-10 whitespace-nowrap px-2 py-2.5 text-center font-semibold text-foreground sm:px-3"
+                      title="Who logged this return: 1 = team PIN, 2 = admin PIN"
+                    >
+                      User
+                    </th>
+                  ) : null}
                   <th className="px-3 py-2.5 font-semibold text-foreground sm:px-4">
                     Order
                   </th>
@@ -603,6 +615,14 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                     <td className="whitespace-nowrap px-3 py-3 sm:px-4">
                       {fmtWhen(r.createdAt)}
                     </td>
+                    {q.refundPending ? (
+                      <td
+                        className="whitespace-nowrap px-2 py-3 text-center font-medium tabular-nums text-foreground sm:px-3"
+                        title="Who logged this return: 1 = team PIN, 2 = admin PIN"
+                      >
+                        {warehouseSiteRoleAuditDigit(r.loggedByRole)}
+                      </td>
+                    ) : null}
                     <td className="px-3 py-3 font-mono text-xs sm:px-4 sm:text-sm">
                       {r.orderRef}
                     </td>
@@ -672,7 +692,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                       }
                     >
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         className="border-t border-zinc-200 px-3 py-2.5 align-top text-xs leading-relaxed dark:border-zinc-800"
                       >
                         <p className="mb-1.5 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -758,6 +778,15 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                         <dt className={mutedText}>Logged</dt>
                         <dd className={`font-medium tabular-nums ${strongText}`}>
                           {fmtWhen(r.createdAt)}
+                        </dd>
+                        <dt className={mutedText} title="1 = team PIN, 2 = admin PIN">
+                          User
+                        </dt>
+                        <dd
+                          className={`font-medium tabular-nums ${strongText}`}
+                          title="Who logged this return: 1 = team PIN, 2 = admin PIN"
+                        >
+                          {warehouseSiteRoleAuditDigit(r.loggedByRole)}
                         </dd>
                         <dt className={mutedText}>Order</dt>
                         <dd

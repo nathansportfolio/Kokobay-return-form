@@ -15,6 +15,7 @@ import {
   type ReturnLogLineEntry,
   type ReturnLogListItem,
 } from "@/lib/returnLogTypes";
+import type { SiteAccessRole } from "@/lib/siteAccess";
 
 export const RETURN_LOGS_COLLECTION = "returnLogs";
 
@@ -34,6 +35,9 @@ type ReturnLogMongo = {
   fullRefundAmountGbp?: number;
   fullRefundIssuedAt?: Date;
   updatedAt: Date;
+  loggedByRole?: SiteAccessRole;
+  customerEmailMarkedByRole?: SiteAccessRole;
+  fullRefundMarkedByRole?: SiteAccessRole;
 };
 
 function lineTotal(quantity: number, unit: number) {
@@ -95,6 +99,7 @@ export async function insertReturnLog(
     customerEmailSent: false,
     fullRefundIssued: false,
     updatedAt: now,
+    ...(input.loggedByRole ? { loggedByRole: input.loggedByRole } : {}),
   };
 
   const client = await clientPromise;
@@ -135,6 +140,13 @@ const mapDocToListItem = (d: ReturnLogMongo): ReturnLogListItem => ({
     : {}),
   ...(d.fullRefundIssuedAt
     ? { fullRefundIssuedAt: d.fullRefundIssuedAt.toISOString() }
+    : {}),
+  ...(d.loggedByRole ? { loggedByRole: d.loggedByRole } : {}),
+  ...(d.customerEmailMarkedByRole
+    ? { customerEmailMarkedByRole: d.customerEmailMarkedByRole }
+    : {}),
+  ...(d.fullRefundMarkedByRole
+    ? { fullRefundMarkedByRole: d.fullRefundMarkedByRole }
     : {}),
 });
 
@@ -278,24 +290,29 @@ function escRegex(s: string) {
 
 export async function markReturnCustomerEmailSent(
   returnUid: string,
+  opts?: { markedByRole?: SiteAccessRole },
 ): Promise<boolean> {
   const client = await clientPromise;
   const col = client
     .db(kokobayDbName)
     .collection(RETURN_LOGS_COLLECTION);
   const now = new Date();
-  const res = await col.updateOne(
-    { returnUid: String(returnUid) },
-    {
-      $set: { customerEmailSent: true, customerEmailSentAt: now, updatedAt: now },
-    },
-  );
+  const set: Record<string, unknown> = {
+    customerEmailSent: true,
+    customerEmailSentAt: now,
+    updatedAt: now,
+  };
+  if (opts?.markedByRole) {
+    set.customerEmailMarkedByRole = opts.markedByRole;
+  }
+  const res = await col.updateOne({ returnUid: String(returnUid) }, { $set: set });
   return res.matchedCount === 1;
 }
 
 export async function markReturnFullRefund(
   returnUid: string,
   fullRefundAmountGbp: number,
+  opts?: { markedByRole?: SiteAccessRole },
 ): Promise<boolean> {
   const client = await clientPromise;
   const col = client
@@ -303,16 +320,15 @@ export async function markReturnFullRefund(
     .collection(RETURN_LOGS_COLLECTION);
   const now = new Date();
   const amt = Math.max(0, fullRefundAmountGbp);
-  const res = await col.updateOne(
-    { returnUid: String(returnUid) },
-    {
-      $set: {
-        fullRefundIssued: true,
-        fullRefundAmountGbp: amt,
-        fullRefundIssuedAt: now,
-        updatedAt: now,
-      },
-    },
-  );
+  const set: Record<string, unknown> = {
+    fullRefundIssued: true,
+    fullRefundAmountGbp: amt,
+    fullRefundIssuedAt: now,
+    updatedAt: now,
+  };
+  if (opts?.markedByRole) {
+    set.fullRefundMarkedByRole = opts.markedByRole;
+  }
+  const res = await col.updateOne({ returnUid: String(returnUid) }, { $set: set });
   return res.matchedCount === 1;
 }

@@ -8,7 +8,9 @@ import {
   shopifyOrderAdminUrlFromOrderRef,
 } from "@/lib/shopifyOrderAdminUrl";
 import { formatGbp } from "@/lib/kokobayOrderLines";
+import { warehouseSiteRoleAuditLabel } from "@/lib/returnAuditUi";
 import { returnLineHandlingListingLabel } from "@/lib/returnLogTypes";
+import type { SiteAccessRole } from "@/lib/siteAccess";
 import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { WAREHOUSE_TZ, formatDateAsOrdinalInTimeZone } from "@/lib/warehouseLondonDay";
 
@@ -21,6 +23,11 @@ function formatIso(d: Date | string | undefined): string {
   const dt = typeof d === "string" ? new Date(d) : d;
   if (Number.isNaN(dt.getTime())) return "—";
   return formatDateAsOrdinalInTimeZone(dt, WAREHOUSE_TZ);
+}
+
+function byRoleSuffix(role: SiteAccessRole | undefined): string | null {
+  if (!role) return null;
+  return ` · Logged by ${warehouseSiteRoleAuditLabel(role)}`;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -84,7 +91,10 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
         </div>
         <div>
           <dt className="text-zinc-500">Registered</dt>
-          <dd className="text-foreground">{formatIso(doc.createdAt)}</dd>
+          <dd className="text-foreground">
+            {formatIso(doc.createdAt)}
+            {byRoleSuffix(doc.loggedByRole)}
+          </dd>
         </div>
         <div>
           <dt className="text-zinc-500">Customer email marked sent</dt>
@@ -98,6 +108,9 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
             {doc.customerEmailSent ? "Yes" : "No"}{" "}
             {doc.customerEmailSentAt
               ? `· ${formatIso(doc.customerEmailSentAt)}`
+              : null}
+            {doc.customerEmailMarkedByRole
+              ? ` · Marked by ${warehouseSiteRoleAuditLabel(doc.customerEmailMarkedByRole)}`
               : null}
           </dd>
         </div>
@@ -116,6 +129,9 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
               : null}{" "}
             {doc.fullRefundIssuedAt
               ? `· ${formatIso(doc.fullRefundIssuedAt)}`
+              : null}
+            {doc.fullRefundMarkedByRole
+              ? ` · Marked by ${warehouseSiteRoleAuditLabel(doc.fullRefundMarkedByRole)}`
               : null}
           </dd>
         </div>

@@ -4,6 +4,7 @@ import {
   markReturnCustomerEmailSent,
   markReturnFullRefund,
 } from "@/lib/returnLog";
+import { parseSiteAccessRoleFromCookieHeader } from "@/lib/siteAccess";
 
 type PatchBody = {
   markEmailSent?: boolean;
@@ -52,9 +53,14 @@ export async function PATCH(
     );
   }
 
+  const markedByRole = parseSiteAccessRoleFromCookieHeader(
+    request.headers.get("cookie"),
+  );
+  const auditOpts = markedByRole ? { markedByRole } : undefined;
+
   try {
     if (hasEmail) {
-      await markReturnCustomerEmailSent(returnUid);
+      await markReturnCustomerEmailSent(returnUid, auditOpts);
     }
     if (hasRefund) {
       const amt = Number(body.fullRefundAmountGbp);
@@ -64,7 +70,7 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      await markReturnFullRefund(returnUid, amt);
+      await markReturnFullRefund(returnUid, amt, auditOpts);
     }
     const fresh = await getReturnLogByUid(returnUid);
     return NextResponse.json({ ok: true, return: fresh });

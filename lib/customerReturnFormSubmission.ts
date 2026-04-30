@@ -31,6 +31,8 @@ export type CustomerReturnFormDoc = {
   datePosted: string;
   items: CustomerReturnFormItem[];
   createdAt: Date;
+  /** Audit: public form submission (`customer` + name/email). Omitted on older rows. */
+  submittedByKind?: "customer";
 };
 
 type InsertInput = {
@@ -164,6 +166,7 @@ export async function insertCustomerReturnForm(
     datePosted: data.datePosted,
     items,
     createdAt: new Date(),
+    submittedByKind: "customer",
   };
   const client = await clientPromise;
   const col = client

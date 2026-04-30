@@ -1,3 +1,5 @@
+import type { SiteAccessRole } from "@/lib/siteAccess";
+
 /** Warehouse handling — chosen on the return screen (not the customer reason list). */
 export type ReturnLineDisposition =
   | "restock"
@@ -55,6 +57,12 @@ export type ReturnLogDoc = {
   fullRefundAmountGbp?: number;
   fullRefundIssuedAt?: string | Date;
   updatedAt: string | Date;
+  /** PIN session role when the warehouse registered this return (`site_access`). */
+  loggedByRole?: SiteAccessRole;
+  /** PIN session role when “customer email sent” was marked. */
+  customerEmailMarkedByRole?: SiteAccessRole;
+  /** PIN session role when full refund was marked issued. */
+  fullRefundMarkedByRole?: SiteAccessRole;
 };
 
 export type ReturnLogListItem = {
@@ -75,6 +83,9 @@ export type ReturnLogListItem = {
   /** Optional recorded amount when refund was marked issued in app. */
   fullRefundAmountGbp?: number;
   fullRefundIssuedAt?: string;
+  loggedByRole?: SiteAccessRole;
+  customerEmailMarkedByRole?: SiteAccessRole;
+  fullRefundMarkedByRole?: SiteAccessRole;
 };
 
 /**
@@ -113,6 +124,8 @@ export type InsertReturnLogInput = {
     disposition: ReturnLineDisposition;
     notes?: string | null;
   }[];
+  /** From `site_access` cookie when the request is authenticated as warehouse. */
+  loggedByRole?: SiteAccessRole | null;
 };
 
 /** Label for warehouse handling on refund / logged lists. */

@@ -46,3 +46,11 @@ function parseSiteAccessFromCookieString(cookie: string): SiteAccessRole | null 
   }
   return null;
 }
+
+/** Parse `Cookie` request header (Route Handlers / middleware). */
+export function parseSiteAccessRoleFromCookieHeader(
+  cookieHeader: string | null | undefined,
+): SiteAccessRole | null {
+  if (cookieHeader == null || cookieHeader === "") return null;
+  return parseSiteAccessFromCookieString(cookieHeader);
+}
