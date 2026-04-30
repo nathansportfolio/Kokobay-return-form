@@ -141,10 +141,6 @@ export function CustomerReturnForm() {
     for (const line of lines) {
       const s = byLine[line.id];
       if (!s?.include) continue;
-      if (!s.reasonValue) {
-        toast.error(`Choose a return reason for: ${line.title}`);
-        return;
-      }
       items.push({
         lineId: line.id,
         sku: line.sku,
@@ -154,7 +150,7 @@ export function CustomerReturnForm() {
       });
     }
     if (items.length === 0) {
-      toast.error("Select at least one item you are sending back and a reason for each");
+      toast.error("Select at least one item you are sending back");
       return;
     }
     setSubmitBusy(true);
@@ -243,7 +239,7 @@ export function CustomerReturnForm() {
           HOW TO RETURN: RETURNS FORM
         </h1>
         <p className="mt-8 text-sm leading-relaxed text-zinc-500 sm:mt-10 mb-12 sm:mb-16">
-          Enter your order number, choose what you are sending back and a reason, then
+          Enter your order number, choose what you are sending back (reason optional), then
           post to our address. We email you when we have your parcel, and we aim to
           refund within{" "}
           <strong className="font-semibold text-zinc-700 dark:text-zinc-300">5–10 working days</strong>.
@@ -269,7 +265,7 @@ export function CustomerReturnForm() {
               weight="duotone"
               aria-hidden
             />
-            <span>Tick the items you are returning and select a reason for each.</span>
+            <span>Tick the items you are returning. You can add a reason for each if you want.</span>
           </li>
           <li className="flex gap-3">
             <Truck
@@ -345,7 +341,7 @@ export function CustomerReturnForm() {
           >
             <h2 className="text-base font-semibold">Items you are returning</h2>
             <p className="text-sm text-zinc-500">
-              Tick each item you are sending back, then choose a reason.
+              Tick each item you are sending back. Reasons are optional.
             </p>
             <ul className="space-y-3 sm:space-y-4">
               {lines.map((line) => {
@@ -393,7 +389,7 @@ export function CustomerReturnForm() {
                             id={`reason-lbl-${line.id}`}
                             className="text-xs font-medium uppercase tracking-wide text-zinc-500"
                           >
-                            Reason
+                            Reason (optional)
                           </span>
                           <select
                             id={`reason-sel-${line.id}`}

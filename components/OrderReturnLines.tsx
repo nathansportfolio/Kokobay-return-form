@@ -251,16 +251,6 @@ export function OrderReturnLines({
       });
       return;
     }
-    for (const l of lines) {
-      if (!byId[l.id]?.selected) continue;
-      const row = { ...emptyLine(), ...byId[l.id] };
-      if (row.reason === CUSTOMER_FORM_REASON_UNSET || !row.reason) {
-        toast.error("Select a return reason for each line", {
-          description: "Use the same reasons as the online return form (too big, damaged, etc.).",
-        });
-        return;
-      }
-    }
     setSaving(true);
     try {
       const body = {
@@ -468,9 +458,9 @@ export function OrderReturnLines({
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           {resume.source === "customerForm" ? (
             <>
-              Lines, quantities, and reasons are pre-filled from the
-              customer&apos;s online return form. Review when goods arrive and
-              correct if needed.
+              Lines, quantities, and any reasons from the customer&apos;s online
+              return form are pre-filled. Review when goods arrive and correct if
+              needed.
             </>
           ) : (
             <>Pre-filled from the last warehouse return for this order.</>
@@ -606,7 +596,7 @@ export function OrderReturnLines({
                         htmlFor={reasonFieldId}
                         className="block text-xs font-medium uppercase tracking-wide text-zinc-500"
                       >
-                        Reason for return
+                        Reason for return (optional)
                       </label>
                       <select
                         id={reasonFieldId}

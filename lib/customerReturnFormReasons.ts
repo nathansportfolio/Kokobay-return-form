@@ -21,7 +21,7 @@ export const CUSTOMER_FORM_REASON_SELECT_OPTIONS: ReadonlyArray<{
   value: string;
   label: string;
 }> = [
-  { value: CUSTOMER_FORM_REASON_UNSET, label: "Select a reason" },
+  { value: CUSTOMER_FORM_REASON_UNSET, label: "No reason given" },
   ...CUSTOMER_FORM_REASONS,
 ];
 

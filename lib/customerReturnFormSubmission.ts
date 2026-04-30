@@ -103,8 +103,11 @@ export function validateCustomerReturnForm(
     const title = clamp(String(r.title ?? ""), MAX.itemTitle);
     const q = Math.max(1, Math.min(999, Math.floor(Number(r.quantity) || 1)));
     const reasonValue = String(r.reasonValue ?? "").trim();
-    if (!lineId || !sku || !isReasonAllowed(reasonValue)) {
-      return { ok: false, error: "Each line needs a valid reason" };
+    if (!lineId || !sku) {
+      return { ok: false, error: "Something was wrong with an item row. Reload the form and try again." };
+    }
+    if (reasonValue !== "" && !isReasonAllowed(reasonValue)) {
+      return { ok: false, error: "Use a listed reason or leave as no reason given" };
     }
     items.push({
       lineId,
