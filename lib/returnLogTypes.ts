@@ -37,10 +37,18 @@ export type ReturnLogListItem = {
   /** Shopify Admin / REST `order.id` for `…/orders/{id}` links. Omitted on older logs. */
   shopifyOrderId?: string;
   createdAt: string;
+  updatedAt: string;
+  /** Line items (for mobile refund list, etc.). */
+  lines: ReturnLogLineEntry[];
   lineCount: number;
+  /** Sum of return line totals (expected refund from logged lines). */
   totalRefundGbp: number;
   customerEmailSent: boolean;
+  customerEmailSentAt?: string;
   fullRefundIssued: boolean;
+  /** Optional recorded amount when refund was marked issued in app. */
+  fullRefundAmountGbp?: number;
+  fullRefundIssuedAt?: string;
 };
 
 /**

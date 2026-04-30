@@ -106,9 +106,14 @@ export interface ShopifyOrder {
   fulfillment_status: string | null;
 
   total_price: string;
+  /** Net total after refunds/adjustments; when lower than `total_price`, money was returned. */
+  current_total_price?: string;
   subtotal_price: string;
   total_tax: string;
   total_discounts: string;
+
+  /** Present when Shopify has recorded at least one refund on the order (REST). */
+  refunds?: { id?: number }[];
 
   customer: ShopifyCustomer | null;
   billing_address: ShopifyAddress | null;

@@ -112,10 +112,21 @@ const mapDocToListItem = (d: ReturnLogMongo): ReturnLogListItem => ({
   orderRef: d.orderRef,
   ...(d.shopifyOrderId ? { shopifyOrderId: d.shopifyOrderId } : {}),
   createdAt: d.createdAt.toISOString(),
+  updatedAt: d.updatedAt.toISOString(),
+  lines: Array.isArray(d.lines) ? d.lines : [],
   lineCount: d.lineCount,
   totalRefundGbp: d.totalRefundGbp,
   customerEmailSent: d.customerEmailSent,
+  ...(d.customerEmailSentAt
+    ? { customerEmailSentAt: d.customerEmailSentAt.toISOString() }
+    : {}),
   fullRefundIssued: d.fullRefundIssued,
+  ...(typeof d.fullRefundAmountGbp === "number"
+    ? { fullRefundAmountGbp: d.fullRefundAmountGbp }
+    : {}),
+  ...(d.fullRefundIssuedAt
+    ? { fullRefundIssuedAt: d.fullRefundIssuedAt.toISOString() }
+    : {}),
 });
 
 /**

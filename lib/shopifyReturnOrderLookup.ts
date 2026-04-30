@@ -40,6 +40,10 @@ export type ShopifyOrderDisplay = {
   currency: string;
   financialStatus: string;
   fulfillmentStatus: string | null;
+  /** Count of REST `order.refunds` entries (Shopify can keep `financial_status` as `paid` after a partial refund). */
+  refundRecordCount: number;
+  /** REST `current_total_price` when present; net after refunds. */
+  currentTotalPrice?: string;
 };
 
 export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
@@ -56,6 +60,11 @@ export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
 
   const email = String(o.email || c?.email || "")
     .trim();
+  const refundRecordCount = Array.isArray(o.refunds) ? o.refunds.length : 0;
+  const currentTotalPrice =
+    typeof o.current_total_price === "string" && o.current_total_price.trim()
+      ? o.current_total_price.trim()
+      : undefined;
   return {
     orderName: o.name,
     shopifyOrderId: String(o.id),
@@ -67,6 +76,8 @@ export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
     currency: o.currency,
     financialStatus: o.financial_status,
     fulfillmentStatus: o.fulfillment_status ?? null,
+    refundRecordCount,
+    ...(currentTotalPrice ? { currentTotalPrice } : {}),
   };
 }
 
@@ -104,6 +115,7 @@ export async function findShopifyOrderByQuery(
   }
 
   let order: ShopifyOrder | undefined;
+  let resolvedViaNumericOrderIdPath = false;
 
   if (LONG_NUMERIC_ID.test(q)) {
     const r = await shopifyAdminGetNoCache<{ order?: ShopifyOrder }>(
@@ -111,6 +123,7 @@ export async function findShopifyOrderByQuery(
     );
     if (r.ok && r.data.order) {
       order = r.data.order;
+      resolvedViaNumericOrderIdPath = true;
     }
   }
 
@@ -138,6 +151,16 @@ export async function findShopifyOrderByQuery(
     );
     if (r2.ok && r2.data.orders?.[0]) {
       order = r2.data.orders[0];
+    }
+  }
+
+  // `orders.json` search hits can omit `refunds` / `current_total_price`; single-order GET is complete.
+  if (order?.id && !resolvedViaNumericOrderIdPath) {
+    const rFull = await shopifyAdminGetNoCache<{ order?: ShopifyOrder }>(
+      `orders/${order.id}.json`,
+    );
+    if (rFull.ok && rFull.data.order) {
+      order = rFull.data.order;
     }
   }
 
@@ -297,6 +320,57 @@ export function shopifyFinancialStatusIsFullyRefunded(
   financialStatus: string | null | undefined,
 ): boolean {
   return String(financialStatus ?? "").trim().toLowerCase() === "refunded";
+}
+
+function shopifyFinancialStatusIsPartiallyRefunded(
+  financialStatus: string | null | undefined,
+): boolean {
+  return (
+    String(financialStatus ?? "").trim().toLowerCase() === "partially_refunded"
+  );
+}
+
+/**
+ * True when Shopify shows money has been returned: full/partial financial status,
+ * or at least one entry in REST `order.refunds` (some stores keep `paid` after a partial refund).
+ */
+export function shopifyOrderDisplayIndicatesMoneyReturned(
+  d: ShopifyOrderDisplay | null | undefined,
+): boolean {
+  if (!d) return false;
+  if (shopifyFinancialStatusIsFullyRefunded(d.financialStatus)) return true;
+  if (shopifyFinancialStatusIsPartiallyRefunded(d.financialStatus)) return true;
+  if ((d.refundRecordCount ?? 0) > 0) return true;
+  const orig = Number.parseFloat(String(d.totalPrice ?? ""));
+  const curRaw = d.currentTotalPrice;
+  if (curRaw != null && curRaw !== "") {
+    const cur = Number.parseFloat(String(curRaw));
+    if (
+      !Number.isNaN(orig) &&
+      !Number.isNaN(cur) &&
+      orig > cur + 0.005
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Human-readable payment column including refund records when status still says “paid”. */
+export function shopifyPaymentStatusLabelForReturnsList(
+  d: ShopifyOrderDisplay | null | undefined,
+): string {
+  if (!d) return "—";
+  const base = shopifyFinancialStatusLabel(d.financialStatus);
+  const n = d.refundRecordCount ?? 0;
+  if (
+    n > 0 &&
+    !shopifyFinancialStatusIsFullyRefunded(d.financialStatus) &&
+    !shopifyFinancialStatusIsPartiallyRefunded(d.financialStatus)
+  ) {
+    return `${base} · ${n} refund record${n === 1 ? "" : "s"}`;
+  }
+  return base;
 }
 
 export function shopifyFinancialStatusLabel(

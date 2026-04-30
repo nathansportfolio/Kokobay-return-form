@@ -19,8 +19,8 @@ import {
 } from "@/lib/returnLogListParams";
 import {
   resolveShopifyOrderDisplaysForOrderRefs,
-  shopifyFinancialStatusIsFullyRefunded,
-  shopifyFinancialStatusLabel,
+  shopifyOrderDisplayIndicatesMoneyReturned,
+  shopifyPaymentStatusLabelForReturnsList,
 } from "@/lib/shopifyReturnOrderLookup";
 import {
   shopifyOrderAdminUrlByOrderId,
@@ -70,6 +70,49 @@ function fmtWhen(iso: string) {
   return formatDateAsOrdinalInTimeZone(d, WAREHOUSE_TZ);
 }
 
+/**
+ * Split stored line title (often `Product – Variant` from Shopify) into product vs
+ * size/colour for the mobile refund list. Variant `a / b` → size `a`, colour `b`.
+ */
+function parseReturnLogLineTitleForMobile(title: string): {
+  product: string;
+  size: string;
+  colour: string;
+} {
+  const raw = String(title ?? "").trim();
+  if (!raw) {
+    return { product: "—", size: "—", colour: "—" };
+  }
+  let product = raw;
+  let variant = "";
+  const byEn = raw.split(/\s*–\s*/);
+  if (byEn.length >= 2) {
+    product = byEn[0].trim() || "—";
+    variant = byEn.slice(1).join(" – ").trim();
+  } else {
+    const byHy = raw.split(/\s+-\s+/);
+    if (byHy.length >= 2) {
+      product = byHy[0].trim() || "—";
+      variant = byHy.slice(1).join(" - ").trim();
+    }
+  }
+  if (!variant) {
+    return { product: product || "—", size: "—", colour: "—" };
+  }
+  const parts = variant
+    .split(/\s*\/\s/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return {
+      product: product || "—",
+      size: parts[0] ?? "—",
+      colour: parts.slice(1).join(" / ") || "—",
+    };
+  }
+  return { product: product || "—", size: variant, colour: "—" };
+}
+
 type PageProps = {
   searchParams: Promise<Readonly<Record<string, string | string[] | undefined>>>;
 };
@@ -96,7 +139,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
 
   if (err) {
     return (
-      <div className="mx-auto w-full max-w-5xl flex-1 p-4 sm:p-6">
+      <div className="mx-auto min-w-0 max-w-5xl flex-1 px-3 py-4 sm:px-6 sm:py-6">
         <h1 className="text-2xl font-semibold">Logged returns</h1>
         <p className="mt-2 text-sm text-red-600 dark:text-red-400">{err}</p>
         <Link
@@ -135,21 +178,96 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
     if (d?.shopifyOrderId) shopifyAdminIdByOrderRef.set(ref, d.shopifyOrderId);
   }
 
-  const filteredRows =
-    q.refundPending &&
-    refsToFetchForShopify.size > 0 &&
-    Boolean(process.env.SHOPIFY_STORE?.trim())
-      ? rows.filter((r) => {
-          const d = shopifyDisplayByOrderRef.get(r.orderRef.trim());
-          if (!d) return true;
-          return !shopifyFinancialStatusIsFullyRefunded(d.financialStatus);
-        })
-      : rows;
+  const shopifyLiveRefundsEnabled =
+    q.refundPending && Boolean(process.env.SHOPIFY_STORE?.trim());
 
-  const hiddenByShopifyFullyRefunded =
-    q.refundPending && rows.length > 0
-      ? rows.length - filteredRows.length
-      : 0;
+  const rowIndicatesShopifyMoneyReturned = (r: ReturnLogListItem) => {
+    if (!shopifyLiveRefundsEnabled) return false;
+    const d = shopifyDisplayByOrderRef.get(r.orderRef.trim());
+    return shopifyOrderDisplayIndicatesMoneyReturned(d);
+  };
+
+  const rowOrderIndex = new Map(rows.map((r, i) => [r.returnUid, i]));
+  const displayRows = shopifyLiveRefundsEnabled
+    ? [...rows].sort((a, b) => {
+        const ar = rowIndicatesShopifyMoneyReturned(a) ? 1 : 0;
+        const br = rowIndicatesShopifyMoneyReturned(b) ? 1 : 0;
+        if (ar !== br) return ar - br;
+        return (rowOrderIndex.get(a.returnUid) ?? 0) -
+          (rowOrderIndex.get(b.returnUid) ?? 0);
+      })
+    : rows;
+
+  const shopifyRefundedRowCountOnPage = shopifyLiveRefundsEnabled
+    ? rows.filter((r) => rowIndicatesShopifyMoneyReturned(r)).length
+    : 0;
+
+  if (q.refundPending && rows.length > 0) {
+    console.log(
+      "[returns/logged] refundPending=1 · page",
+      page,
+      "· Mongo rows on page:",
+      rows.length,
+      "· display (Shopify refunded sorted to bottom):",
+      displayRows.length,
+      "· SHOPIFY_STORE:",
+      Boolean(process.env.SHOPIFY_STORE?.trim()),
+    );
+    for (const r of rows) {
+      const shop = shopifyDisplayByOrderRef.get(r.orderRef.trim());
+      const greyedAtBottom = shopifyOrderDisplayIndicatesMoneyReturned(shop);
+      console.log("[returns/logged] order", {
+        orderRef: r.orderRef,
+        returnUid: r.returnUid,
+        mongo: {
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+          customerEmailSent: r.customerEmailSent,
+          customerEmailSentAt: r.customerEmailSentAt ?? null,
+          /** Sum of logged line totals (table “refund” amount context). */
+          totalRefundGbp_fromReturnLines: r.totalRefundGbp,
+          fullRefundIssued_appColumn: r.fullRefundIssued,
+          fullRefundAmountGbp_recordedWhenMarked:
+            r.fullRefundAmountGbp ?? null,
+          fullRefundIssuedAt: r.fullRefundIssuedAt ?? null,
+          lineCount: r.lineCount,
+        },
+        shopifyLive: shop
+          ? {
+              orderName: shop.orderName,
+              shopifyOrderId: shop.shopifyOrderId,
+              shopifyOrderNumber: shop.shopifyOrderNumber,
+              financialStatus: shop.financialStatus,
+              fulfillmentStatus: shop.fulfillmentStatus,
+              totalPrice: shop.totalPrice,
+              currentTotalPrice: shop.currentTotalPrice ?? null,
+              refundRecordCount: shop.refundRecordCount,
+              currency: shop.currency,
+              email: shop.email,
+              customerName: shop.customerName,
+              orderCreatedAt: shop.createdAt,
+            }
+          : {
+              _note:
+                "No Shopify row — check SHOPIFY_STORE, token, or order ref match",
+            },
+        shopifyOrderIdUsedForAdminLink:
+          r.shopifyOrderId ??
+          shopifyAdminIdByOrderRef.get(r.orderRef.trim()) ??
+          null,
+        shopifyRefunded_greyedSortedToBottom: greyedAtBottom,
+        linesPreview: r.lines.slice(0, 8).map((l) => ({
+          title: l.title,
+          sku: l.sku,
+          quantity: l.quantity,
+          lineTotalGbp: l.lineTotalGbp,
+          disposition: l.disposition,
+        })),
+        linesTotalShown: Math.min(8, r.lines.length),
+        linesTruncated: r.lines.length > 8,
+      });
+    }
+  }
 
   const current: ReturnLogListState = {
     page,
@@ -186,30 +304,33 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl flex-1 p-4 sm:p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-semibold">
+    <div className="mx-auto min-w-0 max-w-5xl flex-1 px-3 py-4 sm:px-6 sm:py-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-2">
+        <h1 className="text-xl font-semibold sm:text-2xl">
           {q.refundPending ? "Returns awaiting refund" : "Logged returns"}
         </h1>
         <Link
           href="/returns"
-          className="inline-flex shrink-0 items-center justify-center rounded-md bg-foreground px-2.5 py-1.5 text-xs font-semibold text-background shadow-sm transition-colors hover:bg-foreground/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+          className="inline-flex w-full shrink-0 items-center justify-center rounded-md bg-foreground px-2.5 py-2 text-xs font-semibold text-background shadow-sm transition-colors hover:bg-foreground/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground sm:w-auto sm:py-1.5"
         >
           New return
         </Link>
       </div>
       {q.refundPending ? (
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 text-pretty text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
           <strong className="font-medium">Refund</strong> column is this app’s flag
-          (not yet marked). When Shopify is configured, we also load each order’s live{" "}
-          <strong className="font-medium">payment status</strong> and{" "}
-          <strong className="font-medium">hide</strong> rows Shopify already shows as{" "}
-          <strong className="font-medium">Refunded</strong> so the list matches money
-          movement. <strong className="font-medium">Refund in Shopify</strong> opens
-          Admin refund with stored id or the same live lookup as the return screen.
+          (not yet marked). When Shopify is configured, we load each order’s live payment
+          data; rows where Shopify shows <strong className="font-medium">refunded</strong>,{" "}
+          <strong className="font-medium">partially refunded</strong>, or{" "}
+          <strong className="font-medium">refund records</strong> (even if status still
+          says <strong className="font-medium">paid</strong>) appear{" "}
+          <strong className="font-medium">greyed</strong> and{" "}
+          <strong className="font-medium">at the bottom</strong> of this page.{" "}
+          <strong className="font-medium">Refund in Shopify</strong> opens Admin refund
+          with stored id or the same live lookup as the return screen.
         </p>
       ) : null}
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-1.5">
         <Link
           href={returnLogListHref(current, {
             page: 1,
@@ -217,11 +338,12 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
           })}
           className={
             q.refundPending
-              ? "rounded-md bg-foreground px-2.5 py-1.5 text-xs font-semibold text-background shadow-sm"
-              : "rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+              ? "inline-flex w-full items-center justify-center rounded-md bg-foreground px-2.5 py-2 text-center text-xs font-semibold text-background shadow-sm sm:w-auto sm:py-1.5"
+              : "inline-flex w-full items-center justify-center rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-center text-xs font-medium text-foreground transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800 sm:w-auto sm:py-1.5"
           }
         >
-          View returns yet to be refunded
+          <span className="sm:hidden">Outstanding refunds</span>
+          <span className="hidden sm:inline">View returns yet to be refunded</span>
         </Link>
         <Link
           href={returnLogListHref(current, {
@@ -230,11 +352,12 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
           })}
           className={
             !q.refundPending
-              ? "rounded-md bg-foreground px-2.5 py-1.5 text-xs font-semibold text-background shadow-sm"
-              : "rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+              ? "inline-flex w-full items-center justify-center rounded-md bg-foreground px-2.5 py-2 text-center text-xs font-semibold text-background shadow-sm sm:w-auto sm:py-1.5"
+              : "inline-flex w-full items-center justify-center rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-center text-xs font-medium text-foreground transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800 sm:w-auto sm:py-1.5"
           }
         >
-          View all returns
+          <span className="sm:hidden">All returns</span>
+          <span className="hidden sm:inline">View all returns</span>
         </Link>
       </div>
 
@@ -382,54 +505,23 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
             </>
           ) : null}
         </p>
-      ) : filteredRows.length === 0 && q.refundPending ? (
-        <p className="mt-8 text-sm text-zinc-600 dark:text-zinc-400">
-          Every return on this page already has live Shopify payment status{" "}
-          <strong className="font-medium">Refunded</strong>, so nothing is shown
-          here.
-          {page > 1 ? (
-            <>
-              {" "}
-              <Link
-                className="font-medium text-foreground underline"
-                href={returnLogListPageHref(current, page - 1)}
-              >
-                Previous page
-              </Link>
-              {" · "}
-            </>
-          ) : null}
-          <Link
-            className="font-medium text-foreground underline"
-            href={returnLogListHref({
-              page: 1,
-              pageSize,
-              sort: q.sort,
-              order: q.order,
-              date: q.date,
-              refundPending: false,
-            })}
-          >
-            View all returns
-          </Link>
-          . Mark <strong className="font-medium">Refund</strong> in this app when
-          processing is done so your list stays accurate.
-        </p>
       ) : (
         <>
-          {hiddenByShopifyFullyRefunded > 0 ? (
+          {shopifyRefundedRowCountOnPage > 0 ? (
             <p
-              className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+              className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-200"
               role="status"
             >
-              Hiding {hiddenByShopifyFullyRefunded} return
-              {hiddenByShopifyFullyRefunded === 1 ? "" : "s"} on this page — Shopify
-              already shows payment as <strong className="font-medium">Refunded</strong>.
-              Mark <strong className="font-medium">Refund</strong> in the app when you
-              finish so those rows leave the database filter too.
+              {shopifyRefundedRowCountOnPage} return
+              {shopifyRefundedRowCountOnPage === 1 ? "" : "s"} on this page already have
+              refund activity in Shopify (paid/partial/refunded) — they are{" "}
+              <strong className="font-medium">greyed</strong> and listed{" "}
+              <strong className="font-medium">at the bottom</strong>. Mark{" "}
+              <strong className="font-medium">Refund</strong> in the app when processing
+              is done so the outstanding list stays accurate.
             </p>
           ) : null}
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-500">
+          <div className="mt-3 flex flex-col gap-2 text-sm text-zinc-500 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <span>Rows per page</span>
             <div className="flex flex-wrap items-center gap-1">
               {RETURN_LOG_PAGE_SIZES.map((n) => (
@@ -451,8 +543,14 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
             </div>
           </div>
 
-          <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-            <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
+          <div
+            className={
+              q.refundPending
+                ? "mt-3 hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 md:block"
+                : "mt-3 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800"
+            }
+          >
+            <table className="w-full min-w-[40rem] border-collapse text-left text-sm md:min-w-[48rem]">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50/90 dark:border-zinc-800 dark:bg-zinc-900/50">
                   {colHeader("date", "Logged")}
@@ -470,7 +568,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                   {q.refundPending ? (
                     <th
                       className="px-3 py-2.5 font-semibold text-foreground sm:px-4"
-                      title="Live Shopify REST financial_status for this order"
+                      title="Shopify financial_status plus refund records when status is still “paid”"
                     >
                       Shopify payment
                     </th>
@@ -481,10 +579,16 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                {filteredRows.map((r) => (
+                {displayRows.map((r) => {
+                  const greyed = rowIndicatesShopifyMoneyReturned(r);
+                  return (
                   <tr
                     key={r.returnUid}
-                    className="text-zinc-800 dark:text-zinc-200"
+                    className={
+                      greyed
+                        ? "bg-zinc-100/95 text-zinc-500 dark:bg-zinc-900/55 dark:text-zinc-400"
+                        : "text-zinc-800 dark:text-zinc-200"
+                    }
                   >
                     <td className="whitespace-nowrap px-3 py-3 sm:px-4">
                       {fmtWhen(r.createdAt)}
@@ -498,36 +602,39 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                     </td>
                     <td
                       className={`px-3 py-3 font-medium sm:px-4 ${
-                        r.customerEmailSent
-                          ? "text-emerald-700 dark:text-emerald-400"
-                          : "text-zinc-500"
+                        greyed
+                          ? "text-zinc-500 dark:text-zinc-400"
+                          : r.customerEmailSent
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-zinc-500"
                       }`}
                     >
                       {r.customerEmailSent ? "Yes" : "No"}
                     </td>
                     <td
                       className={`px-3 py-3 font-medium sm:px-4 ${
-                        r.fullRefundIssued
-                          ? "text-emerald-700 dark:text-emerald-400"
-                          : "text-red-600 dark:text-red-400"
+                        greyed
+                          ? "text-zinc-500 dark:text-zinc-400"
+                          : r.fullRefundIssued
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-red-600 dark:text-red-400"
                       }`}
                     >
                       {r.fullRefundIssued ? "Yes" : "No"}
                     </td>
                     {q.refundPending ? (
-                      <td className="px-3 py-3 text-sm capitalize sm:px-4">
-                        {shopifyFinancialStatusLabel(
-                          shopifyDisplayByOrderRef.get(
-                            r.orderRef.trim(),
-                          )?.financialStatus,
+                      <td className="px-3 py-3 text-sm normal-case sm:px-4">
+                        {shopifyPaymentStatusLabelForReturnsList(
+                          shopifyDisplayByOrderRef.get(r.orderRef.trim()) ??
+                            null,
                         )}
                       </td>
                     ) : null}
-                    <td className="px-3 py-3 sm:px-4">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                    <td className="px-2 py-3 sm:px-4">
+                      <div className="flex max-w-[10.5rem] flex-col gap-2 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:gap-1.5 lg:max-w-none">
                         <Link
                           href={`/returns/${encodeURIComponent(r.orderRef)}`}
-                          className="inline-flex min-h-8 min-w-[3.25rem] items-center justify-center rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-xs font-semibold text-foreground shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                          className="inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-foreground shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:hover:bg-zinc-800 sm:w-auto sm:min-h-8 sm:min-w-[3.25rem] sm:px-2.5 sm:py-1"
                           title="Open return in app"
                         >
                           View
@@ -537,31 +644,204 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                             r,
                             shopifyAdminIdByOrderRef,
                           )}
-                          className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[#006e52] bg-[#008060] px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950"
+                          className="inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-center text-xs font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950 sm:w-auto sm:min-h-8 sm:px-2.5 sm:py-1"
                           target="_blank"
                           rel="noopener noreferrer"
                           title="Refund order in Shopify admin (new tab)"
                         >
-                          Refund in Shopify
+                          <span className="sm:hidden">Shopify refund</span>
+                          <span className="hidden sm:inline">Refund in Shopify</span>
                         </a>
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+                })}
               </tbody>
             </table>
           </div>
 
-          <div className="mt-4 flex flex-col items-stretch justify-between gap-3 border-t border-zinc-200 pt-4 text-sm sm:flex-row sm:items-center dark:border-zinc-800">
-            <p className="text-zinc-600 dark:text-zinc-400" aria-live="polite">
+          {q.refundPending ? (
+            <div className="mt-3 space-y-4 md:hidden">
+              {displayRows.map((r) => {
+                const lines = r.lines ?? [];
+                const greyed = rowIndicatesShopifyMoneyReturned(r);
+                const cardBase =
+                  greyed
+                    ? "rounded-xl border border-zinc-300 bg-zinc-100/90 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900/55 dark:text-zinc-400"
+                    : "rounded-xl border border-zinc-200 bg-white text-foreground dark:border-zinc-800 dark:bg-zinc-950/40";
+                const strongText = greyed
+                  ? "text-zinc-600 dark:text-zinc-400"
+                  : "text-foreground";
+                const mutedText = greyed
+                  ? "text-zinc-500 dark:text-zinc-500"
+                  : "text-zinc-500 dark:text-zinc-400";
+                const yesNoEmail = r.customerEmailSent
+                  ? greyed
+                    ? "text-zinc-500 dark:text-zinc-400"
+                    : "text-emerald-700 dark:text-emerald-400"
+                  : mutedText;
+                const yesNoRefund = r.fullRefundIssued
+                  ? greyed
+                    ? "text-zinc-500 dark:text-zinc-400"
+                    : "text-emerald-700 dark:text-emerald-400"
+                  : greyed
+                    ? "text-zinc-500 dark:text-zinc-400"
+                    : "text-red-600 dark:text-red-400";
+                return (
+                  <section key={r.returnUid} className={cardBase}>
+                    <div className="border-b border-zinc-100 px-3 py-3 dark:border-zinc-800/80">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        Order and refund status
+                      </p>
+                      <dl className="mt-2 grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-3 gap-y-2 text-sm">
+                        <dt className={mutedText}>Logged</dt>
+                        <dd className={`font-medium tabular-nums ${strongText}`}>
+                          {fmtWhen(r.createdAt)}
+                        </dd>
+                        <dt className={mutedText}>Order</dt>
+                        <dd
+                          className={`break-all font-mono text-xs font-semibold ${strongText}`}
+                        >
+                          {r.orderRef}
+                        </dd>
+                        <dt className={mutedText}>Lines</dt>
+                        <dd className={`font-medium ${strongText}`}>
+                          {r.lineCount}
+                        </dd>
+                        <dt className={mutedText}>Value</dt>
+                        <dd className={`font-medium tabular-nums ${strongText}`}>
+                          {formatGbp(r.totalRefundGbp)}
+                        </dd>
+                        <dt className={mutedText}>Email</dt>
+                        <dd className={`font-medium ${yesNoEmail}`}>
+                          {r.customerEmailSent ? "Yes" : "No"}
+                        </dd>
+                        <dt className={mutedText}>Refund</dt>
+                        <dd className={`font-medium ${yesNoRefund}`}>
+                          {r.fullRefundIssued ? "Yes" : "No"}
+                        </dd>
+                        <dt className={mutedText}>Shopify payment</dt>
+                        <dd className={`text-sm normal-case ${strongText}`}>
+                          {shopifyPaymentStatusLabelForReturnsList(
+                            shopifyDisplayByOrderRef.get(r.orderRef.trim()) ??
+                              null,
+                          )}
+                        </dd>
+                      </dl>
+                      <div className="mt-3 flex gap-2">
+                        <Link
+                          href={`/returns/${encodeURIComponent(r.orderRef)}`}
+                          className="inline-flex min-h-9 flex-1 items-center justify-center rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-foreground shadow-sm dark:border-zinc-600 dark:bg-zinc-900"
+                        >
+                          View
+                        </Link>
+                        <a
+                          href={shopifyReturnLogRowAdminHref(
+                            r,
+                            shopifyAdminIdByOrderRef,
+                          )}
+                          className="inline-flex min-h-9 flex-1 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-xs font-semibold text-white"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Shopify refund
+                        </a>
+                      </div>
+                    </div>
+                    <div className="px-3 pt-2.5">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        Items to refund
+                      </p>
+                    </div>
+                    {lines.length === 0 ? (
+                      <p className="px-3 pb-3 pt-1 text-sm text-zinc-500">
+                        No line items stored for this return.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                        {lines.map((line) => {
+                          const { product, size, colour } =
+                            parseReturnLogLineTitleForMobile(line.title);
+                          return (
+                            <li key={line.lineId} className="px-3 py-3">
+                              <p
+                                className={`text-sm font-medium leading-snug ${
+                                  greyed
+                                    ? "text-zinc-600 dark:text-zinc-400"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                {product}
+                              </p>
+                              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                                <div>
+                                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                                    Size
+                                  </span>
+                                  <p
+                                    className={`font-medium ${
+                                      greyed
+                                        ? "text-zinc-600 dark:text-zinc-400"
+                                        : "text-foreground"
+                                    }`}
+                                  >
+                                    {size}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                                    Colour
+                                  </span>
+                                  <p
+                                    className={`font-medium ${
+                                      greyed
+                                        ? "text-zinc-600 dark:text-zinc-400"
+                                        : "text-foreground"
+                                    }`}
+                                  >
+                                    {colour}
+                                  </p>
+                                </div>
+                              </div>
+                              <p
+                                className={`mt-2 text-sm font-semibold tabular-nums ${
+                                  greyed
+                                    ? "text-zinc-600 dark:text-zinc-400"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                {formatGbp(line.lineTotalGbp)}
+                              </p>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex flex-col items-stretch gap-3 border-t border-zinc-200 pt-4 text-sm sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
+            <p
+              className="text-pretty text-zinc-600 dark:text-zinc-400"
+              aria-live="polite"
+            >
               {q.refundPending ? (
                 <>
-                  Showing {filteredRows.length} of {rows.length} on this page
-                  {hiddenByShopifyFullyRefunded > 0
-                    ? ` (${hiddenByShopifyFullyRefunded} hidden: Shopify already refunded)`
-                    : ""}
-                  . Database filter: {from}–{to} of {total} with refund not marked in
-                  app.
+                  <span className="block sm:inline">
+                    Showing {displayRows.length} return
+                    {displayRows.length === 1 ? "" : "s"} on this page
+                    {shopifyRefundedRowCountOnPage > 0
+                      ? ` (${shopifyRefundedRowCountOnPage} greyed: Shopify refund activity)`
+                      : ""}
+                    .
+                  </span>{" "}
+                  <span className="mt-1 block text-xs sm:mt-0 sm:inline sm:text-sm">
+                    DB filter: {from}–{to} of {total} with refund not marked in app.
+                  </span>
                 </>
               ) : (
                 <>
@@ -569,22 +849,19 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                 </>
               )}
             </p>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid w-full min-w-0 max-w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:gap-2">
               <Link
                 href={returnLogListPageHref(current, Math.max(1, page - 1))}
                 className={
                   page <= 1
-                    ? "pointer-events-none cursor-not-allowed rounded-lg border border-zinc-200 px-3 py-1.5 text-zinc-400 dark:border-zinc-800"
-                    : "rounded-lg border border-zinc-200 px-3 py-1.5 font-medium text-foreground hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                    ? "pointer-events-none col-start-1 row-start-1 flex min-h-11 cursor-not-allowed items-center justify-center rounded-lg border border-zinc-200 px-3 py-2 text-center text-sm text-zinc-400 dark:border-zinc-800 sm:order-1 sm:min-h-0 sm:py-1.5"
+                    : "col-start-1 row-start-1 flex min-h-11 items-center justify-center rounded-lg border border-zinc-200 px-3 py-2 text-center text-sm font-medium text-foreground hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800 sm:order-1 sm:min-h-0 sm:py-1.5"
                 }
                 aria-disabled={page <= 1}
                 tabIndex={page <= 1 ? -1 : 0}
               >
                 Previous
               </Link>
-              <span className="px-1 text-zinc-500" aria-label="Page numbers">
-                Page {page} of {lastPage}
-              </span>
               <Link
                 href={returnLogListPageHref(
                   current,
@@ -592,14 +869,20 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                 )}
                 className={
                   page >= lastPage
-                    ? "pointer-events-none cursor-not-allowed rounded-lg border border-zinc-200 px-3 py-1.5 text-zinc-400 dark:border-zinc-800"
-                    : "rounded-lg border border-zinc-200 px-3 py-1.5 font-medium text-foreground hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                    ? "pointer-events-none col-start-2 row-start-1 flex min-h-11 cursor-not-allowed items-center justify-center rounded-lg border border-zinc-200 px-3 py-2 text-center text-sm text-zinc-400 dark:border-zinc-800 sm:order-3 sm:min-h-0 sm:py-1.5"
+                    : "col-start-2 row-start-1 flex min-h-11 items-center justify-center rounded-lg border border-zinc-200 px-3 py-2 text-center text-sm font-medium text-foreground hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800 sm:order-3 sm:min-h-0 sm:py-1.5"
                 }
                 aria-disabled={page >= lastPage}
                 tabIndex={page >= lastPage ? -1 : 0}
               >
                 Next
               </Link>
+              <span
+                className="col-span-2 row-start-2 text-center text-sm text-zinc-500 sm:order-2 sm:col-auto sm:row-auto sm:shrink-0 sm:px-1"
+                aria-label="Page numbers"
+              >
+                Page {page} of {lastPage}
+              </span>
             </div>
           </div>
         </>
