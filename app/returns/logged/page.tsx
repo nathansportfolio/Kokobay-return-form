@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Fragment } from "react";
 import {
   listReturnLogsPaged,
   type ReturnLogListItem,
@@ -22,6 +23,11 @@ import {
   shopifyOrderDisplayIndicatesMoneyReturned,
   shopifyPaymentStatusLabelForReturnsList,
 } from "@/lib/shopifyReturnOrderLookup";
+import {
+  returnLineDispositionHandlingPillClass,
+  returnLineDispositionListBorderClass,
+} from "@/lib/returnLineDispositionUi";
+import { returnLineHandlingListingLabel } from "@/lib/returnLogTypes";
 import {
   shopifyOrderAdminUrlByOrderId,
   shopifyOrderAdminUrlFromOrderRef,
@@ -318,9 +324,11 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
       </div>
       {q.refundPending ? (
         <p className="mt-2 text-pretty text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-          <strong className="font-medium">Refund</strong> column is this app’s flag
-          (not yet marked). When Shopify is configured, we load each order’s live payment
-          data; rows where Shopify shows <strong className="font-medium">refunded</strong>,{" "}
+          <strong className="font-medium">Refund</strong> shows{" "}
+          <strong className="font-medium">Yes</strong> when marked in the app{" "}
+          <em className="not-italic">or</em> when the row is greyed (Shopify shows refund
+          activity). When Shopify is configured, we load each order’s live payment data;
+          rows where Shopify shows <strong className="font-medium">refunded</strong>,{" "}
           <strong className="font-medium">partially refunded</strong>, or{" "}
           <strong className="font-medium">refund records</strong> (even if status still
           says <strong className="font-medium">paid</strong>) appear{" "}
@@ -546,7 +554,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
           <div
             className={
               q.refundPending
-                ? "mt-3 hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 md:block"
+                ? "mt-3 hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 lg:block"
                 : "mt-3 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800"
             }
           >
@@ -581,9 +589,11 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
                 {displayRows.map((r) => {
                   const greyed = rowIndicatesShopifyMoneyReturned(r);
+                  const refundShowsYes = r.fullRefundIssued || greyed;
+                  const lines = r.lines ?? [];
                   return (
+                  <Fragment key={r.returnUid}>
                   <tr
-                    key={r.returnUid}
                     className={
                       greyed
                         ? "bg-zinc-100/95 text-zinc-500 dark:bg-zinc-900/55 dark:text-zinc-400"
@@ -613,14 +623,12 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                     </td>
                     <td
                       className={`px-3 py-3 font-medium sm:px-4 ${
-                        greyed
-                          ? "text-zinc-500 dark:text-zinc-400"
-                          : r.fullRefundIssued
-                            ? "text-emerald-700 dark:text-emerald-400"
-                            : "text-red-600 dark:text-red-400"
+                        refundShowsYes
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : "text-red-600 dark:text-red-400"
                       }`}
                     >
-                      {r.fullRefundIssued ? "Yes" : "No"}
+                      {refundShowsYes ? "Yes" : "No"}
                     </td>
                     {q.refundPending ? (
                       <td className="px-3 py-3 text-sm normal-case sm:px-4">
@@ -655,6 +663,61 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                       </div>
                     </td>
                   </tr>
+                  {q.refundPending && lines.length > 0 ? (
+                    <tr
+                      className={
+                        greyed
+                          ? "bg-zinc-100/90 text-zinc-600 dark:bg-zinc-900/55 dark:text-zinc-400"
+                          : "bg-zinc-50/90 text-zinc-800 dark:bg-zinc-950/25 dark:text-zinc-200"
+                      }
+                    >
+                      <td
+                        colSpan={8}
+                        className="border-t border-zinc-200 px-3 py-2.5 align-top text-xs leading-relaxed dark:border-zinc-800"
+                      >
+                        <p className="mb-1.5 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                          Line detail
+                        </p>
+                        <ul className="space-y-2">
+                          {lines.map((line) => (
+                            <li
+                              key={line.lineId}
+                              className={`border-l-2 pl-2 ${returnLineDispositionListBorderClass(line.disposition)}`}
+                            >
+                              <span className="font-medium text-foreground">
+                                {line.title}
+                              </span>
+                              <span className="mt-0.5 block text-zinc-600 dark:text-zinc-400">
+                                <span className="font-medium text-zinc-500 dark:text-zinc-400">
+                                  Reason:{" "}
+                                </span>
+                                {line.reasonLabel}
+                              </span>
+                              <span className="mt-1 flex flex-wrap items-center gap-2">
+                                <span className="font-medium text-zinc-500 dark:text-zinc-400">
+                                  Handling
+                                </span>
+                                <span
+                                  className={returnLineDispositionHandlingPillClass(
+                                    line.disposition,
+                                    greyed,
+                                  )}
+                                >
+                                  {returnLineHandlingListingLabel(line)}
+                                </span>
+                              </span>
+                              {line.notes?.trim() ? (
+                                <span className="mt-1 block whitespace-pre-wrap text-zinc-700 dark:text-zinc-300">
+                                  Notes: {line.notes.trim()}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  ) : null}
+                  </Fragment>
                 );
                 })}
               </tbody>
@@ -662,10 +725,11 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
           </div>
 
           {q.refundPending ? (
-            <div className="mt-3 space-y-4 md:hidden">
+            <div className="mt-3 space-y-4 lg:hidden">
               {displayRows.map((r) => {
                 const lines = r.lines ?? [];
                 const greyed = rowIndicatesShopifyMoneyReturned(r);
+                const refundShowsYes = r.fullRefundIssued || greyed;
                 const cardBase =
                   greyed
                     ? "rounded-xl border border-zinc-300 bg-zinc-100/90 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900/55 dark:text-zinc-400"
@@ -681,13 +745,9 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                     ? "text-zinc-500 dark:text-zinc-400"
                     : "text-emerald-700 dark:text-emerald-400"
                   : mutedText;
-                const yesNoRefund = r.fullRefundIssued
-                  ? greyed
-                    ? "text-zinc-500 dark:text-zinc-400"
-                    : "text-emerald-700 dark:text-emerald-400"
-                  : greyed
-                    ? "text-zinc-500 dark:text-zinc-400"
-                    : "text-red-600 dark:text-red-400";
+                const yesNoRefund = refundShowsYes
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : "text-red-600 dark:text-red-400";
                 return (
                   <section key={r.returnUid} className={cardBase}>
                     <div className="border-b border-zinc-100 px-3 py-3 dark:border-zinc-800/80">
@@ -719,7 +779,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                         </dd>
                         <dt className={mutedText}>Refund</dt>
                         <dd className={`font-medium ${yesNoRefund}`}>
-                          {r.fullRefundIssued ? "Yes" : "No"}
+                          {refundShowsYes ? "Yes" : "No"}
                         </dd>
                         <dt className={mutedText}>Shopify payment</dt>
                         <dd className={`text-sm normal-case ${strongText}`}>
@@ -813,6 +873,51 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                               >
                                 {formatGbp(line.lineTotalGbp)}
                               </p>
+                              <p
+                                className={`mt-2 text-xs ${
+                                  greyed
+                                    ? "text-zinc-500 dark:text-zinc-500"
+                                    : "text-zinc-600 dark:text-zinc-400"
+                                }`}
+                              >
+                                <span className="font-medium text-zinc-500 dark:text-zinc-400">
+                                  Reason:{" "}
+                                </span>
+                                {line.reasonLabel}
+                              </p>
+                              <div
+                                className={`mt-1 flex flex-wrap items-center gap-2 text-xs ${
+                                  greyed
+                                    ? "text-zinc-500 dark:text-zinc-500"
+                                    : "text-zinc-600 dark:text-zinc-400"
+                                }`}
+                              >
+                                <span className="font-medium text-zinc-500 dark:text-zinc-400">
+                                  Handling
+                                </span>
+                                <span
+                                  className={returnLineDispositionHandlingPillClass(
+                                    line.disposition,
+                                    greyed,
+                                  )}
+                                >
+                                  {returnLineHandlingListingLabel(line)}
+                                </span>
+                              </div>
+                              {line.notes?.trim() ? (
+                                <p
+                                  className={`mt-1 whitespace-pre-wrap text-xs ${
+                                    greyed
+                                      ? "text-zinc-500 dark:text-zinc-500"
+                                      : "text-zinc-700 dark:text-zinc-300"
+                                  }`}
+                                >
+                                  <span className="font-medium text-zinc-500 dark:text-zinc-400">
+                                    Notes:{" "}
+                                  </span>
+                                  {line.notes.trim()}
+                                </p>
+                              ) : null}
                             </li>
                           );
                         })}

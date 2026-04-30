@@ -6,6 +6,7 @@ import {
   CUSTOMER_FORM_REASONS,
   customerFormReasonLabel,
 } from "@/lib/customerReturnFormReasons";
+import { clampReturnLineNotes } from "@/lib/returnLineNotes";
 
 export const CUSTOMER_RETURN_FORMS_COLLECTION = "customerReturnForms";
 
@@ -16,6 +17,7 @@ export type CustomerReturnFormItem = {
   quantity: number;
   reasonValue: string;
   reasonLabel: string;
+  notes?: string;
 };
 
 /**
@@ -42,6 +44,7 @@ type InsertInput = {
     title: string;
     quantity: number;
     reasonValue: string;
+    notes?: string;
   }[];
 };
 
@@ -109,12 +112,19 @@ export function validateCustomerReturnForm(
     if (reasonValue !== "" && !isReasonAllowed(reasonValue)) {
       return { ok: false, error: "Use a listed reason or leave as no reason given" };
     }
+    if (r.notes !== undefined && r.notes !== null && typeof r.notes !== "string") {
+      return { ok: false, error: "Notes must be text" };
+    }
+    const notes = clampReturnLineNotes(
+      typeof r.notes === "string" ? r.notes : "",
+    );
     items.push({
       lineId,
       sku,
       title: title || sku,
       quantity: q,
       reasonValue,
+      ...(notes ? { notes } : {}),
     });
   }
   if (items.length === 0) {
@@ -143,6 +153,7 @@ export async function insertCustomerReturnForm(
     quantity: i.quantity,
     reasonValue: i.reasonValue,
     reasonLabel: customerFormReasonLabel(i.reasonValue),
+    ...(i.notes?.trim() ? { notes: clampReturnLineNotes(i.notes) } : {}),
   }));
   const submissionUid = randomUUID();
   const doc: CustomerReturnFormDoc = {

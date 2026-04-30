@@ -8,6 +8,7 @@ import {
   shopifyOrderAdminUrlFromOrderRef,
 } from "@/lib/shopifyOrderAdminUrl";
 import { formatGbp } from "@/lib/kokobayOrderLines";
+import { returnLineHandlingListingLabel } from "@/lib/returnLogTypes";
 import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { WAREHOUSE_TZ, formatDateAsOrdinalInTimeZone } from "@/lib/warehouseLondonDay";
 
@@ -137,8 +138,14 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
             </p>
             <p className="mt-0.5 text-zinc-600 dark:text-zinc-400">
               <span className="text-zinc-500">Handling: </span>
-              {l.disposition === "restock" ? "On shelf / reshelve" : "Disposed of"}
+              {returnLineHandlingListingLabel(l)}
             </p>
+            {l.notes?.trim() ? (
+              <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
+                <span className="text-zinc-500">Notes: </span>
+                {l.notes.trim()}
+              </p>
+            ) : null}
           </li>
         ))}
       </ol>

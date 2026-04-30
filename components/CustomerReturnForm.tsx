@@ -13,8 +13,13 @@ import {
   EnvelopeSimple,
   ListChecks,
   MagnifyingGlass,
+  Plus,
   Truck,
 } from "@phosphor-icons/react";
+import {
+  MAX_RETURN_LINE_NOTES,
+  clampReturnLineNotes,
+} from "@/lib/returnLineNotes";
 import { toast } from "sonner";
 
 const RETURNS_ADDRESS = `KOKOBAY RETURNS
@@ -59,6 +64,7 @@ function FormLineThumb({
 type PerLine = {
   include: boolean;
   reasonValue: string;
+  notes: string;
 };
 
 export function CustomerReturnForm() {
@@ -67,6 +73,9 @@ export function CustomerReturnForm() {
   const [lines, setLines] = useState<KokobayOrderLine[] | null>(null);
   const [loadBusy, setLoadBusy] = useState(false);
   const [byLine, setByLine] = useState<Record<string, PerLine>>({});
+  const [notesOpenByLine, setNotesOpenByLine] = useState<Record<string, boolean>>(
+    {},
+  );
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [datePosted, setDatePosted] = useState("");
@@ -114,7 +123,11 @@ export function CustomerReturnForm() {
       setLines(data.lines);
       const next: Record<string, PerLine> = {};
       for (const l of data.lines) {
-        next[l.id] = { include: false, reasonValue: CUSTOMER_FORM_REASON_UNSET };
+        next[l.id] = {
+          include: false,
+          reasonValue: CUSTOMER_FORM_REASON_UNSET,
+          notes: "",
+        };
       }
       setByLine(next);
     } finally {
@@ -141,12 +154,14 @@ export function CustomerReturnForm() {
     for (const line of lines) {
       const s = byLine[line.id];
       if (!s?.include) continue;
+      const notesTrimmed = clampReturnLineNotes(s.notes ?? "");
       items.push({
         lineId: line.id,
         sku: line.sku,
         title: line.title,
         quantity: line.quantity,
         reasonValue: s.reasonValue,
+        ...(notesTrimmed ? { notes: notesTrimmed } : {}),
       });
     }
     if (items.length === 0) {
@@ -345,7 +360,11 @@ export function CustomerReturnForm() {
             </p>
             <ul className="space-y-3 sm:space-y-4">
               {lines.map((line) => {
-                const s = byLine[line.id] ?? { include: false, reasonValue: "" };
+                const s = byLine[line.id] ?? {
+                  include: false,
+                  reasonValue: CUSTOMER_FORM_REASON_UNSET,
+                  notes: "",
+                };
                 return (
                   <li
                     key={line.id}
@@ -361,17 +380,27 @@ export function CustomerReturnForm() {
                           type="checkbox"
                           className="mt-0.5 h-5 w-5 min-h-5 min-w-5 shrink-0 cursor-pointer touch-manipulation rounded border-zinc-400 text-amber-600 focus:ring-2 focus:ring-amber-500/40"
                           checked={s.include}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            if (!checked) {
+                              setNotesOpenByLine((p) => {
+                                const next = { ...p };
+                                delete next[line.id];
+                                return next;
+                              });
+                            }
                             setByLine((prev) => ({
                               ...prev,
                               [line.id]: {
-                                include: e.target.checked,
-                                reasonValue: e.target.checked
-                                  ? prev[line.id]?.reasonValue ?? CUSTOMER_FORM_REASON_UNSET
+                                include: checked,
+                                reasonValue: checked
+                                  ? prev[line.id]?.reasonValue ??
+                                    CUSTOMER_FORM_REASON_UNSET
                                   : CUSTOMER_FORM_REASON_UNSET,
+                                notes: checked ? prev[line.id]?.notes ?? "" : "",
                               },
-                            }))
-                          }
+                            }));
+                          }}
                         />
                         <div className="min-w-0">
                           <p className="font-medium leading-snug text-foreground">{line.title}</p>
@@ -402,6 +431,7 @@ export function CustomerReturnForm() {
                                 [line.id]: {
                                   ...s,
                                   reasonValue: e.target.value,
+                                  notes: prev[line.id]?.notes ?? s.notes ?? "",
                                 },
                               }))
                             }
@@ -415,6 +445,58 @@ export function CustomerReturnForm() {
                               </option>
                             ))}
                           </select>
+                          <div className="mt-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNotesOpenByLine((p) => ({
+                                  ...p,
+                                  [line.id]: !p[line.id],
+                                }))
+                              }
+                              className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-300 bg-background px-3 py-2 text-sm font-medium text-foreground"
+                              aria-expanded={Boolean(notesOpenByLine[line.id])}
+                              aria-controls={`cust-notes-${line.id}`}
+                            >
+                              <Plus className="h-4 w-4 shrink-0" weight="bold" aria-hidden />
+                              Notes
+                              {s.notes.trim() ? (
+                                <span className="text-xs font-normal text-zinc-500">
+                                  (has text)
+                                </span>
+                              ) : null}
+                            </button>
+                            {notesOpenByLine[line.id] ? (
+                              <div className="mt-2" id={`cust-notes-${line.id}`}>
+                                <label
+                                  htmlFor={`cust-notes-ta-${line.id}`}
+                                  className="sr-only"
+                                >
+                                  Notes for {line.title}
+                                </label>
+                                <textarea
+                                  id={`cust-notes-ta-${line.id}`}
+                                  value={s.notes}
+                                  maxLength={MAX_RETURN_LINE_NOTES}
+                                  rows={3}
+                                  placeholder="Optional notes…"
+                                  onChange={(e) =>
+                                    setByLine((prev) => ({
+                                      ...prev,
+                                      [line.id]: {
+                                        ...s,
+                                        notes: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="w-full resize-y rounded-lg border border-zinc-300 bg-background px-3 py-2 text-sm text-foreground"
+                                />
+                                <p className="mt-1 text-xs text-zinc-500">
+                                  {s.notes.length}/{MAX_RETURN_LINE_NOTES}
+                                </p>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       ) : null}
                     </div>

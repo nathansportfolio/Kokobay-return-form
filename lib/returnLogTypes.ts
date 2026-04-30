@@ -1,3 +1,27 @@
+/** Warehouse handling — chosen on the return screen (not the customer reason list). */
+export type ReturnLineDisposition =
+  | "restock"
+  | "dispose"
+  | "return_to_sender"
+  | "wrong_item_received";
+
+const RETURN_LINE_DISPOSITIONS = new Set<string>([
+  "restock",
+  "dispose",
+  "return_to_sender",
+  "wrong_item_received",
+]);
+
+export function normalizeReturnLineDisposition(
+  raw: unknown,
+): ReturnLineDisposition {
+  const s = String(raw ?? "").trim();
+  /** Legacy second “dispose” variant — merged into `dispose`. */
+  if (s === "dispose_refund_custom") return "dispose";
+  if (RETURN_LINE_DISPOSITIONS.has(s)) return s as ReturnLineDisposition;
+  return "restock";
+}
+
 export type ReturnLogLineEntry = {
   lineId: string;
   sku: string;
@@ -6,8 +30,10 @@ export type ReturnLogLineEntry = {
   unitPrice: number;
   reason: string | null;
   reasonLabel: string;
-  disposition: "restock" | "dispose";
+  disposition: ReturnLineDisposition;
   lineTotalGbp: number;
+  /** Optional staff / customer free-text per line (shown on refund listings). */
+  notes?: string;
 };
 
 /**
@@ -65,7 +91,11 @@ export type ReturnPageResume = {
   fullRefundIssued: boolean;
   byLine: Record<
     string,
-    { reason: string | null; disposition: "restock" | "dispose" }
+    {
+      reason: string | null;
+      disposition: ReturnLineDisposition;
+      notes?: string;
+    }
   >;
 };
 
@@ -80,6 +110,23 @@ export type InsertReturnLogInput = {
     quantity: number;
     unitPrice: number;
     reason: string | null;
-    disposition: "restock" | "dispose";
+    disposition: ReturnLineDisposition;
+    notes?: string | null;
   }[];
 };
+
+/** Label for warehouse handling on refund / logged lists. */
+export function returnLineHandlingListingLabel(line: {
+  disposition: ReturnLineDisposition;
+}): string {
+  switch (line.disposition) {
+    case "restock":
+      return "On shelf / reshelve";
+    case "dispose":
+      return "Dispose & refund";
+    case "return_to_sender":
+      return "Return to sender";
+    case "wrong_item_received":
+      return "Wrong item received";
+  }
+}

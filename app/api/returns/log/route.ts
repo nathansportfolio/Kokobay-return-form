@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { insertReturnLog } from "@/lib/returnLog";
+import { normalizeReturnLineDisposition } from "@/lib/returnLogTypes";
 import { normalizeShopifyOrderIdForStorage } from "@/lib/shopifyOrderAdminUrl";
 
 type Body = {
@@ -9,6 +10,13 @@ type Body = {
   lines?: unknown;
 };
 
+const ALLOWED_DISPOSITIONS = new Set([
+  "restock",
+  "dispose",
+  "return_to_sender",
+  "wrong_item_received",
+]);
+
 function isLine(x: unknown): x is {
   lineId: string;
   sku: string;
@@ -16,7 +24,12 @@ function isLine(x: unknown): x is {
   quantity: number;
   unitPrice: number;
   reason: string | null;
-  disposition: "restock" | "dispose";
+  disposition:
+    | "restock"
+    | "dispose"
+    | "return_to_sender"
+    | "wrong_item_received";
+  notes?: string | null;
 } {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
@@ -26,7 +39,9 @@ function isLine(x: unknown): x is {
   if (typeof o.quantity !== "number") return false;
   if (typeof o.unitPrice !== "number") return false;
   if (o.reason !== null && typeof o.reason !== "string") return false;
-  if (o.disposition !== "restock" && o.disposition !== "dispose")
+  if (typeof o.disposition !== "string" || !ALLOWED_DISPOSITIONS.has(o.disposition))
+    return false;
+  if (o.notes !== undefined && o.notes !== null && typeof o.notes !== "string")
     return false;
   return true;
 }
@@ -57,7 +72,15 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  for (const row of linesRaw) {
+  const linesNormalized = linesRaw.map((row) => {
+    if (!row || typeof row !== "object") return row;
+    const o = row as Record<string, unknown>;
+    return {
+      ...o,
+      disposition: normalizeReturnLineDisposition(o.disposition),
+    };
+  });
+  for (const row of linesNormalized) {
     if (!isLine(row)) {
       return NextResponse.json(
         { ok: false, error: "Invalid line payload" },
@@ -72,7 +95,7 @@ export async function POST(request: Request) {
     const returnUid = await insertReturnLog({
       orderRef,
       ...(shopifyOrderId ? { shopifyOrderId } : {}),
-      lines: linesRaw,
+      lines: linesNormalized as Parameters<typeof insertReturnLog>[0]["lines"],
     });
     return NextResponse.json({ ok: true, returnUid });
   } catch (e) {

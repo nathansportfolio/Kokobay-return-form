@@ -7,11 +7,13 @@ import {
 } from "@/lib/customerReturnFormReasons";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import { returnReasonLabel } from "@/lib/returnReasons";
+import { clampReturnLineNotes } from "@/lib/returnLineNotes";
 import { normalizeShopifyOrderIdForStorage } from "@/lib/shopifyOrderAdminUrl";
-import type {
-  InsertReturnLogInput,
-  ReturnLogLineEntry,
-  ReturnLogListItem,
+import {
+  normalizeReturnLineDisposition,
+  type InsertReturnLogInput,
+  type ReturnLogLineEntry,
+  type ReturnLogListItem,
 } from "@/lib/returnLogTypes";
 
 export const RETURN_LOGS_COLLECTION = "returnLogs";
@@ -62,6 +64,7 @@ export async function insertReturnLog(
 
   const lines: ReturnLogLineEntry[] = input.lines.map((l) => {
     const lt = lineTotal(l.quantity, l.unitPrice);
+    const notesTrimmed = clampReturnLineNotes(l.notes ?? "");
     return {
       lineId: l.lineId,
       sku: l.sku,
@@ -70,8 +73,9 @@ export async function insertReturnLog(
       unitPrice: l.unitPrice,
       reason: l.reason,
       reasonLabel: returnLogLineReasonLabel(l.reason),
-      disposition: l.disposition,
+      disposition: normalizeReturnLineDisposition(l.disposition),
       lineTotalGbp: lt,
+      ...(notesTrimmed ? { notes: notesTrimmed } : {}),
     };
   });
 
@@ -113,7 +117,12 @@ const mapDocToListItem = (d: ReturnLogMongo): ReturnLogListItem => ({
   ...(d.shopifyOrderId ? { shopifyOrderId: d.shopifyOrderId } : {}),
   createdAt: d.createdAt.toISOString(),
   updatedAt: d.updatedAt.toISOString(),
-  lines: Array.isArray(d.lines) ? d.lines : [],
+  lines: Array.isArray(d.lines)
+    ? d.lines.map((l) => ({
+        ...l,
+        disposition: normalizeReturnLineDisposition(l.disposition),
+      }))
+    : [],
   lineCount: d.lineCount,
   totalRefundGbp: d.totalRefundGbp,
   customerEmailSent: d.customerEmailSent,
@@ -225,7 +234,15 @@ export async function getReturnLogByUid(
   const col = client
     .db(kokobayDbName)
     .collection<ReturnLogMongo>(RETURN_LOGS_COLLECTION);
-  return col.findOne({ returnUid: String(returnUid) });
+  const doc = await col.findOne({ returnUid: String(returnUid) });
+  if (!doc || !Array.isArray(doc.lines)) return doc;
+  return {
+    ...doc,
+    lines: doc.lines.map((l) => ({
+      ...l,
+      disposition: normalizeReturnLineDisposition(l.disposition),
+    })),
+  };
 }
 
 /** Most recent return log for this order reference (trimmed, case-insensitive on stored value). */

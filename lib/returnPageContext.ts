@@ -3,7 +3,10 @@ import { resolveOrderRefFromPathSegment } from "@/lib/orderRefAliases";
 import { mapCustomerFormReasonToWarehouse } from "@/lib/customerFormToWarehouseReturn";
 import { getLatestCustomerReturnFormForOrder } from "@/lib/customerReturnFormSubmission";
 import { getLatestReturnLogForOrder } from "@/lib/returnLog";
-import type { ReturnPageResume } from "@/lib/returnLogTypes";
+import {
+  normalizeReturnLineDisposition,
+  type ReturnPageResume,
+} from "@/lib/returnLogTypes";
 import {
   getReturnOrderLinesFromProducts,
   getThumbnailsBySkus,
@@ -93,7 +96,11 @@ export async function getReturnPageLinesAndResume(
     const byLine: ReturnPageResume["byLine"] = Object.fromEntries(
       last.lines.map((l) => [
         l.lineId,
-        { reason: l.reason, disposition: l.disposition },
+        {
+          reason: l.reason,
+          disposition: normalizeReturnLineDisposition(l.disposition),
+          notes: l.notes?.trim() ? l.notes : "",
+        },
       ]),
     );
 
@@ -130,7 +137,11 @@ export async function getReturnPageLinesAndResume(
     const byLine: ReturnPageResume["byLine"] = {};
     let lines: KokobayOrderLine[] = form.items.map((i) => {
       const { disposition } = mapCustomerFormReasonToWarehouse(i.reasonValue);
-      byLine[i.lineId] = { reason: i.reasonValue, disposition };
+      byLine[i.lineId] = {
+        reason: i.reasonValue,
+        disposition,
+        notes: i.notes?.trim() ? i.notes : "",
+      };
       return {
         id: i.lineId,
         sku: i.sku,

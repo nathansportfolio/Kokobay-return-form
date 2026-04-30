@@ -13,18 +13,50 @@ import {
 import { mapCustomerFormReasonToWarehouse } from "@/lib/customerFormToWarehouseReturn";
 import { reasonValueForSharedReturnSelect } from "@/lib/returnReasonForSelect";
 import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
-import type { ReturnPageResume } from "@/lib/returnLogTypes";
+import {
+  normalizeReturnLineDisposition,
+  type ReturnLineDisposition,
+  type ReturnPageResume,
+} from "@/lib/returnLogTypes";
+import {
+  MAX_RETURN_LINE_NOTES,
+  clampReturnLineNotes,
+} from "@/lib/returnLineNotes";
+import { RETURN_LINE_DISPOSITION_SELECTED_TONE } from "@/lib/returnLineDispositionUi";
 import {
   shopifyOrderAdminUrlByOrderId,
   shopifyOrderAdminUrlFromOrderRef,
 } from "@/lib/shopifyOrderAdminUrl";
-import { CurrencyGbp, EnvelopeSimple, Storefront } from "@phosphor-icons/react";
+import { CurrencyGbp, EnvelopeSimple, Plus, Storefront } from "@phosphor-icons/react";
 import { toast } from "sonner";
+
+const WAREHOUSE_HANDLING_OPTIONS: ReadonlyArray<{
+  value: ReturnLineDisposition;
+  label: string;
+}> = [
+  { value: "restock", label: "On shelf / to be reshelved" },
+  { value: "dispose", label: "Dispose & refund" },
+  { value: "return_to_sender", label: "Return to sender" },
+  { value: "wrong_item_received", label: "Wrong item received" },
+];
+
+function dispositionRadioSurface(
+  value: ReturnLineDisposition,
+  current: ReturnLineDisposition,
+): string {
+  const base =
+    "flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors";
+  const inactive =
+    "border-zinc-200 bg-white text-foreground dark:border-zinc-700";
+  if (current !== value) return `${base} ${inactive}`;
+  return `${base} ${RETURN_LINE_DISPOSITION_SELECTED_TONE[value]}`;
+}
 
 type LineState = {
   selected: boolean;
   reason: string;
-  disposition: "restock" | "dispose";
+  disposition: ReturnLineDisposition;
+  notes: string;
 };
 
 function emptyLine(): LineState {
@@ -32,6 +64,7 @@ function emptyLine(): LineState {
     selected: false,
     reason: CUSTOMER_FORM_REASON_UNSET,
     disposition: "restock",
+    notes: "",
   };
 }
 
@@ -61,7 +94,8 @@ function buildInitialState(
           {
             selected: true,
             reason: reasonValueForSharedReturnSelect(r.reason),
-            disposition: r.disposition,
+            disposition: normalizeReturnLineDisposition(r.disposition),
+            notes: r.notes?.trim() ?? "",
           } satisfies LineState,
         ];
       }
@@ -142,6 +176,9 @@ export function OrderReturnLines({
   );
   const [saving, setSaving] = useState(false);
   const [returnBusy, setReturnBusy] = useState(false);
+  const [notesOpenByLine, setNotesOpenByLine] = useState<Record<string, boolean>>(
+    {},
+  );
   const masterCheckboxRef = useRef<HTMLInputElement>(null);
 
   const lineKey = useMemo(() => lines.map((l) => l.id).join("\0"), [lines]);
@@ -164,6 +201,13 @@ export function OrderReturnLines({
   }, []);
 
   const setLineSelected = useCallback((id: string, selected: boolean) => {
+    if (!selected) {
+      setNotesOpenByLine((p) => {
+        const next = { ...p };
+        delete next[id];
+        return next;
+      });
+    }
     setById((prev) => {
       const base = { ...emptyLine(), ...prev[id] };
       return {
@@ -176,6 +220,7 @@ export function OrderReturnLines({
             : {
                 reason: CUSTOMER_FORM_REASON_UNSET,
                 disposition: "restock" as const,
+                notes: "",
               }),
         },
       };
@@ -215,6 +260,7 @@ export function OrderReturnLines({
 
   const setEntireOrderReturned = useCallback(
     (selected: boolean) => {
+      if (!selected) setNotesOpenByLine({});
       setById((prev) => {
         const next = { ...prev };
         for (const line of lines) {
@@ -227,6 +273,7 @@ export function OrderReturnLines({
               : {
                   reason: CUSTOMER_FORM_REASON_UNSET,
                   disposition: "restock" as const,
+                  notes: "",
                 }),
           };
         }
@@ -260,6 +307,7 @@ export function OrderReturnLines({
           .filter((l) => byId[l.id]?.selected)
           .map((l) => {
             const row = { ...emptyLine(), ...byId[l.id] };
+            const notesTrimmed = clampReturnLineNotes(row.notes ?? "");
             return {
               lineId: l.id,
               sku: l.sku,
@@ -271,6 +319,7 @@ export function OrderReturnLines({
                   ? null
                   : row.reason,
               disposition: row.disposition,
+              ...(notesTrimmed ? { notes: notesTrimmed } : {}),
             };
           }),
       };
@@ -627,53 +676,79 @@ export function OrderReturnLines({
                       <legend className="block text-xs font-medium uppercase tracking-wide text-zinc-500">
                         Warehouse handling
                       </legend>
-                      <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                        <label
-                          className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                            s.disposition === "restock"
-                              ? "border-emerald-500 bg-emerald-50 font-medium text-emerald-900 ring-1 ring-emerald-500/45 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-500/35"
-                              : "border-zinc-200 bg-white text-foreground dark:border-zinc-700"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`disp-${idBase}`}
-                            checked={s.disposition === "restock"}
-                            onChange={() =>
-                              updateLine(line.id, { disposition: "restock" })
-                            }
-                            className={
-                              s.disposition === "restock"
-                                ? "accent-emerald-600"
-                                : "accent-zinc-400"
-                            }
-                          />
-                          On shelf / to be reshelved
-                        </label>
-                        <label
-                          className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                            s.disposition === "dispose"
-                              ? "border-red-500 bg-red-50 font-medium text-red-900 ring-1 ring-red-500/45 dark:border-red-500 dark:bg-red-950/40 dark:text-red-200 dark:ring-red-500/35"
-                              : "border-zinc-200 bg-white text-foreground dark:border-zinc-700"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`disp-${idBase}`}
-                            checked={s.disposition === "dispose"}
-                            onChange={() =>
-                              updateLine(line.id, { disposition: "dispose" })
-                            }
-                            className={
-                              s.disposition === "dispose"
-                                ? "accent-red-600"
-                                : "accent-zinc-400"
-                            }
-                          />
-                          Disposed of
-                        </label>
+                      <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                        {WAREHOUSE_HANDLING_OPTIONS.map(({ value: disp, label }) => (
+                          <label
+                            key={disp}
+                            className={dispositionRadioSurface(disp, s.disposition)}
+                          >
+                            <input
+                              type="radio"
+                              name={`disp-${idBase}`}
+                              checked={s.disposition === disp}
+                              onChange={() =>
+                                updateLine(line.id, { disposition: disp })
+                              }
+                              className={
+                                s.disposition === disp
+                                  ? "accent-zinc-900 dark:accent-zinc-100"
+                                  : "accent-zinc-400"
+                              }
+                            />
+                            {label}
+                          </label>
+                        ))}
                       </div>
                     </fieldset>
+                  </div>
+                  <div className="mt-3 border-t border-amber-200/60 pt-3 dark:border-amber-900/40">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesOpenByLine((p) => ({
+                          ...p,
+                          [line.id]: !p[line.id],
+                        }))
+                      }
+                      className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                      aria-expanded={Boolean(notesOpenByLine[line.id])}
+                      aria-controls={`notes-${idBase}`}
+                    >
+                      <Plus className="h-4 w-4 shrink-0" weight="bold" aria-hidden />
+                      Notes
+                      {s.notes.trim() ? (
+                        <span className="text-xs font-normal text-zinc-500">
+                          (saved text)
+                        </span>
+                      ) : null}
+                    </button>
+                    {notesOpenByLine[line.id] ? (
+                      <div className="mt-2" id={`notes-${idBase}`}>
+                        <label
+                          htmlFor={`notes-ta-${idBase}`}
+                          className="sr-only"
+                        >
+                          Notes for {line.title}
+                        </label>
+                        <textarea
+                          id={`notes-ta-${idBase}`}
+                          value={s.notes}
+                          maxLength={MAX_RETURN_LINE_NOTES}
+                          rows={3}
+                          placeholder="Optional notes for this line…"
+                          onChange={(e) =>
+                            updateLine(line.id, { notes: e.target.value })
+                          }
+                          className="w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-amber-500/50 dark:border-zinc-600 dark:bg-zinc-950"
+                        />
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {s.notes.length}/{MAX_RETURN_LINE_NOTES}
+                          {selected
+                            ? " · Shown on logged returns / refund list"
+                            : " · Saved when you tick this line and log the return"}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
