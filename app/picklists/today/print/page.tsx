@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { PicklistOrderLabelsPrint } from "@/components/picklist/PicklistOrderLabelsPrint";
-import { fetchTodaysPickLists, parseOrdersPerListParam } from "@/lib/fetchTodaysPickLists";
+import {
+  fetchTodaysPickLists,
+  parseItemsPerListParam,
+  parseOrdersPerListParam,
+} from "@/lib/fetchTodaysPickLists";
 import { picklistsToLabelPrintBatches } from "@/lib/picklistOrderLabelPrintData";
-import { formatDayKeyAsOrdinalEnglish } from "@/lib/warehouseLondonDay";
 
 export const dynamic = "force-dynamic";
 
@@ -21,13 +24,15 @@ type PageProps = {
 export default async function TodaysPickListPrintPage({ searchParams }: PageProps) {
   const sp = (await searchParams) ?? {};
   const ordersPerList = parseOrdersPerListParam(sp.ordersPerList);
+  const itemsPerList = parseItemsPerListParam(sp.itemsPerList);
   const listQuery = new URLSearchParams();
   listQuery.set("ordersPerList", String(ordersPerList));
+  listQuery.set("itemsPerList", String(itemsPerList));
   const backHref = `${LIST}?${listQuery.toString()}`;
 
   let payload: Awaited<ReturnType<typeof fetchTodaysPickLists>>;
   try {
-    payload = await fetchTodaysPickLists(ordersPerList);
+    payload = await fetchTodaysPickLists(ordersPerList, itemsPerList);
   } catch {
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 p-4 sm:p-6">
@@ -39,7 +44,6 @@ export default async function TodaysPickListPrintPage({ searchParams }: PageProp
 
   const { dayKey, batches, ordersPerList: applied } = payload;
   const printBatches = picklistsToLabelPrintBatches(batches);
-  const dayOrdinal = formatDayKeyAsOrdinalEnglish(dayKey);
   const documentTitle = `Order labels — ${dayKey} (standard)`;
 
   return (
@@ -48,7 +52,7 @@ export default async function TodaysPickListPrintPage({ searchParams }: PageProp
       backLabel="← Today’s pick lists"
       documentTitle={documentTitle}
       pageHeading="Print order labels"
-      summaryLine={`Order day (London): ${dayOrdinal} — one block per order, in pick list and line order · batching: ${applied} orders per list.`}
+      summaryLine={`One block per order, in pick list and line order · batching: ${applied} orders per list.`}
       helpLine="Use this to label packages after picking. Only orders on the current active pick lists are listed (not already completed today)."
       printBatches={printBatches}
     />

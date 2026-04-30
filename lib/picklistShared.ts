@@ -2,9 +2,13 @@ import type { WarehouseOrderLine } from "@/lib/warehouseMockOrders";
 
 /** Used by client and server — do not import Mongo/Shopify here (keeps client bundle clean). */
 
-export const DEFAULT_ORDERS_PER_PICK_LIST = 5;
+export const DEFAULT_ORDERS_PER_PICK_LIST = 4;
 const MIN_ORDERS_PER_PICK = 1;
 const MAX_ORDERS_PER_PICK = 10;
+
+export const DEFAULT_ITEMS_PER_PICK_LIST = 8;
+const MIN_ITEMS_PER_PICK = 1;
+const MAX_ITEMS_PER_PICK = 100;
 
 export function parseOrdersPerListParam(
   raw: string | string[] | undefined,
@@ -23,6 +27,34 @@ export function clampOrdersPerList(n: number): number {
     MAX_ORDERS_PER_PICK,
     Math.max(MIN_ORDERS_PER_PICK, Math.floor(n)),
   );
+}
+
+export function parseItemsPerListParam(
+  raw: string | string[] | undefined,
+): number {
+  const s = Array.isArray(raw) ? raw[0] : raw;
+  const n = parseInt(String(s ?? ""), 10);
+  if (Number.isNaN(n)) return DEFAULT_ITEMS_PER_PICK_LIST;
+  return Math.min(MAX_ITEMS_PER_PICK, Math.max(MIN_ITEMS_PER_PICK, n));
+}
+
+export function clampItemsPerList(n: number): number {
+  if (Number.isNaN(n) || n < MIN_ITEMS_PER_PICK) {
+    return DEFAULT_ITEMS_PER_PICK_LIST;
+  }
+  return Math.min(
+    MAX_ITEMS_PER_PICK,
+    Math.max(MIN_ITEMS_PER_PICK, Math.floor(n)),
+  );
+}
+
+/** Sum of pickable line quantities; matches “Total items (qty)” for one order. */
+export function itemUnitsForOrder(o: OrderForPick): number {
+  let s = 0;
+  for (const line of o.items) {
+    s += Math.max(0, Math.trunc(line.quantity || 0));
+  }
+  return s;
 }
 
 export type OrderForPick = {

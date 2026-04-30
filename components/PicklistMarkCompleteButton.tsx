@@ -16,6 +16,7 @@ type Props = {
   /** Daily pick sequence (1–N for the day, after completed picks). */
   pickListNumber: number;
   ordersPerList: number;
+  itemsPerList: number;
   orderNumbers: string[];
   steps: PickStep[];
   assembly: OrderAssembly[];
@@ -26,6 +27,7 @@ export function PicklistMarkCompleteButton({
   dayKey,
   pickListNumber,
   ordersPerList,
+  itemsPerList,
   orderNumbers,
   steps,
   assembly,
@@ -52,6 +54,7 @@ export function PicklistMarkCompleteButton({
           orderNumbers,
           batchIndex: pickListNumber,
           ordersPerList,
+          itemsPerList,
           steps,
           assembly,
           totalItemsQty,
@@ -81,6 +84,7 @@ export function PicklistMarkCompleteButton({
     orderNumbers,
     pickListNumber,
     ordersPerList,
+    itemsPerList,
     router,
     steps,
     totalItemsQty,

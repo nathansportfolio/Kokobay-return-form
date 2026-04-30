@@ -10,8 +10,11 @@ import type {
 /**
  * Picks the best product image for a line: variant’s image, image that lists
  * this `variant_id`, or product default / first image.
+ *
+ * Exported for product CSV/JSON exports — variant `image_id` is often null
+ * when the store only set a **product**-level featured image.
  */
-function imageUrlForLine(
+export function shopifyVariantImageUrl(
   product: ShopifyProduct,
   variantId: number,
 ): string {
@@ -83,7 +86,7 @@ export function lineItemImageUrlsFromProductMap(
     }
     byLineId.set(
       key,
-      imageUrlForLine(p, li.variant_id).trim(),
+      shopifyVariantImageUrl(p, li.variant_id).trim(),
     );
   }
   return byLineId;

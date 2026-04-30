@@ -289,3 +289,35 @@ export function shopifyOrderDisplayFromLookup(
   const { lines, orderRef, ok, ...display } = s;
   return display;
 }
+
+const RETURN_LOG_SHOPIFY_ID_LOOKUP_CONCURRENCY = 5;
+
+/**
+ * For logged-return rows that have no stored `shopifyOrderId`: resolve REST `order.id`
+ * from Shopify using the same lookup as `/returns/[order]` (order name / `#` / id).
+ * Map keys are `orderRef.trim()` for stable lookup.
+ */
+export async function resolveShopifyOrderIdsForOrderRefs(
+  orderRefs: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!process.env.SHOPIFY_STORE?.trim()) return out;
+  const unique = [
+    ...new Set(
+      orderRefs.map((x) => String(x).trim()).filter((x) => x.length > 0),
+    ),
+  ];
+  for (let i = 0; i < unique.length; i += RETURN_LOG_SHOPIFY_ID_LOOKUP_CONCURRENCY) {
+    const batch = unique.slice(i, i + RETURN_LOG_SHOPIFY_ID_LOOKUP_CONCURRENCY);
+    const settled = await Promise.all(
+      batch.map(async (ref) => {
+        const d = await fetchShopifyOrderDisplay(ref);
+        return { ref, id: d?.shopifyOrderId };
+      }),
+    );
+    for (const { ref, id } of settled) {
+      if (id) out.set(ref, id);
+    }
+  }
+  return out;
+}

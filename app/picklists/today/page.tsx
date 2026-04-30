@@ -7,6 +7,7 @@ import { PicklistOrdersPerListSelect } from "@/components/PicklistOrdersPerListS
 import { WarehouseLocationLine } from "@/components/WarehouseLocationLine";
 import {
   fetchTodaysPickLists,
+  parseItemsPerListParam,
   parseOrdersPerListParam,
   pickStepForOrdersLabel,
 } from "@/lib/fetchTodaysPickLists";
@@ -21,9 +22,9 @@ import {
   PICK_LIST_TOOLBAR_WRAP,
 } from "@/components/picklist/pickListToolbarClasses";
 import { formatDisplayColour } from "@/lib/formatDisplayColour";
-import { formatDayKeyAsOrdinalEnglish } from "@/lib/warehouseLondonDay";
-import { PicklistRefreshButton } from "@/components/PicklistRefreshButton";
 import { PicklistPicksConsoleLogger } from "@/components/PicklistPicksConsoleLogger";
+import { PicklistRefreshAndAllTypes } from "@/components/picklist/PicklistRefreshAndAllTypes";
+import { PicklistStepOverviewThumb } from "@/components/picklist/PicklistStepOverviewThumb";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +40,11 @@ type PageProps = {
 export default async function TodaysPickListsPage({ searchParams }: PageProps) {
   const sp = (await searchParams) ?? {};
   const ordersPerList = parseOrdersPerListParam(sp.ordersPerList);
+  const itemsPerList = parseItemsPerListParam(sp.itemsPerList);
 
   let payload: Awaited<ReturnType<typeof fetchTodaysPickLists>>;
   try {
-    payload = await fetchTodaysPickLists(ordersPerList);
+    payload = await fetchTodaysPickLists(ordersPerList, itemsPerList);
   } catch {
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 p-4 sm:p-6">
@@ -62,14 +64,17 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
     dayKey,
     batches,
     ordersPerList: appliedOrdersPerList,
+    itemsPerList: appliedItemsPerList,
     totalPicklistsForDay,
     completedPicklistCount,
     dataSource,
   } = payload;
   const completedQuery = new URLSearchParams();
   completedQuery.set("ordersPerList", String(appliedOrdersPerList));
+  completedQuery.set("itemsPerList", String(appliedItemsPerList));
   const printQuery = new URLSearchParams();
   printQuery.set("ordersPerList", String(appliedOrdersPerList));
+  printQuery.set("itemsPerList", String(appliedItemsPerList));
   const showProgress =
     totalPicklistsForDay > 0 || completedPicklistCount > 0;
 
@@ -83,15 +88,7 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
           </h1>
           <div className={PICK_LIST_TOOLBAR_WRAP}>
             <PicklistHowToFindProductsButton />
-            <PicklistRefreshButton
-              title="Re-fetch from Shopify and Mongo (e.g. after re-seeding stock or editing locations)"
-            />
-            <Link
-              href="/picklists"
-              className={`${PICK_LIST_TB_ACTION} ${PICK_LIST_TB_SECONDARY}`}
-            >
-              All types
-            </Link>
+            <PicklistRefreshAndAllTypes />
             <Link
               href={`/picklists/today/completed?${completedQuery.toString()}`}
               className={`${PICK_LIST_TB_ACTION} ${PICK_LIST_TB_SECONDARY}`}
@@ -107,16 +104,13 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
           </div>
         </div>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          <span className="font-medium text-foreground">Order day (London):</span>{" "}
-          <span className="text-foreground">
-            {formatDayKeyAsOrdinalEnglish(dayKey)}
-          </span>
-          . Picks are <span className="font-medium text-foreground">yesterday’s orders</span> (ship
+          Picks are <span className="font-medium text-foreground">yesterday’s orders</span> (ship
           today, pick the prior calendar day in the warehouse).{" "}
           <Link className="underline" href="/orders/today">
             Today’s orders
           </Link>{" "}
-          (same Shopify store) is the <span className="font-medium">current</span> warehouse day.
+          (same Shopify store) is the <span className="font-medium text-foreground">current</span>{" "}
+          warehouse day.
         </p>
         {dataSource === "shopify" ? (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -154,7 +148,10 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
               />
             }
           >
-            <PicklistOrdersPerListSelect value={appliedOrdersPerList} />
+            <PicklistOrdersPerListSelect
+              ordersValue={appliedOrdersPerList}
+              itemsValue={appliedItemsPerList}
+            />
           </Suspense>
         </div>
       </div>
@@ -205,7 +202,7 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
                     Pick list {batch.displayPickListNumber}
                   </h2>
                   <Link
-                    href={`/picklists/today/walk?list=${batch.batchIndex}&ordersPerList=${appliedOrdersPerList}`}
+                    href={`/picklists/today/walk?list=${batch.batchIndex}&ordersPerList=${appliedOrdersPerList}&itemsPerList=${appliedItemsPerList}`}
                     className="shrink-0 rounded-lg border-2 border-sky-600/80 bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:border-sky-700 hover:bg-sky-700 dark:border-sky-500 dark:bg-sky-600 dark:hover:border-sky-400 dark:hover:bg-sky-500"
                   >
                     Start Picklist
@@ -233,6 +230,7 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
                     >
                       {s.step}
                     </span>
+                    <PicklistStepOverviewThumb step={s} name={s.name} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
@@ -335,6 +333,7 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
                 dayKey={dayKey}
                 pickListNumber={batch.displayPickListNumber}
                 ordersPerList={appliedOrdersPerList}
+                itemsPerList={appliedItemsPerList}
                 orderNumbers={batch.orderNumbers}
                 steps={batch.steps}
                 assembly={batch.assembly}

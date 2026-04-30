@@ -4,9 +4,9 @@ import { PicklistOrderLabelsPrint } from "@/components/picklist/PicklistOrderLab
 import { picklistsToLabelPrintBatches } from "@/lib/picklistOrderLabelPrintData";
 import {
   fetchUkPremiumPickLists,
+  parseItemsPerListParam,
   parseOrdersPerListParam,
 } from "@/lib/fetchTodaysPickLists";
-import { formatDayKeyAsOrdinalEnglish } from "@/lib/warehouseLondonDay";
 import { UK_PREMIUM_NDD_LINE_TITLE } from "@/lib/shopifyShippingLineTitles";
 
 export const dynamic = "force-dynamic";
@@ -28,13 +28,15 @@ export default async function UkPremiumPickListPrintPage({
 }: PageProps) {
   const sp = (await searchParams) ?? {};
   const ordersPerList = parseOrdersPerListParam(sp.ordersPerList);
+  const itemsPerList = parseItemsPerListParam(sp.itemsPerList);
   const listQuery = new URLSearchParams();
   listQuery.set("ordersPerList", String(ordersPerList));
+  listQuery.set("itemsPerList", String(itemsPerList));
   const backHref = `${LIST}?${listQuery.toString()}`;
 
   let payload: Awaited<ReturnType<typeof fetchUkPremiumPickLists>>;
   try {
-    payload = await fetchUkPremiumPickLists(ordersPerList);
+    payload = await fetchUkPremiumPickLists(ordersPerList, itemsPerList);
   } catch {
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 p-4 sm:p-6">
@@ -46,7 +48,6 @@ export default async function UkPremiumPickListPrintPage({
 
   const { dayKey, batches, dataSource, ordersPerList: applied } = payload;
   const printBatches = picklistsToLabelPrintBatches(batches);
-  const dayOrdinal = formatDayKeyAsOrdinalEnglish(dayKey);
   const documentTitle = `Order labels — ${dayKey} (Next Day)`;
 
   const noShopify = dataSource === "empty";
@@ -71,7 +72,7 @@ export default async function UkPremiumPickListPrintPage({
       backLabel="← Next Day"
       documentTitle={documentTitle}
       pageHeading="Print order labels"
-      summaryLine={`Next Day · ${dayOrdinal}, London (before 2pm). Shipping: ${UK_PREMIUM_NDD_LINE_TITLE}. Batching: ${applied} orders per list.`}
+      summaryLine={`Next Day (London, before 2pm). Shipping: ${UK_PREMIUM_NDD_LINE_TITLE}. Batching: ${applied} orders per list.`}
       helpLine="Only orders on active Next Day lists, not in a completed special pick yet."
       printBatches={printBatches}
     />

@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PicklistWalkClient } from "@/components/PicklistWalkClient";
 import { PICKLIST_LIST_KIND_UK_PREMIUM } from "@/lib/picklistListKind";
-import { fetchUkPremiumPickLists, parseOrdersPerListParam } from "@/lib/fetchTodaysPickLists";
+import {
+  fetchUkPremiumPickLists,
+  parseItemsPerListParam,
+  parseOrdersPerListParam,
+} from "@/lib/fetchTodaysPickLists";
 
 export const dynamic = "force-dynamic";
 
@@ -27,11 +31,12 @@ type PageProps = {
 export default async function UkPremiumWalkPage({ searchParams }: PageProps) {
   const sp = (await searchParams) ?? {};
   const ordersPerList = parseOrdersPerListParam(sp.ordersPerList);
+  const itemsPerList = parseItemsPerListParam(sp.itemsPerList);
   const listN = parseListParam(sp.list);
 
   let payload: Awaited<ReturnType<typeof fetchUkPremiumPickLists>>;
   try {
-    payload = await fetchUkPremiumPickLists(ordersPerList);
+    payload = await fetchUkPremiumPickLists(ordersPerList, itemsPerList);
   } catch {
     return (
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-4 p-4 sm:p-6">
@@ -44,12 +49,14 @@ export default async function UkPremiumWalkPage({ searchParams }: PageProps) {
     );
   }
 
-  const { batches, ordersPerList: applied, dayKey } = payload;
+  const { batches, ordersPerList: applied, itemsPerList: appliedItems, dayKey } =
+    payload;
   const batch = batches.find((b) => b.batchIndex === listN);
 
   if (!batch || batch.steps.length === 0) {
     const listQuery = new URLSearchParams();
     listQuery.set("ordersPerList", String(applied));
+    listQuery.set("itemsPerList", String(appliedItems));
     return (
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-4 p-4 sm:p-6">
         <h1 className="text-xl font-semibold">Walk pick list</h1>
@@ -73,6 +80,7 @@ export default async function UkPremiumWalkPage({ searchParams }: PageProps) {
       pickListNumber={batch.displayPickListNumber}
       orderNumbers={batch.orderNumbers}
       ordersPerList={applied}
+      itemsPerList={appliedItems}
       dayKey={dayKey}
       assembly={batch.assembly}
       listPathBase={LIST}

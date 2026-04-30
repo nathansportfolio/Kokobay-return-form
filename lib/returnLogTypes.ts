@@ -17,6 +17,8 @@ export type ReturnLogLineEntry = {
 export type ReturnLogDoc = {
   returnUid: string;
   orderRef: string;
+  /** Shopify REST `order.id` when stored (newer return logs). */
+  shopifyOrderId?: string;
   createdAt: string | Date;
   lines: ReturnLogLineEntry[];
   lineCount: number;
@@ -32,6 +34,8 @@ export type ReturnLogDoc = {
 export type ReturnLogListItem = {
   returnUid: string;
   orderRef: string;
+  /** Shopify Admin / REST `order.id` for `…/orders/{id}` links. Omitted on older logs. */
+  shopifyOrderId?: string;
   createdAt: string;
   lineCount: number;
   totalRefundGbp: number;
@@ -59,6 +63,8 @@ export type ReturnPageResume = {
 
 export type InsertReturnLogInput = {
   orderRef: string;
+  /** Shopify Admin order resource id; required for correct “View Shopify” from logged list. */
+  shopifyOrderId?: string;
   lines: {
     lineId: string;
     sku: string;

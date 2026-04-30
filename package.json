@@ -8,14 +8,21 @@
     "dev:lan": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "list-active-products": "node --import tsx --env-file=.env.local ./scripts/list-active-shopify-products.ts",
+    "merge-products": "node scripts/merge-products.js",
+    "export-shopify-csv": "node scripts/export-shopify-import-csv.js",
+    "active-products-shopify-headers": "node scripts/active-products-shopify-headers.js"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^9.0.0",
     "@phosphor-icons/react": "^2.1.10",
+    "csv-parser": "^3.2.0",
+    "fs-extra": "^11.3.4",
     "jsbarcode": "^3.12.3",
+    "json2csv": "6.0.0-alpha.2",
     "luxon": "^3.7.2",
     "mongodb": "^6.21.0",
     "next": "16.2.4",
@@ -35,6 +42,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

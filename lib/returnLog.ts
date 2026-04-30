@@ -7,6 +7,7 @@ import {
 } from "@/lib/customerReturnFormReasons";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import { returnReasonLabel } from "@/lib/returnReasons";
+import { normalizeShopifyOrderIdForStorage } from "@/lib/shopifyOrderAdminUrl";
 import type {
   InsertReturnLogInput,
   ReturnLogLineEntry,
@@ -20,6 +21,7 @@ export type { InsertReturnLogInput, ReturnLogLineEntry, ReturnLogListItem };
 type ReturnLogMongo = {
   returnUid: string;
   orderRef: string;
+  shopifyOrderId?: string;
   createdAt: Date;
   lines: ReturnLogLineEntry[];
   lineCount: number;
@@ -54,6 +56,9 @@ export async function insertReturnLog(
   if (!orderRef) {
     throw new Error("orderRef is required");
   }
+  const shopifyOrderId = normalizeShopifyOrderIdForStorage(
+    input.shopifyOrderId,
+  );
 
   const lines: ReturnLogLineEntry[] = input.lines.map((l) => {
     const lt = lineTotal(l.quantity, l.unitPrice);
@@ -78,6 +83,7 @@ export async function insertReturnLog(
   const doc: ReturnLogMongo = {
     returnUid,
     orderRef,
+    ...(shopifyOrderId ? { shopifyOrderId } : {}),
     createdAt: now,
     lines,
     lineCount: lines.length,
@@ -104,6 +110,7 @@ export type ReturnLogListOrder = "asc" | "desc";
 const mapDocToListItem = (d: ReturnLogMongo): ReturnLogListItem => ({
   returnUid: d.returnUid,
   orderRef: d.orderRef,
+  ...(d.shopifyOrderId ? { shopifyOrderId: d.shopifyOrderId } : {}),
   createdAt: d.createdAt.toISOString(),
   lineCount: d.lineCount,
   totalRefundGbp: d.totalRefundGbp,

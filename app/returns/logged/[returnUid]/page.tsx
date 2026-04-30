@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getReturnLogByUid } from "@/lib/returnLog";
+import { fetchShopifyOrderDisplay } from "@/lib/shopifyReturnOrderLookup";
+import {
+  shopifyOrderAdminUrlByOrderId,
+  shopifyOrderAdminUrlFromOrderRef,
+} from "@/lib/shopifyOrderAdminUrl";
 import { formatGbp } from "@/lib/kokobayOrderLines";
 import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { WAREHOUSE_TZ, formatDateAsOrdinalInTimeZone } from "@/lib/warehouseLondonDay";
@@ -28,6 +33,17 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
   const doc = await getReturnLogByUid(uid);
   if (!doc) notFound();
 
+  let shopifyAdminOrderId = doc.shopifyOrderId?.trim();
+  if (!shopifyAdminOrderId && process.env.SHOPIFY_STORE?.trim()) {
+    const d = await fetchShopifyOrderDisplay(doc.orderRef);
+    if (d?.shopifyOrderId) shopifyAdminOrderId = d.shopifyOrderId;
+  }
+  const shopifyAdminHref = shopifyAdminOrderId
+    ? shopifyOrderAdminUrlByOrderId(shopifyAdminOrderId)
+    : shopifyOrderAdminUrlFromOrderRef(doc.orderRef);
+  const showLegacyNote =
+    !doc.shopifyOrderId && !shopifyAdminOrderId && process.env.SHOPIFY_STORE?.trim();
+
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 p-4 sm:p-6">
       <p className="text-sm">
@@ -41,6 +57,22 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
       <h1 className="mt-3 text-2xl font-semibold">Return log</h1>
       <p className="mt-1 break-all font-mono text-sm text-zinc-600 dark:text-zinc-400">
         {doc.returnUid}
+      </p>
+
+      <p className="mt-4">
+        <a
+          href={shopifyAdminHref}
+          className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[#006e52] bg-[#008060] px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          View Shopify order
+        </a>
+        {showLegacyNote ? (
+          <span className="ml-2 text-xs text-zinc-500">
+            Could not look up this order in Shopify — link may be wrong.
+          </span>
+        ) : null}
       </p>
 
       <dl className="mt-6 flex flex-col gap-3 text-sm sm:flex-row sm:flex-wrap sm:gap-x-8 sm:gap-y-2">

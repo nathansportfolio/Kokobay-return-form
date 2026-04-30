@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   listReturnLogsPaged,
+  type ReturnLogListItem,
   type ReturnLogListOrder,
   type ReturnLogListSort,
 } from "@/lib/returnLog";
@@ -16,15 +17,48 @@ import {
   sortHeaderArrow,
   type ReturnLogListState,
 } from "@/lib/returnLogListParams";
-import { shopifyOrderAdminUrlFromOrderRef } from "@/lib/shopifyOrderAdminUrl";
+import { resolveShopifyOrderIdsForOrderRefs } from "@/lib/shopifyReturnOrderLookup";
+import {
+  shopifyOrderAdminUrlByOrderId,
+  shopifyOrderAdminUrlFromOrderRef,
+} from "@/lib/shopifyOrderAdminUrl";
 import { WAREHOUSE_TZ, formatDateAsOrdinalInTimeZone } from "@/lib/warehouseLondonDay";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Logged Returns",
-  description: "Returns registered in the warehouse with email and refund status",
+type MetadataProps = {
+  searchParams: Promise<Readonly<Record<string, string | string[] | undefined>>>;
 };
+
+export async function generateMetadata({
+  searchParams,
+}: MetadataProps): Promise<Metadata> {
+  const sp = await searchParams;
+  const q = parseReturnLogListQuery(sp);
+  if (q.refundPending) {
+    return {
+      title: "Awaiting refund · Logged returns",
+      description:
+        "Returns logged in the warehouse where a full refund has not been marked yet.",
+    };
+  }
+  return {
+    title: "Logged returns",
+    description:
+      "Returns registered in the warehouse with email and refund status.",
+  };
+}
+
+function shopifyReturnLogRowAdminHref(
+  r: ReturnLogListItem,
+  resolvedIdByOrderRef: Map<string, string>,
+): string {
+  const id =
+    r.shopifyOrderId ?? resolvedIdByOrderRef.get(r.orderRef.trim());
+  return id
+    ? shopifyOrderAdminUrlByOrderId(id)
+    : shopifyOrderAdminUrlFromOrderRef(r.orderRef);
+}
 
 function fmtWhen(iso: string) {
   const d = new Date(iso);
@@ -59,7 +93,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
   if (err) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 p-4 sm:p-6">
-        <h1 className="text-2xl font-semibold">Logged Returns</h1>
+        <h1 className="text-2xl font-semibold">Logged returns</h1>
         <p className="mt-2 text-sm text-red-600 dark:text-red-400">{err}</p>
         <Link
           className="mt-4 inline-block text-sm font-medium text-foreground underline"
@@ -76,6 +110,15 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
   }
 
   const { items: rows, total, page, pageSize } = data;
+
+  const orderRefsMissingShopifyId = rows
+    .filter((r) => !r.shopifyOrderId)
+    .map((r) => r.orderRef);
+  const shopifyAdminIdByOrderRef =
+    orderRefsMissingShopifyId.length > 0
+      ? await resolveShopifyOrderIdsForOrderRefs(orderRefsMissingShopifyId)
+      : new Map<string, string>();
+
   const current: ReturnLogListState = {
     page,
     pageSize,
@@ -113,7 +156,9 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Logged Returns</h1>
+        <h1 className="text-2xl font-semibold">
+          {q.refundPending ? "Returns awaiting refund" : "Logged returns"}
+        </h1>
         <Link
           href="/returns"
           className="inline-flex shrink-0 items-center justify-center rounded-md bg-foreground px-2.5 py-1.5 text-xs font-semibold text-background shadow-sm transition-colors hover:bg-foreground/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
@@ -123,7 +168,10 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
       </div>
       {q.refundPending ? (
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Showing only returns with no full refund recorded yet.{" "}
+          Only rows where <strong className="font-medium">Refund</strong> is still{" "}
+          <strong className="font-medium">No</strong>.{" "}
+          <strong className="font-medium">View Shopify</strong> opens Admin using the
+          stored order id, or the same live Shopify lookup as the return screen.
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -388,7 +436,10 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                           View
                         </Link>
                         <a
-                          href={shopifyOrderAdminUrlFromOrderRef(r.orderRef)}
+                          href={shopifyReturnLogRowAdminHref(
+                            r,
+                            shopifyAdminIdByOrderRef,
+                          )}
                           className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[#006e52] bg-[#008060] px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950"
                           target="_blank"
                           rel="noopener noreferrer"

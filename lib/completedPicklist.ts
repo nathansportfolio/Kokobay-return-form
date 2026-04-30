@@ -26,6 +26,8 @@ export type CompletedPicklistDoc = {
   /** Batch index the picker saw when they started (1-based, that day + batching). */
   batchIndex: number;
   ordersPerList: number;
+  /** Omitted in legacy complete rows. */
+  itemsPerList?: number;
   steps: PickStep[];
   assembly: OrderAssembly[];
   totalItemsQty: number;
@@ -89,6 +91,7 @@ export type CompletedPicklistListItem = {
   orderNumbers: string[];
   batchIndex: number;
   ordersPerList: number;
+  itemsPerList?: number;
   totalItemsQty: number;
   orderCount: number;
   completedAt: string;
@@ -112,6 +115,9 @@ export async function listCompletedPicklistsForDay(
     orderNumbers: d.orderNumbers,
     batchIndex: d.batchIndex,
     ordersPerList: d.ordersPerList,
+    ...(d.itemsPerList != null
+      ? { itemsPerList: d.itemsPerList }
+      : {}),
     totalItemsQty: d.totalItemsQty,
     orderCount: d.orderCount,
     completedAt:
@@ -127,6 +133,7 @@ type InsertInput = {
   orderNumbers: string[];
   batchIndex: number;
   ordersPerList: number;
+  itemsPerList: number;
   steps: PickStep[];
   assembly: OrderAssembly[];
   totalItemsQty: number;
@@ -144,7 +151,7 @@ type InsertInput = {
 export async function insertCompletedPicklist(
   input: InsertInput,
 ): Promise<string> {
-  const { dayKey, orderNumbers, batchIndex, ordersPerList, steps, assembly } =
+  const { dayKey, orderNumbers, batchIndex, ordersPerList, itemsPerList, steps, assembly } =
     input;
   const listKind = input.listKind ?? PICKLIST_LIST_KIND_STANDARD;
   const sorted = [...orderNumbers].sort((a, b) => a.localeCompare(b));
@@ -187,6 +194,7 @@ export async function insertCompletedPicklist(
     orderNumbers: sorted,
     batchIndex,
     ordersPerList: Math.floor(ordersPerList),
+    itemsPerList: Math.floor(itemsPerList),
     steps: JSON.parse(JSON.stringify(steps)) as PickStep[],
     assembly: JSON.parse(JSON.stringify(assembly)) as OrderAssembly[],
     totalItemsQty: input.totalItemsQty,

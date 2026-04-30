@@ -41,6 +41,22 @@ export function shopifyOrderAdminUrlByOrderId(
 }
 
 /**
+ * REST admin id (`12948825899394`) or `gid://shopify/Order/…` from APIs.
+ * Returns `undefined` if the value is not a usable id (e.g. order name `#57373`).
+ */
+export function normalizeShopifyOrderIdForStorage(
+  raw: unknown,
+): string | undefined {
+  if (raw == null) return undefined;
+  const s = String(raw).trim();
+  if (!s) return undefined;
+  const gid = /^gid:\/\/shopify\/Order\/(\d+)$/i.exec(s);
+  if (gid) return gid[1];
+  if (/^\d{10,}$/.test(s)) return s;
+  return undefined;
+}
+
+/**
  * Map warehouse / customer order ref to the numeric id used in admin URLs.
  * Set `NEXT_PUBLIC_SHOPIFY_ORDER_ADMIN_ID_MAP` to JSON e.g. `{"333344":"12985108038018"}`.
  */

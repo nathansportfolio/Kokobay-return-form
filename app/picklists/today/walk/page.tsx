@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PicklistWalkClient } from "@/components/PicklistWalkClient";
 import {
   fetchTodaysPickLists,
+  parseItemsPerListParam,
   parseOrdersPerListParam,
 } from "@/lib/fetchTodaysPickLists";
 
@@ -29,11 +30,12 @@ type PageProps = {
 export default async function PicklistWalkPage({ searchParams }: PageProps) {
   const sp = (await searchParams) ?? {};
   const ordersPerList = parseOrdersPerListParam(sp.ordersPerList);
+  const itemsPerList = parseItemsPerListParam(sp.itemsPerList);
   const listN = parseListParam(sp.list);
 
   let payload: Awaited<ReturnType<typeof fetchTodaysPickLists>>;
   try {
-    payload = await fetchTodaysPickLists(ordersPerList);
+    payload = await fetchTodaysPickLists(ordersPerList, itemsPerList);
   } catch {
     return (
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-4 p-4 sm:p-6">
@@ -51,12 +53,14 @@ export default async function PicklistWalkPage({ searchParams }: PageProps) {
     );
   }
 
-  const { batches, ordersPerList: applied, dayKey } = payload;
+  const { batches, ordersPerList: applied, itemsPerList: appliedItems, dayKey } =
+    payload;
   const batch = batches.find((b) => b.batchIndex === listN);
 
   if (!batch || batch.steps.length === 0) {
     const listQuery = new URLSearchParams();
     listQuery.set("ordersPerList", String(applied));
+    listQuery.set("itemsPerList", String(appliedItems));
     return (
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-4 p-4 sm:p-6">
         <h1 className="text-xl font-semibold text-foreground">Walk pick list</h1>
@@ -80,6 +84,7 @@ export default async function PicklistWalkPage({ searchParams }: PageProps) {
       pickListNumber={batch.displayPickListNumber}
       orderNumbers={batch.orderNumbers}
       ordersPerList={applied}
+      itemsPerList={appliedItems}
       dayKey={dayKey}
       assembly={batch.assembly}
     />

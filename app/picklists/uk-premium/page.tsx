@@ -9,6 +9,7 @@ import { UK_PREMIUM_NDD_LINE_TITLE } from "@/lib/shopifyShippingLineTitles";
 import { PICKLIST_LIST_KIND_UK_PREMIUM } from "@/lib/picklistListKind";
 import {
   fetchUkPremiumPickLists,
+  parseItemsPerListParam,
   parseOrdersPerListParam,
   pickStepForOrdersLabel,
 } from "@/lib/fetchTodaysPickLists";
@@ -23,9 +24,9 @@ import {
   PICK_LIST_TOOLBAR_WRAP,
 } from "@/components/picklist/pickListToolbarClasses";
 import { formatDisplayColour } from "@/lib/formatDisplayColour";
-import { formatDayKeyAsOrdinalEnglish } from "@/lib/warehouseLondonDay";
-import { PicklistRefreshButton } from "@/components/PicklistRefreshButton";
 import { PicklistPicksConsoleLogger } from "@/components/PicklistPicksConsoleLogger";
+import { PicklistRefreshAndAllTypes } from "@/components/picklist/PicklistRefreshAndAllTypes";
+import { PicklistStepOverviewThumb } from "@/components/picklist/PicklistStepOverviewThumb";
 
 export const dynamic = "force-dynamic";
 
@@ -44,10 +45,11 @@ type PageProps = {
 export default async function UkPremiumPicklistsPage({ searchParams }: PageProps) {
   const sp = (await searchParams) ?? {};
   const ordersPerList = parseOrdersPerListParam(sp.ordersPerList);
+  const itemsPerList = parseItemsPerListParam(sp.itemsPerList);
 
   let payload: Awaited<ReturnType<typeof fetchUkPremiumPickLists>>;
   try {
-    payload = await fetchUkPremiumPickLists(ordersPerList);
+    payload = await fetchUkPremiumPickLists(ordersPerList, itemsPerList);
   } catch {
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 p-4 sm:p-6">
@@ -66,14 +68,17 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
     dayKey,
     batches,
     ordersPerList: appliedOrdersPerList,
+    itemsPerList: appliedItemsPerList,
     totalPicklistsForDay,
     completedPicklistCount,
     dataSource,
   } = payload;
   const completedQuery = new URLSearchParams();
   completedQuery.set("ordersPerList", String(appliedOrdersPerList));
+  completedQuery.set("itemsPerList", String(appliedItemsPerList));
   const printQuery = new URLSearchParams();
   printQuery.set("ordersPerList", String(appliedOrdersPerList));
+  printQuery.set("itemsPerList", String(appliedItemsPerList));
   const showProgress = totalPicklistsForDay > 0 || completedPicklistCount > 0;
 
   return (
@@ -86,9 +91,7 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
           </h1>
           <div className={PICK_LIST_TOOLBAR_WRAP}>
             <PicklistHowToFindProductsButton />
-            <PicklistRefreshButton
-              title="Re-fetch from Shopify and Mongo (e.g. after re-seeding stock or editing locations)"
-            />
+            <PicklistRefreshAndAllTypes />
             <Link
               href={`${LIST}/completed?${completedQuery.toString()}`}
               className={`${PICK_LIST_TB_ACTION} ${PICK_LIST_TB_SECONDARY}`}
@@ -104,18 +107,18 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
           </div>
         </div>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          <span className="font-medium text-foreground">Order day (London):</span>{" "}
-          <span className="text-foreground">
-            {formatDayKeyAsOrdinalEnglish(dayKey)}
-          </span>
-          . <span className="font-medium text-foreground">Shipping line:</span>{" "}
-          {UK_PREMIUM_NDD_LINE_TITLE}. <span className="font-medium text-foreground">Cut-off:</span> same day,
-          before 2:00 PM London, when the order was placed.
+          <span className="font-medium text-foreground">Shipping line:</span>{" "}
+          {UK_PREMIUM_NDD_LINE_TITLE}. <span className="font-medium text-foreground">Cut-off:</span> same
+          London day, before 2:00 PM, when the order was placed.
         </p>
         {dataSource === "shopify" ? (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Bins and walk use the same rules as the main list; only the order
-            set is different.
+            Picks for this set are the same work day. Bins and walk use the same rules
+            as the main list; only the order set is different. For standard picks, see{" "}
+            <Link className="font-medium text-foreground underline" href="/picklists/today">
+              Today’s pick lists
+            </Link>
+            .
           </p>
         ) : (
           <p className="text-sm text-amber-800 dark:text-amber-200/90">
@@ -143,7 +146,8 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
             }
           >
             <PicklistOrdersPerListSelect
-              value={appliedOrdersPerList}
+              ordersValue={appliedOrdersPerList}
+              itemsValue={appliedItemsPerList}
               listPath={LIST}
             />
           </Suspense>
@@ -193,7 +197,7 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
                       Pick list {batch.displayPickListNumber}
                     </h2>
                     <Link
-                      href={`${LIST}/walk?list=${batch.batchIndex}&ordersPerList=${appliedOrdersPerList}`}
+                      href={`${LIST}/walk?list=${batch.batchIndex}&ordersPerList=${appliedOrdersPerList}&itemsPerList=${appliedItemsPerList}`}
                       className="shrink-0 rounded-lg border-2 border-amber-600/90 bg-amber-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:border-amber-700 hover:bg-amber-700 dark:border-amber-500 dark:bg-amber-600 dark:hover:bg-amber-500"
                     >
                       Start picklist
@@ -221,6 +225,7 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
                       >
                         {s.step}
                       </span>
+                      <PicklistStepOverviewThumb step={s} name={s.name} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
@@ -315,6 +320,7 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
                   dayKey={dayKey}
                   pickListNumber={batch.displayPickListNumber}
                   ordersPerList={appliedOrdersPerList}
+                  itemsPerList={appliedItemsPerList}
                   orderNumbers={batch.orderNumbers}
                   steps={batch.steps}
                   assembly={batch.assembly}

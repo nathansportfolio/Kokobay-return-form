@@ -24,7 +24,9 @@ import {
 import { hexForProductColorName } from "@/lib/warehouseProductColors";
 import { withPickableLinesOnly } from "@/lib/warehousePickableLine";
 import {
+  clampItemsPerList,
   clampOrdersPerList,
+  itemUnitsForOrder,
   type AssemblyLine,
   type OrderAssembly,
   type OrderForPick,
@@ -33,9 +35,13 @@ import {
 } from "@/lib/picklistShared";
 
 export {
+  DEFAULT_ITEMS_PER_PICK_LIST,
   DEFAULT_ORDERS_PER_PICK_LIST,
+  parseItemsPerListParam,
   parseOrdersPerListParam,
+  clampItemsPerList,
   clampOrdersPerList,
+  itemUnitsForOrder,
   pickStepForOrdersLabel,
   type OrderForPick,
   type PickStep,
@@ -134,32 +140,44 @@ function countSetOverlap(candidate: Set<string>, existing: Set<string>): number 
 }
 
 /**
- * Batches of at most `size` orders, seed = next in queue (order #). Each
- * **slot** is filled with the remaining order that shares the most
- * **(location+SKU) pick stops** with the batch (same bin+line = merged qty
- * in one walk). Ties: lower `orderNumber`. If nothing shares a stop, take the
- * next order in queue like plain chunking. **Does not** pre-split A–I vs J–U:
- * a list may straddle the warehouse so the same (bin+SKU) is not a separate
- * pick. If a SKU appears in more than `size` orders, the bin may still be visited
- * on more than one list (unavoidable for capacity).
+ * Batches of at most `maxOrders` orders and combined line **qty** at most
+ * `maxItemUnits`. An order with more than `maxItemUnits` is always alone
+ * (one list for that order only). Otherwise same greedy (location+SKU) overlap
+ * and queue order as before, but the next order must fit the item cap.
  */
 function chunkOrdersGreedyStopOverlap(
   orders: OrderForPick[],
-  size: number,
+  maxOrders: number,
+  maxItemUnits: number,
 ): OrderForPick[][] {
-  if (size < 1 || orders.length === 0) {
+  if (maxOrders < 1 || maxItemUnits < 1 || orders.length === 0) {
     return orders.length === 0 ? [] : [orders];
   }
   const remaining = [...orders];
   const out: OrderForPick[][] = [];
   while (remaining.length > 0) {
     const first = remaining.shift()!;
+    const u0 = itemUnitsForOrder(first);
+    if (u0 > maxItemUnits) {
+      out.push([first]);
+      continue;
+    }
     const batch: OrderForPick[] = [first];
+    let batchUnits = u0;
     const batchStops = new Set(pickStopKeysForOrder(first));
-    while (batch.length < size && remaining.length > 0) {
+    while (batch.length < maxOrders && remaining.length > 0) {
+      const fitting: number[] = [];
+      for (let i = 0; i < remaining.length; i += 1) {
+        if (batchUnits + itemUnitsForOrder(remaining[i]!) <= maxItemUnits) {
+          fitting.push(i);
+        }
+      }
+      if (fitting.length === 0) {
+        break;
+      }
       let bestI = -1;
       let bestOverlap = -1;
-      for (let i = 0; i < remaining.length; i += 1) {
+      for (const i of fitting) {
         const o = remaining[i]!;
         const ov = countSetOverlap(
           pickStopKeysForOrder(o),
@@ -177,12 +195,15 @@ function chunkOrdersGreedyStopOverlap(
       if (bestOverlap > 0 && bestI >= 0) {
         const [next] = remaining.splice(bestI, 1);
         batch.push(next);
+        batchUnits += itemUnitsForOrder(next);
         for (const k of pickStopKeysForOrder(next)) {
           batchStops.add(k);
         }
       } else {
-        const next = remaining.shift()!;
+        const idx = Math.min(...fitting);
+        const [next] = remaining.splice(idx, 1);
         batch.push(next);
+        batchUnits += itemUnitsForOrder(next);
         for (const k of pickStopKeysForOrder(next)) {
           batchStops.add(k);
         }
@@ -366,9 +387,13 @@ function buildAssemblyByOrder(orders: OrderForPick[]): OrderAssembly[] {
   }));
 }
 
-export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
+export async function fetchTodaysPickLists(
+  ordersPerList: number,
+  itemsPerList: number,
+): Promise<{
   dayKey: string;
   ordersPerList: number;
+  itemsPerList: number;
   /** Pick lists for the day with this batch size, if no completions (full day order count / batching). */
   totalPicklistsForDay: number;
   /** How many walk sessions were finished and recorded for this warehouse day. */
@@ -424,11 +449,16 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
 
   allTodays.sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
 
-  const size = clampOrdersPerList(ordersPerList);
+  const maxOrders = clampOrdersPerList(ordersPerList);
+  const maxItemUnits = clampItemsPerList(itemsPerList);
   const totalPicklistsForDay =
     allTodays.length === 0
       ? 0
-      : chunkOrdersGreedyStopOverlap(allTodays, size).length;
+      : chunkOrdersGreedyStopOverlap(
+          allTodays,
+          maxOrders,
+          maxItemUnits,
+        ).length;
   const dayOrderCount = allTodays.length;
 
   const [completedSet, completedPicklistCount] = await Promise.all([
@@ -442,7 +472,11 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
   const todays = allTodays.filter((o) => !completedSet.has(o.orderNumber));
   assertOrderQueueUnique(todays, "fetchTodaysPickLists");
 
-  const groups = chunkOrdersGreedyStopOverlap(todays, size);
+  const groups = chunkOrdersGreedyStopOverlap(
+    todays,
+    maxOrders,
+    maxItemUnits,
+  );
   assertBatchesPartitionQueue(todays, groups, "fetchTodaysPickLists");
 
   const batches: TodaysPickListBatch[] = groups.map((group, idx) => {
@@ -458,7 +492,8 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
 
   return {
     dayKey,
-    ordersPerList: size,
+    ordersPerList: maxOrders,
+    itemsPerList: maxItemUnits,
     totalPicklistsForDay,
     completedPicklistCount,
     dayOrderCount,
@@ -471,9 +506,13 @@ export async function fetchTodaysPickLists(ordersPerList: number): Promise<{
  * **UK Premium / NDD (Shopify only):** orders on **today** (London) with
  * **UK Premium Delivery (1-2 working days)**, `created_at` on that day **before 14:00** London.
  */
-export async function fetchUkPremiumPickLists(ordersPerList: number): Promise<{
+export async function fetchUkPremiumPickLists(
+  ordersPerList: number,
+  itemsPerList: number,
+): Promise<{
   dayKey: string;
   ordersPerList: number;
+  itemsPerList: number;
   totalPicklistsForDay: number;
   completedPicklistCount: number;
   dayOrderCount: number;
@@ -485,6 +524,7 @@ export async function fetchUkPremiumPickLists(ordersPerList: number): Promise<{
     return {
       dayKey,
       ordersPerList: clampOrdersPerList(ordersPerList),
+      itemsPerList: clampItemsPerList(itemsPerList),
       totalPicklistsForDay: 0,
       completedPicklistCount: 0,
       dayOrderCount: 0,
@@ -497,11 +537,16 @@ export async function fetchUkPremiumPickLists(ordersPerList: number): Promise<{
   allTodays = withPickableLinesOnly(allTodays);
   allTodays.sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
 
-  const size = clampOrdersPerList(ordersPerList);
+  const maxOrders = clampOrdersPerList(ordersPerList);
+  const maxItemUnits = clampItemsPerList(itemsPerList);
   const totalPicklistsForDay =
     allTodays.length === 0
       ? 0
-      : chunkOrdersGreedyStopOverlap(allTodays, size).length;
+      : chunkOrdersGreedyStopOverlap(
+          allTodays,
+          maxOrders,
+          maxItemUnits,
+        ).length;
   const dayOrderCount = allTodays.length;
 
   const [completedSet, completedPicklistCount] = await Promise.all([
@@ -514,7 +559,11 @@ export async function fetchUkPremiumPickLists(ordersPerList: number): Promise<{
 
   const todays = allTodays.filter((o) => !completedSet.has(o.orderNumber));
   assertOrderQueueUnique(todays, "fetchUkPremiumPickLists");
-  const groups = chunkOrdersGreedyStopOverlap(todays, size);
+  const groups = chunkOrdersGreedyStopOverlap(
+    todays,
+    maxOrders,
+    maxItemUnits,
+  );
   assertBatchesPartitionQueue(todays, groups, "fetchUkPremiumPickLists");
 
   const batches: TodaysPickListBatch[] = groups.map((group, idx) => {
@@ -530,7 +579,8 @@ export async function fetchUkPremiumPickLists(ordersPerList: number): Promise<{
 
   return {
     dayKey,
-    ordersPerList: size,
+    ordersPerList: maxOrders,
+    itemsPerList: maxItemUnits,
     totalPicklistsForDay,
     completedPicklistCount,
     dayOrderCount,

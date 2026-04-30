@@ -27,6 +27,7 @@ type Props = {
   pickListNumber: number;
   orderNumbers: string[];
   ordersPerList: number;
+  itemsPerList: number;
   dayKey: string;
   assembly: OrderAssembly[];
   /** e.g. `/picklists/today` or `/picklists/uk-premium` (no trailing slash). */
@@ -34,9 +35,14 @@ type Props = {
   listKind?: PicklistListKind;
 };
 
-function makeListListHref(ordersPerList: number, listPathBase: string) {
+function makeListListHref(
+  ordersPerList: number,
+  itemsPerList: number,
+  listPathBase: string,
+) {
   const p = new URLSearchParams();
   p.set("ordersPerList", String(ordersPerList));
+  p.set("itemsPerList", String(itemsPerList));
   return `${listPathBase}?${p.toString()}`;
 }
 
@@ -127,6 +133,7 @@ export function PicklistWalkClient({
   pickListNumber,
   orderNumbers,
   ordersPerList,
+  itemsPerList,
   dayKey,
   assembly,
   listPathBase: listPathBaseIn,
@@ -135,7 +142,7 @@ export function PicklistWalkClient({
   const router = useRouter();
   const listPathBase = listPathBaseIn ?? "/picklists/today";
   const listKind = listKindIn ?? PICKLIST_LIST_KIND_STANDARD;
-  const listHref = (n: number) => makeListListHref(n, listPathBase);
+  const listHref = (o: number, it: number) => makeListListHref(o, it, listPathBase);
   const [index, setIndex] = useState(0);
   const [complete, setComplete] = useState(false);
   const [apiSaved, setApiSaved] = useState(false);
@@ -201,6 +208,7 @@ export function PicklistWalkClient({
             orderNumbers,
             batchIndex: pickListNumber,
             ordersPerList,
+            itemsPerList,
             steps,
             assembly,
             totalItemsQty,
@@ -237,6 +245,7 @@ export function PicklistWalkClient({
     orderCount,
     orderNumbers,
     ordersPerList,
+    itemsPerList,
     steps,
     totalItemsQty,
   ]);
@@ -277,7 +286,7 @@ export function PicklistWalkClient({
         No pick steps in this list.
         <div className="mt-4">
           <Link
-            href={listHref(ordersPerList)}
+            href={listHref(ordersPerList, itemsPerList)}
             className="font-medium text-foreground underline"
           >
             Back to pick lists
@@ -354,7 +363,7 @@ export function PicklistWalkClient({
                 This pick is complete. Orders stay off the active list unless
                 undone in{" "}
                 <Link
-                  href={`${listPathBase}/completed?ordersPerList=${ordersPerList}`}
+                  href={`${listPathBase}/completed?ordersPerList=${ordersPerList}&itemsPerList=${itemsPerList}`}
                   className="font-medium text-foreground underline"
                 >
                   View completed
@@ -362,7 +371,7 @@ export function PicklistWalkClient({
                 .
               </p>
               <Link
-                href={listHref(ordersPerList)}
+                href={listHref(ordersPerList, itemsPerList)}
                 className="inline-flex min-h-11 w-full min-w-0 max-w-sm items-center justify-center rounded-lg border-2 border-zinc-200 bg-zinc-100 px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
               >
                 Back to all pick lists
@@ -384,7 +393,7 @@ export function PicklistWalkClient({
             Pick list {pickListNumber}
           </p>
           <Link
-            href={listHref(ordersPerList)}
+            href={listHref(ordersPerList, itemsPerList)}
             className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
           >
             Back to all pick lists
@@ -579,7 +588,7 @@ export function PicklistWalkClient({
 
       <p className="pt-2 text-center">
         <Link
-          href={listHref(ordersPerList)}
+          href={listHref(ordersPerList, itemsPerList)}
           className="text-sm text-zinc-500 underline"
         >
           View full list

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { insertReturnLog } from "@/lib/returnLog";
+import { normalizeShopifyOrderIdForStorage } from "@/lib/shopifyOrderAdminUrl";
 
 type Body = {
   orderRef?: string;
+  /** Shopify REST `order.id` (digits or gid) for admin deep links. */
+  shopifyOrderId?: unknown;
   lines?: unknown;
 };
 
@@ -63,9 +66,12 @@ export async function POST(request: Request) {
     }
   }
 
+  const shopifyOrderId = normalizeShopifyOrderIdForStorage(body.shopifyOrderId);
+
   try {
     const returnUid = await insertReturnLog({
       orderRef,
+      ...(shopifyOrderId ? { shopifyOrderId } : {}),
       lines: linesRaw,
     });
     return NextResponse.json({ ok: true, returnUid });

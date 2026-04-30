@@ -6,12 +6,14 @@ import {
   PICKLIST_LIST_KIND_UK_PREMIUM,
   type PicklistListKind,
 } from "@/lib/picklistListKind";
+import { clampItemsPerList } from "@/lib/picklistShared";
 
 type Body = {
   dayKey?: string;
   orderNumbers?: string[];
   batchIndex?: number;
   ordersPerList?: number;
+  itemsPerList?: number;
   steps?: unknown;
   assembly?: unknown;
   totalItemsQty?: number;
@@ -141,6 +143,7 @@ export async function POST(request: Request) {
     : [];
   const batchIndex = Number(body.batchIndex);
   const ordersPerList = Number(body.ordersPerList);
+  const itemsPerList = clampItemsPerList(Number(body.itemsPerList));
   const steps = body.steps;
   const assembly = body.assembly;
   const totalItemsQty = Number(body.totalItemsQty);
@@ -200,6 +203,7 @@ export async function POST(request: Request) {
       orderNumbers,
       batchIndex,
       ordersPerList,
+      itemsPerList,
       steps,
       assembly,
       totalItemsQty,

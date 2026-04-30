@@ -265,6 +265,7 @@ export function OrderReturnLines({
     try {
       const body = {
         orderRef: orderLabel,
+        ...(shopifyOrderId ? { shopifyOrderId } : {}),
         lines: lines
           .filter((l) => byId[l.id]?.selected)
           .map((l) => {
@@ -338,7 +339,15 @@ export function OrderReturnLines({
     } finally {
       setSaving(false);
     }
-  }, [applyLogFlags, byId, lines, orderLabel, router, selectedCount]);
+  }, [
+    applyLogFlags,
+    byId,
+    lines,
+    orderLabel,
+    router,
+    selectedCount,
+    shopifyOrderId,
+  ]);
 
   const sendReceivedEmail = useCallback(async () => {
     if (regEmail) {

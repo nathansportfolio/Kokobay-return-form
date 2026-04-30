@@ -54,6 +54,8 @@ function getParentHref(pathname: string, search: URLSearchParams): string {
     const p = new URLSearchParams();
     const o = search.get("ordersPerList");
     if (o) p.set("ordersPerList", o);
+    const it = search.get("itemsPerList");
+    if (it) p.set("itemsPerList", it);
     const q = p.toString();
     return q ? `/picklists/today?${q}` : "/picklists/today";
   }
@@ -65,6 +67,8 @@ function getParentHref(pathname: string, search: URLSearchParams): string {
     const p = new URLSearchParams();
     const o = search.get("ordersPerList");
     if (o) p.set("ordersPerList", o);
+    const it = search.get("itemsPerList");
+    if (it) p.set("itemsPerList", it);
     const q = p.toString();
     return q ? `/picklists/uk-premium?${q}` : "/picklists/uk-premium";
   }
