@@ -290,33 +290,47 @@ export function shopifyOrderDisplayFromLookup(
   return display;
 }
 
-const RETURN_LOG_SHOPIFY_ID_LOOKUP_CONCURRENCY = 5;
+const RETURN_LOG_SHOPIFY_LOOKUP_CONCURRENCY = 5;
+
+/** Shopify REST `financial_status` when the order is fully refunded (live). */
+export function shopifyFinancialStatusIsFullyRefunded(
+  financialStatus: string | null | undefined,
+): boolean {
+  return String(financialStatus ?? "").trim().toLowerCase() === "refunded";
+}
+
+export function shopifyFinancialStatusLabel(
+  financialStatus: string | null | undefined,
+): string {
+  const s = String(financialStatus ?? "").trim();
+  if (!s) return "—";
+  return s.replace(/_/g, " ");
+}
 
 /**
- * For logged-return rows that have no stored `shopifyOrderId`: resolve REST `order.id`
- * from Shopify using the same lookup as `/returns/[order]` (order name / `#` / id).
- * Map keys are `orderRef.trim()` for stable lookup.
+ * Live order summary per `orderRef` for logged returns (Admin REST). Map keys are
+ * `orderRef.trim()`. Values are `null` when Shopify is unavailable or the order was not found.
  */
-export async function resolveShopifyOrderIdsForOrderRefs(
+export async function resolveShopifyOrderDisplaysForOrderRefs(
   orderRefs: string[],
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+): Promise<Map<string, ShopifyOrderDisplay | null>> {
+  const out = new Map<string, ShopifyOrderDisplay | null>();
   if (!process.env.SHOPIFY_STORE?.trim()) return out;
   const unique = [
     ...new Set(
       orderRefs.map((x) => String(x).trim()).filter((x) => x.length > 0),
     ),
   ];
-  for (let i = 0; i < unique.length; i += RETURN_LOG_SHOPIFY_ID_LOOKUP_CONCURRENCY) {
-    const batch = unique.slice(i, i + RETURN_LOG_SHOPIFY_ID_LOOKUP_CONCURRENCY);
+  for (let i = 0; i < unique.length; i += RETURN_LOG_SHOPIFY_LOOKUP_CONCURRENCY) {
+    const batch = unique.slice(i, i + RETURN_LOG_SHOPIFY_LOOKUP_CONCURRENCY);
     const settled = await Promise.all(
       batch.map(async (ref) => {
         const d = await fetchShopifyOrderDisplay(ref);
-        return { ref, id: d?.shopifyOrderId };
+        return { ref, d };
       }),
     );
-    for (const { ref, id } of settled) {
-      if (id) out.set(ref, id);
+    for (const { ref, d } of settled) {
+      out.set(ref, d ?? null);
     }
   }
   return out;

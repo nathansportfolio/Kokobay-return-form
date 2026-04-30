@@ -17,7 +17,11 @@ import {
   sortHeaderArrow,
   type ReturnLogListState,
 } from "@/lib/returnLogListParams";
-import { resolveShopifyOrderIdsForOrderRefs } from "@/lib/shopifyReturnOrderLookup";
+import {
+  resolveShopifyOrderDisplaysForOrderRefs,
+  shopifyFinancialStatusIsFullyRefunded,
+  shopifyFinancialStatusLabel,
+} from "@/lib/shopifyReturnOrderLookup";
 import {
   shopifyOrderAdminUrlByOrderId,
   shopifyOrderAdminUrlFromOrderRef,
@@ -111,13 +115,41 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
 
   const { items: rows, total, page, pageSize } = data;
 
-  const orderRefsMissingShopifyId = rows
-    .filter((r) => !r.shopifyOrderId)
-    .map((r) => r.orderRef);
-  const shopifyAdminIdByOrderRef =
-    orderRefsMissingShopifyId.length > 0
-      ? await resolveShopifyOrderIdsForOrderRefs(orderRefsMissingShopifyId)
-      : new Map<string, string>();
+  const refsToFetchForShopify = new Set<string>();
+  for (const r of rows) {
+    const ref = r.orderRef.trim();
+    if (!r.shopifyOrderId) refsToFetchForShopify.add(ref);
+    if (q.refundPending) refsToFetchForShopify.add(ref);
+  }
+
+  const shopifyDisplayByOrderRef =
+    refsToFetchForShopify.size > 0 && process.env.SHOPIFY_STORE?.trim()
+      ? await resolveShopifyOrderDisplaysForOrderRefs([
+          ...refsToFetchForShopify,
+        ])
+      : new Map();
+
+  const shopifyAdminIdByOrderRef = new Map<string, string>();
+  for (const ref of refsToFetchForShopify) {
+    const d = shopifyDisplayByOrderRef.get(ref);
+    if (d?.shopifyOrderId) shopifyAdminIdByOrderRef.set(ref, d.shopifyOrderId);
+  }
+
+  const filteredRows =
+    q.refundPending &&
+    refsToFetchForShopify.size > 0 &&
+    Boolean(process.env.SHOPIFY_STORE?.trim())
+      ? rows.filter((r) => {
+          const d = shopifyDisplayByOrderRef.get(r.orderRef.trim());
+          if (!d) return true;
+          return !shopifyFinancialStatusIsFullyRefunded(d.financialStatus);
+        })
+      : rows;
+
+  const hiddenByShopifyFullyRefunded =
+    q.refundPending && rows.length > 0
+      ? rows.length - filteredRows.length
+      : 0;
 
   const current: ReturnLogListState = {
     page,
@@ -168,10 +200,13 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
       </div>
       {q.refundPending ? (
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Only rows where <strong className="font-medium">Refund</strong> is still{" "}
-          <strong className="font-medium">No</strong>.{" "}
-          <strong className="font-medium">View Shopify</strong> opens Admin using the
-          stored order id, or the same live Shopify lookup as the return screen.
+          <strong className="font-medium">Refund</strong> column is this app’s flag
+          (not yet marked). When Shopify is configured, we also load each order’s live{" "}
+          <strong className="font-medium">payment status</strong> and{" "}
+          <strong className="font-medium">hide</strong> rows Shopify already shows as{" "}
+          <strong className="font-medium">Refunded</strong> so the list matches money
+          movement. <strong className="font-medium">Refund in Shopify</strong> opens
+          Admin refund with stored id or the same live lookup as the return screen.
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -347,8 +382,53 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
             </>
           ) : null}
         </p>
+      ) : filteredRows.length === 0 && q.refundPending ? (
+        <p className="mt-8 text-sm text-zinc-600 dark:text-zinc-400">
+          Every return on this page already has live Shopify payment status{" "}
+          <strong className="font-medium">Refunded</strong>, so nothing is shown
+          here.
+          {page > 1 ? (
+            <>
+              {" "}
+              <Link
+                className="font-medium text-foreground underline"
+                href={returnLogListPageHref(current, page - 1)}
+              >
+                Previous page
+              </Link>
+              {" · "}
+            </>
+          ) : null}
+          <Link
+            className="font-medium text-foreground underline"
+            href={returnLogListHref({
+              page: 1,
+              pageSize,
+              sort: q.sort,
+              order: q.order,
+              date: q.date,
+              refundPending: false,
+            })}
+          >
+            View all returns
+          </Link>
+          . Mark <strong className="font-medium">Refund</strong> in this app when
+          processing is done so your list stays accurate.
+        </p>
       ) : (
         <>
+          {hiddenByShopifyFullyRefunded > 0 ? (
+            <p
+              className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+              role="status"
+            >
+              Hiding {hiddenByShopifyFullyRefunded} return
+              {hiddenByShopifyFullyRefunded === 1 ? "" : "s"} on this page — Shopify
+              already shows payment as <strong className="font-medium">Refunded</strong>.
+              Mark <strong className="font-medium">Refund</strong> in the app when you
+              finish so those rows leave the database filter too.
+            </p>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-500">
             <span>Rows per page</span>
             <div className="flex flex-wrap items-center gap-1">
@@ -387,13 +467,21 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                   </th>
                   {colHeader("email", "Email")}
                   {colHeader("refund", "Refund")}
+                  {q.refundPending ? (
+                    <th
+                      className="px-3 py-2.5 font-semibold text-foreground sm:px-4"
+                      title="Live Shopify REST financial_status for this order"
+                    >
+                      Shopify payment
+                    </th>
+                  ) : null}
                   <th className="px-3 py-2.5 font-semibold text-foreground sm:px-4">
                     Action
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                {rows.map((r) => (
+                {filteredRows.map((r) => (
                   <tr
                     key={r.returnUid}
                     className="text-zinc-800 dark:text-zinc-200"
@@ -426,6 +514,15 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                     >
                       {r.fullRefundIssued ? "Yes" : "No"}
                     </td>
+                    {q.refundPending ? (
+                      <td className="px-3 py-3 text-sm capitalize sm:px-4">
+                        {shopifyFinancialStatusLabel(
+                          shopifyDisplayByOrderRef.get(
+                            r.orderRef.trim(),
+                          )?.financialStatus,
+                        )}
+                      </td>
+                    ) : null}
                     <td className="px-3 py-3 sm:px-4">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Link
@@ -443,9 +540,9 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                           className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[#006e52] bg-[#008060] px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950"
                           target="_blank"
                           rel="noopener noreferrer"
-                          title="Order in Shopify admin (new tab)"
+                          title="Refund order in Shopify admin (new tab)"
                         >
-                          View Shopify
+                          Refund in Shopify
                         </a>
                       </div>
                     </td>
@@ -457,7 +554,20 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
 
           <div className="mt-4 flex flex-col items-stretch justify-between gap-3 border-t border-zinc-200 pt-4 text-sm sm:flex-row sm:items-center dark:border-zinc-800">
             <p className="text-zinc-600 dark:text-zinc-400" aria-live="polite">
-              {from}–{to} of {total} return{total === 1 ? "" : "s"}
+              {q.refundPending ? (
+                <>
+                  Showing {filteredRows.length} of {rows.length} on this page
+                  {hiddenByShopifyFullyRefunded > 0
+                    ? ` (${hiddenByShopifyFullyRefunded} hidden: Shopify already refunded)`
+                    : ""}
+                  . Database filter: {from}–{to} of {total} with refund not marked in
+                  app.
+                </>
+              ) : (
+                <>
+                  {from}–{to} of {total} return{total === 1 ? "" : "s"}
+                </>
+              )}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Link

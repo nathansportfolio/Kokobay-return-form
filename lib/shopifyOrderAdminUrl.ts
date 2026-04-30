@@ -6,13 +6,13 @@ function storeHandle(): string {
 
 /**
  * Path shape (example):
- * `https://admin.shopify.com/store/koko-bay/orders/12985108038018`
- * The last segment is Shopify’s **resource id** (Admin / REST `order.id`), not the
+ * `https://admin.shopify.com/store/koko-bay/orders/12985108038018/refund`
+ * Opens Admin **Refund** for that order. The id segment is REST `order.id`, not the
  * order name or `order_number`.
  */
 function buildAdminOrderUrl(shopifyOrderId: string): string {
   const id = String(shopifyOrderId).trim();
-  return `https://admin.shopify.com/store/${storeHandle()}/orders/${encodeURIComponent(id)}`;
+  return `https://admin.shopify.com/store/${storeHandle()}/orders/${encodeURIComponent(id)}/refund`;
 }
 
 /**

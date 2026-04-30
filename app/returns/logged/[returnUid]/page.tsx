@@ -65,8 +65,9 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
           className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[#006e52] bg-[#008060] px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950"
           target="_blank"
           rel="noopener noreferrer"
+          title="Refund order in Shopify admin (new tab)"
         >
-          View Shopify order
+          Refund in Shopify
         </a>
         {showLegacyNote ? (
           <span className="ml-2 text-xs text-zinc-500">

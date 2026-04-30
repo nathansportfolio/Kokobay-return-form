@@ -171,7 +171,7 @@ export interface Order {
   /** From REST; may lose precision for very large ids — prefer `shopifyOrderId` for URLs. */
   id: number;
   /**
-   * String form of Shopify `order.id` for `admin.shopify.com/.../orders/{id}`.
+   * String form of Shopify `order.id` for `admin.shopify.com/.../orders/{id}/refund`.
    * Always use this for admin links, not `orderNumber`.
    */
   shopifyOrderId: string;
