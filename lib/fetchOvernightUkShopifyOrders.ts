@@ -258,7 +258,16 @@ export async function fetchOvernightUkOrderSummaries(
     "58912",
     "58947",
     "58946",
-    "58927"
+    "58927",
+    "58943",
+    "58948",
+    "58943",
+    "58937",
+    "58953",
+    "58938",
+    "58950",
+    "58951",
+    "58918"
   ]);
 
   const filteredOrders = fetched.orders
@@ -289,7 +298,7 @@ export async function fetchOvernightUkOrderSummaries(
 
       return count(a) - count(b); // least items first
     });
-
+    
   return {
     ok: true,
     window,
