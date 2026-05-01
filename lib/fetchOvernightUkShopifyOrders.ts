@@ -257,6 +257,7 @@ export async function fetchOvernightUkOrderSummaries(
     "58914",
     "58912",
     "58947",
+    "58946"
   ]);
 
   const filteredOrders = fetched.orders
