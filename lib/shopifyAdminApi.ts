@@ -6,10 +6,11 @@ export const SHOPIFY_ADMIN_API_VERSION = "2026-04";
 /** Shared cache: 1 minute, keyed by request path. */
 const CACHE_REVALIDATE_SEC = 60;
 
-async function shopifyAdminGetImpl<T>(path: string): Promise<{
+async function shopifyAdminRequest<T>(path: string): Promise<{
   ok: boolean;
   status: number;
   data: T;
+  link: string | null;
 }> {
   const store = process.env.SHOPIFY_STORE?.trim();
   if (!store) {
@@ -27,7 +28,34 @@ async function shopifyAdminGetImpl<T>(path: string): Promise<{
     },
   );
   const data = (await res.json().catch(() => ({}))) as T;
-  return { ok: res.ok, status: res.status, data };
+  return {
+    ok: res.ok,
+    status: res.status,
+    data,
+    link: res.headers.get("link"),
+  };
+}
+
+async function shopifyAdminGetImpl<T>(path: string): Promise<{
+  ok: boolean;
+  status: number;
+  data: T;
+}> {
+  const r = await shopifyAdminRequest<T>(path);
+  return { ok: r.ok, status: r.status, data: r.data };
+}
+
+/**
+ * Same as {@link shopifyAdminGetNoCache} but exposes the response `Link` header
+ * for REST cursor pagination (`page_info`).
+ */
+export async function shopifyAdminGetNoCacheWithLink<T>(path: string): Promise<{
+  ok: boolean;
+  status: number;
+  data: T;
+  link: string | null;
+}> {
+  return shopifyAdminRequest<T>(path);
 }
 
 /**
