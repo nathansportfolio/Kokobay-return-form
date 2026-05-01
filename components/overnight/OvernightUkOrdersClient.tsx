@@ -357,7 +357,8 @@ export function OvernightUkOrdersClient({
         {previewOrder ? (
           <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-700">
             <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Preview ({previewOrder.customerName.trim() || "first order"})
+              Preview ({previewOrder.orderName}{" "}
+              · {previewOrder.customerName.trim() || "first order"})
             </p>
             <div className="mt-2 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/90 px-3 py-3 dark:border-zinc-600 dark:bg-zinc-900/40">
               <OvernightEmailPreview template={template} order={previewOrder} />
@@ -402,6 +403,9 @@ export function OvernightUkOrdersClient({
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-4">
                   <div className="min-w-0 flex-1 flex-col gap-1">
+                    <p className="text-sm font-semibold tabular-nums text-zinc-700 dark:text-zinc-300">
+                      Order {o.orderName}
+                    </p>
                     <p className="font-semibold text-foreground">
                       {o.customerName.trim() || "—"}
                     </p>

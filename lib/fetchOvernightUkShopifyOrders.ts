@@ -21,6 +21,8 @@ export type OvernightUkOrderWindow = {
 export type OvernightUkOrderSummary = {
   /** Shopify REST order id (stable key for saved UI state). */
   shopifyOrderId: string;
+  /** Admin-facing order label, e.g. `#1045` (REST `name`). */
+  orderName: string;
   customerName: string;
   /** First name when known, else first word of full name, else a safe fallback. */
   greetingName: string;
@@ -151,6 +153,7 @@ function toSummary(o: ShopifyOrder): OvernightUkOrderSummary {
   const items = (o.line_items ?? []).map((li) => lineItemParts(li));
   return {
     shopifyOrderId: String(o.id),
+    orderName: (o.name ?? "").trim() || `#${o.order_number}`,
     customerName: customerNameFromOrder(o),
     greetingName: greetingNameFromOrder(o),
     email: emailFromOrder(o),

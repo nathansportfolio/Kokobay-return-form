@@ -10,6 +10,8 @@
     "start": "next start",
     "lint": "eslint",
     "list-active-products": "node --import tsx --env-file=.env.local ./scripts/list-active-shopify-products.ts",
+    "missing-variant-skus": "node --import tsx --env-file=.env.local ./scripts/missing-variant-skus.ts",
+    "list-product-colours": "node --import tsx --env-file=.env.local ./scripts/list-product-colours.ts",
     "merge-products": "node scripts/merge-products.js",
     "export-shopify-csv": "node scripts/export-shopify-import-csv.js",
     "active-products-shopify-headers": "node scripts/active-products-shopify-headers.js"
