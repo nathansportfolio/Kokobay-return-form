@@ -9,7 +9,9 @@
  *   ./shopify-colour-update.csv
  *
  * Run:
- *   node scripts/export-colour-metafield.js ./active-products.csv ./shopify-colour-update.csv
+ *   node scripts/export-shopify-import-csv.js ./active-products.csv ./shopify-colour-update.csv
+ *
+ * Colour / Option2 text is copied **exactly** as in the CSV (trim only) — no re-casing.
  */
 
 const fs = require("fs");
@@ -38,17 +40,6 @@ function get(row, ...keys) {
   return "";
 }
 
-function normalizeColour(colour) {
-  if (!colour) return "";
-
-  return colour
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase()); // Title Case
-}
-
 function main() {
   if (!fs.existsSync(INPUT)) {
     console.error(`Missing input file: ${INPUT}`);
@@ -71,14 +62,12 @@ function main() {
         "Colour"
       );
 
-      const colour = normalizeColour(colourRaw);
-
       if (!handle || !title) return;
 
       rows.push({
         Handle: handle,
         Title: title,
-        "Color (product.metafields.shopify.color-pattern)": colour
+        "Color (product.metafields.shopify.color-pattern)": colourRaw
       });
     })
     .on("end", () => {

@@ -240,16 +240,59 @@ export async function fetchOvernightUkOrderSummaries(
   | { ok: false; error: string; status?: number }
 > {
   const window = getOvernightUkOrderWindow(now);
+
   const fetched = await fetchShopifyOrdersCreatedBetweenUtc({
     createdAtMinUtcIso: window.startUtcIso,
     createdAtMaxUtcIso: window.endUtcIso,
   });
+
   if (!fetched.ok) {
     return fetched;
   }
+
+  const excludedOrderNumbers = new Set([
+    "58935",
+    "58922",
+    "58919",
+    "58914",
+    "58912",
+    "58947",
+  ]);
+
+  const filteredOrders = fetched.orders
+    .filter((o) => {
+      const rawName = o.name ?? "";
+      const orderNumber = rawName.replace("#", "").split("-")[0].trim();
+
+      const orderName = rawName.toLowerCase();
+      const lastName = o.shipping_address?.last_name?.toLowerCase() || "";
+      const email = (o.email ?? "").toLowerCase();
+
+      // ❌ Exclude specific orders
+      if (excludedOrderNumbers.has(orderNumber)) return false;
+
+      // ❌ Exclude any "test" orders anywhere
+      if (orderName.includes("test")) return false;
+      if (lastName.includes("test")) return false;
+      if (email.includes("test")) return false;
+
+      return true;
+    })
+    .sort((a, b) => {
+      const count = (o: ShopifyOrder) =>
+        (o.line_items ?? []).reduce(
+          (sum, li) => sum + (Number(li.quantity) || 0),
+          0,
+        );
+
+      return count(a) - count(b); // least items first
+    });
+
   return {
     ok: true,
     window,
-    orders: fetched.orders.map(toSummary),
+    orders: filteredOrders.map(toSummary),
   };
 }
+
+
