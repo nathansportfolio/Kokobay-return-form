@@ -1,3 +1,20 @@
+
+populate live stock
+pnpm shopify-stock-export -- --out shopify-stock-live.csv
+(quantities: Admin inventory_levels “available” summed across locations; not cached — re-run after Shopify changes.)
+
+count how manuy with no stock
+pnpm shopify-handles-all-zero -- --source ./shopify-stock-live.csv --count-only --no-active-export
+
+per-handle sizes + qty (defaults to shopify-stock-live.csv)
+pnpm variant-stock -- the-cowl-maxi-blue-floral
+
+many handles from a list file (defaults to shopify-stock-live.csv)
+pnpm list-inventory-for-handles -- --dedupe
+
+
+
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

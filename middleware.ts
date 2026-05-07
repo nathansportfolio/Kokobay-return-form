@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isValidProductsApiKeyNextRequest } from "@/lib/kokobayProductsApiKey";
 import {
   isValidSiteAccessRole,
   isSiteAccessEnforced,
@@ -7,7 +8,8 @@ import {
 } from "@/lib/siteAccess";
 
 /** Unauthenticated access for Next internals, static assets, login, and customer return form + its APIs. */
-function isPublicPath(pathname: string) {
+function isPublicPath(req: NextRequest) {
+  const pathname = req.nextUrl.pathname;
   if (pathname === "/login" || pathname === "/favicon.ico") {
     return true;
   }
@@ -30,8 +32,17 @@ function isPublicPath(pathname: string) {
   if (pathname === "/api/picklists/debug-delivery-temp") {
     return true;
   }
-  /** `GET /api/products/123` — single-product JSON proxy; curl has no `site_access` cookie. */
-  if (/^\/api\/products\/[0-9]+\/?$/.test(pathname)) {
+  /**
+   * Product JSON proxies — require `x-kokobay-products-api-key` (or Bearer) so unauthenticated
+   * callers (e.g. mobile) can use the API without the PIN cookie.
+   */
+  if (pathname === "/api/products" && isValidProductsApiKeyNextRequest(req)) {
+    return true;
+  }
+  if (
+    /^\/api\/products\/[0-9]+\/?$/.test(pathname) &&
+    isValidProductsApiKeyNextRequest(req)
+  ) {
     return true;
   }
   if (/\.(ico|png|jpg|jpeg|gif|svg|webp|woff2?|txt|webmanifest|map|json)$/i.test(pathname)) {
@@ -45,7 +56,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if (isPublicPath(req.nextUrl.pathname)) {
+  if (isPublicPath(req)) {
     return NextResponse.next();
   }
 

@@ -45,6 +45,9 @@ export interface ShopifyVariant {
   sku: string | null;
   barcode: string | null;
 
+  /** REST: links variant to InventoryItem / levels (required for accurate multi-location stock). */
+  inventory_item_id?: number;
+
   inventory_quantity: number;
 
   created_at: string;

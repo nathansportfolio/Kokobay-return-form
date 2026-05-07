@@ -10,8 +10,8 @@ const INPUTRAW = "./active-products.csv";
 const INPUT = "./active-products-3.csv";
 
 // 🔥 CONTROL PRODUCTS HERE (slice on handle order from INPUT / active-products-3)
-const START_PRODUCT = 200;
-const END_PRODUCT = 300;
+const START_PRODUCT = 100;
+const END_PRODUCT = 200;
 
 function rowHandle(row) {
   return String(row.Handle || row.product_handle || "").trim();

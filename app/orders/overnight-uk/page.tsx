@@ -44,7 +44,7 @@ export default async function OvernightUkOrdersPage() {
   }
 
   const { window, orders } = result;
-
+  console.log(orders.map((o) => o.orderName));
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col p-4 sm:p-6">
       <OvernightUkOrdersClient

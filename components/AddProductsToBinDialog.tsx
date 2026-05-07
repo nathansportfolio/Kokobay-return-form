@@ -8,6 +8,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Skeleton from "@mui/material/Skeleton";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { KOKOBAY_PRODUCTS_API_KEY_HEADER } from "@/lib/kokobayProductsApiKey";
 import { catalogSkuForVariant } from "@/lib/shopifyCanonicalVariantSku";
 import type { ShopifyProduct, ShopifyVariant } from "@/types/shopify";
 
@@ -132,7 +133,14 @@ export function AddProductsToBinDialog({
     setLoadError(null);
     (async () => {
       try {
-        const res = await fetch("/api/products?all=1", { cache: "no-store" });
+        const productsApiKey =
+          process.env.NEXT_PUBLIC_KOKOBAY_PRODUCTS_API_KEY?.trim() ?? "";
+        const res = await fetch("/api/products?all=1", {
+          cache: "no-store",
+          headers: productsApiKey
+            ? { [KOKOBAY_PRODUCTS_API_KEY_HEADER]: productsApiKey }
+            : {},
+        });
         const data = (await res.json()) as
           | { products?: ShopifyProduct[]; error?: string };
         if (!res.ok) {
