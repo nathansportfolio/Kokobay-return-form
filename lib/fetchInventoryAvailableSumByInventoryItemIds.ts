@@ -99,9 +99,14 @@ export async function fetchInventoryAvailableSumByInventoryItemIds(
 }
 
 export function inventoryItemIdFromVariant(v: ShopifyVariant): number | null {
-  const raw = v as Record<string, unknown>;
-  const id = raw.inventory_item_id;
-  if (typeof id === "number" && Number.isFinite(id) && id > 0) return id;
-  if (typeof id === "string" && /^\d+$/.test(id.trim())) return Number(id.trim());
+  const id = v.inventory_item_id;
+  if (typeof id === "number" && Number.isFinite(id) && id > 0) {
+    return id;
+  }
+  const loose = (v as unknown as { inventory_item_id?: number | string })
+    .inventory_item_id;
+  if (typeof loose === "string" && /^\d+$/.test(loose.trim())) {
+    return Number(loose.trim());
+  }
   return null;
 }
