@@ -1,11 +1,24 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isValidProductsApiKeyNextRequest } from "@/lib/kokobayProductsApiKey";
 import {
   isValidSiteAccessRole,
   isSiteAccessEnforced,
   SITE_ACCESS_COOKIE,
 } from "@/lib/siteAccess";
+
+/**
+ * Product JSON proxies — skip PIN cookie here; **`app/api/products/**` validates
+ * `x-kokobay-products-api-key` (or Bearer) itself** and returns 401/503.
+ *
+ * We must not gate these on `expectedProductsApiKey()` inside middleware: the Edge
+ * bundle can miss server env vars, which falsely blocks valid keys and breaks mobile/curl.
+ */
+function isProductsApiPath(pathname: string): boolean {
+  if (pathname === "/api/products" || pathname === "/api/products/") {
+    return true;
+  }
+  return /^\/api\/products\/[0-9]+\/?$/.test(pathname);
+}
 
 /** Unauthenticated access for Next internals, static assets, login, and customer return form + its APIs. */
 function isPublicPath(req: NextRequest) {
@@ -32,17 +45,7 @@ function isPublicPath(req: NextRequest) {
   if (pathname === "/api/picklists/debug-delivery-temp") {
     return true;
   }
-  /**
-   * Product JSON proxies — require `x-kokobay-products-api-key` (or Bearer) so unauthenticated
-   * callers (e.g. mobile) can use the API without the PIN cookie.
-   */
-  if (pathname === "/api/products" && isValidProductsApiKeyNextRequest(req)) {
-    return true;
-  }
-  if (
-    /^\/api\/products\/[0-9]+\/?$/.test(pathname) &&
-    isValidProductsApiKeyNextRequest(req)
-  ) {
+  if (isProductsApiPath(pathname)) {
     return true;
   }
   if (/\.(ico|png|jpg|jpeg|gif|svg|webp|woff2?|txt|webmanifest|map|json)$/i.test(pathname)) {
