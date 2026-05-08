@@ -3,6 +3,17 @@ import type { ShopifyProduct, ShopifyProductsResponse } from "@/types/shopify";
 
 const MAX_PAGES = 200;
 
+function coerceProductIdForPagination(id: unknown): number | null {
+  if (typeof id === "number" && Number.isFinite(id)) {
+    return id;
+  }
+  if (typeof id === "string" && id.trim() !== "") {
+    const n = Number.parseInt(id, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 export type FetchAllShopifyProductsOptions = {
   /**
    * REST: `status` (Shopify: `active`, `archived`, or `draft`).
@@ -59,10 +70,11 @@ export async function fetchAllShopifyProducts(
         break;
       }
       const last = batch[batch.length - 1]!;
-      if (typeof last.id !== "number" || !Number.isFinite(last.id)) {
+      const nextSince = coerceProductIdForPagination(last.id);
+      if (nextSince == null) {
         break;
       }
-      sinceId = last.id;
+      sinceId = nextSince;
     }
     return { ok: true, products };
   } catch (e) {
