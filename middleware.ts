@@ -7,11 +7,8 @@ import {
 } from "@/lib/siteAccess";
 
 /**
- * Product JSON proxies — skip PIN cookie here; **`app/api/products/**` validates
- * `x-kokobay-products-api-key` (or Bearer) itself** and returns 401/503.
- *
- * We must not gate these on `expectedProductsApiKey()` inside middleware: the Edge
- * bundle can miss server env vars, which falsely blocks valid keys and breaks mobile/curl.
+ * Product JSON proxies — skip PIN cookie so mobile / curl can hit them.
+ * Routes are unauthenticated; Shopify Admin credentials stay server-only.
  */
 function isProductsApiPath(pathname: string): boolean {
   if (pathname === "/api/products" || pathname === "/api/products/") {

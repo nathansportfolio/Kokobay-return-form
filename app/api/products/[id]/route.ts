@@ -1,8 +1,3 @@
-import {
-  expectedProductsApiKey,
-  isValidProductsApiKeyRequest,
-  KOKOBAY_PRODUCTS_API_KEY_HEADER,
-} from "@/lib/kokobayProductsApiKey";
 import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
 import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import type { ShopifySingleProductResponse } from "@/types/shopify";
@@ -14,32 +9,13 @@ const ID_RE = /^\d+$/;
 /**
  * GET /api/products/56093970366850
  * Proxy to Shopify Admin: GET products/{id}.json (uncached, server-only token).
- * Example: `curl -sS -H "x-kokobay-products-api-key: $KOKOBAY_PRODUCTS_API_KEY" http://localhost:3000/api/products/56093970366850`
+ * No API-key gate — rely on site PIN + server-only Shopify credentials.
  */
 export async function GET(
-  req: Request,
+  _req: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    if (!expectedProductsApiKey()) {
-      return Response.json(
-        {
-          error:
-            "Server misconfiguration: set KOKOBAY_PRODUCTS_API_KEY (and NEXT_PUBLIC_KOKOBAY_PRODUCTS_API_KEY for the browser) in the environment.",
-        },
-        { status: 503 },
-      );
-    }
-    if (!isValidProductsApiKeyRequest(req)) {
-      return Response.json(
-        {
-          error: "Unauthorized",
-          hint: `Send header ${KOKOBAY_PRODUCTS_API_KEY_HEADER}: <key> or Authorization: Bearer <key>`,
-        },
-        { status: 401, headers: { "Cache-Control": "no-store" } },
-      );
-    }
-
     runProductCatalogSyncInBackgroundIfStale();
     if (!process.env.SHOPIFY_STORE?.trim()) {
       return Response.json(
