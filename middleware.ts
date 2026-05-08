@@ -7,11 +7,14 @@ import {
 } from "@/lib/siteAccess";
 
 /**
- * Product JSON proxies — skip PIN cookie so mobile / curl can hit them.
+ * Product + collection JSON proxies — skip PIN cookie so mobile / curl can hit them.
  * Routes are unauthenticated; Shopify Admin credentials stay server-only.
  */
 function isProductsApiPath(pathname: string): boolean {
   if (pathname === "/api/products" || pathname === "/api/products/") {
+    return true;
+  }
+  if (pathname === "/api/collections" || pathname === "/api/collections/") {
     return true;
   }
   return /^\/api\/products\/[0-9]+\/?$/.test(pathname);
