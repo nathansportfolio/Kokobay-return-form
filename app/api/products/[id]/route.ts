@@ -9,6 +9,7 @@ const ID_RE = /^\d+$/;
 /**
  * GET /api/products/56093970366850
  * Proxy to Shopify Admin: GET products/{id}.json (uncached, server-only token).
+ * Returns **404** unless the product’s `status` is `active` (draft/archived are hidden).
  * No API-key gate — rely on site PIN + server-only Shopify credentials.
  */
 export async function GET(
@@ -41,6 +42,14 @@ export async function GET(
       return Response.json(
         { error: "Shopify product request failed", details: data },
         { status: status === 404 ? 404 : status || 502 },
+      );
+    }
+    const product = data?.product;
+    const st = String(product?.status ?? "").toLowerCase();
+    if (!product || st !== "active") {
+      return Response.json(
+        { error: "Product not found or not active" },
+        { status: 404, headers: { "Cache-Control": "no-store" } },
       );
     }
     return Response.json(data, {
