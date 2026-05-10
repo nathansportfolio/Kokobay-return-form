@@ -32,6 +32,13 @@ interface ReportState {
 
 const NUM_FORMAT = new Intl.NumberFormat("en-GB");
 
+/**
+ * Polling cadence for the live dashboard. Kept long enough to be cheap
+ * (one Mongo aggregation per tick), short enough that a merchandiser
+ * watching the page sees pixel events flow in near-real-time.
+ */
+const AUTO_REFRESH_MS = 15_000;
+
 function formatCount(n: number): string {
   return NUM_FORMAT.format(Math.max(0, Math.round(n)));
 }
@@ -143,6 +150,58 @@ export function CartIntelligenceClient() {
     setRefreshTick((t) => t + 1);
   }, []);
 
+  // Live polling: refresh every AUTO_REFRESH_MS while the tab is visible.
+  // Hidden tabs are skipped so we don’t hammer Mongo for a dashboard nobody
+  // is looking at; on visibility resume we trigger an immediate refresh so
+  // the figures snap up to date.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (interval != null) return;
+      interval = setInterval(() => {
+        // Match the manual Reload UX (subtle "Refreshing…" cue, not a full
+        // skeleton flash). The fetch effect cleans up any in-flight request
+        // for us via its AbortController.
+        setReportState((prev) => ({ ...prev, loading: true, error: null }));
+        setRefreshTick((t) => t + 1);
+      }, AUTO_REFRESH_MS);
+    };
+
+    const stop = () => {
+      if (interval != null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // Snap to fresh data immediately when the user returns to the tab.
+        setReportState((prev) => ({ ...prev, loading: true, error: null }));
+        setRefreshTick((t) => t + 1);
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    if (document.visibilityState === "visible") {
+      start();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+    // Re-creating the interval whenever the applied range changes (or a
+    // manual reload happens) keeps the next auto-tick a clean 15 s away
+    // instead of double-firing right after a user-driven refresh.
+  }, [appliedRange.from, appliedRange.to, refreshTick]);
+
   const data = reportState.data;
 
   const buckets = useMemo(() => {
@@ -162,7 +221,7 @@ export function CartIntelligenceClient() {
         key: "low_stock" as const,
         label: "Low-stock carts",
         description:
-          "inventory_remaining > 1 and < 7 on at least one item in the cart.",
+          "inventory_remaining > 1 and ≤ 7 on at least one item in the cart.",
         accent:
           "border-amber-300 bg-amber-50/80 dark:border-amber-800/60 dark:bg-amber-950/30",
         rateAccent: "text-amber-700 dark:text-amber-300",
@@ -171,7 +230,7 @@ export function CartIntelligenceClient() {
       {
         key: "normal" as const,
         label: "Normal carts",
-        description: "Items with healthy stock (inventory_remaining ≥ 7).",
+        description: "Items with healthy stock (inventory_remaining > 7).",
         accent:
           "border-sky-300 bg-sky-50/80 dark:border-sky-800/60 dark:bg-sky-950/30",
         rateAccent: "text-sky-700 dark:text-sky-300",
@@ -248,6 +307,19 @@ export function CartIntelligenceClient() {
             >
               Reload
             </button>
+            <span
+              className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-300/70 bg-emerald-50 px-2.5 py-1 text-[0.7rem] font-medium text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+              aria-live="polite"
+              title={`Dashboard auto-refreshes every ${AUTO_REFRESH_MS / 1000}s while this tab is visible.`}
+            >
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 rounded-full bg-emerald-500 ${
+                  reportState.loading ? "animate-pulse" : ""
+                }`}
+              />
+              Live · {AUTO_REFRESH_MS / 1000}s
+            </span>
           </div>
         </div>
         {data ? (
@@ -469,7 +541,10 @@ export function CartIntelligenceClient() {
             </li>
             <li>
               <strong>low_stock</strong>:{" "}
-              <code>inventory_remaining &gt; 1 &amp;&amp; inventory_remaining &lt; 7</code>
+              <code>
+                inventory_remaining &gt; 1 &amp;&amp; inventory_remaining
+                &lt;= 7
+              </code>
             </li>
             <li>
               <strong>normal</strong>: everything else
