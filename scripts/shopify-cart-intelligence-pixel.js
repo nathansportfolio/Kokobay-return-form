@@ -7,11 +7,7 @@
  * 1. Shopify admin → Settings → Customer events → Add custom pixel.
  * 2. Name it "Kokobay Cart Intelligence", permission = "Not required"
  *    (this pixel only sends first-party analytics to your own domain).
- * 3. Paste the WHOLE BODY of this file into the pixel code editor
- *    (Shopify Custom Pixels run in a sandboxed iframe — they do not have
- *    access to `window` so use `localStorage` cautiously; we use it only
- *    for the session id, with a `try/catch` so a Safari ITP fallback
- *    still works).
+ * 3. Paste the WHOLE BODY of this file into the pixel code editor.
  * 4. Save → Connect.
  *
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -19,17 +15,14 @@
  * !! is not kokobay.com (e.g. staging environment, custom subdomain).    !!
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  *
- * Server route: app/api/cart-intelligence/event/route.ts
- * Storage:     lib/cartIntelligence.ts (Mongo collection
- *              `cart_intelligence_events`)
+ * The pixel is intentionally dumb:
+ *   - It identifies the variant via its Storefront `id` (a GID).
+ *   - It does NOT compute `inventory_remaining`, `low_stock`, or `last_one`.
  *
- * Event sources used here are Shopify standard events:
- *   - product_added_to_cart
- *   - checkout_started
- *   - checkout_completed
- *
- * `analytics.subscribe(...)` runs inside Shopify's pixel runtime; the
- * `event` callback receives a `WebPixelsEvent` (see Shopify docs).
+ * The server-side route (`app/api/cart-intelligence/event/route.ts`) calls
+ * Shopify Admin REST to fetch the variant’s live `inventory_quantity`,
+ * recomputes the flags, and writes the enriched event to MongoDB. That way
+ * the bucketing rules can change in one place without touching the pixel.
  */
 
 // CHANGE ME if your production API domain is different.
@@ -49,7 +42,6 @@ var inMemorySessionId = null;
 var inMemorySessionExpires = 0;
 
 function generateSessionId() {
-  // crypto.randomUUID is available in modern browsers; fallback if not.
   try {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
       return "ci_" + crypto.randomUUID();
@@ -115,18 +107,6 @@ function getSessionId() {
   return fresh;
 }
 
-/**
- * Stock-level helpers — must mirror lib/cartIntelligence.ts (server side
- * recomputes from `inventory_remaining` if it’s present, so this is just an
- * optimistic flag for clients without a numeric inventory hint).
- */
-function deriveLowStock(inv) {
-  return typeof inv === "number" && inv > 1 && inv < 7;
-}
-function deriveLastOne(inv) {
-  return typeof inv === "number" && inv === 1;
-}
-
 function safeNumber(value) {
   if (value == null) return null;
   var n = Number(value);
@@ -139,54 +119,38 @@ function safeString(value) {
   return s.length > 0 ? s : null;
 }
 
-/**
- * Walk a Shopify pixel `cartLine` (or similar productVariant container) and
- * pick out the stock-relevant numbers. Different events expose this through
- * slightly different paths so we try several.
- */
-function readInventoryRemaining(line) {
+/* ------------------------------------------------------------------------ *
+ * Shopify Web Pixel payloads can shape variant info under a few different
+ * paths depending on the event. These helpers normalise that.
+ * ------------------------------------------------------------------------ */
+
+function readVariant(line) {
   if (!line) return null;
-  var v = line.merchandise || line.variant || null;
-  if (!v) return null;
-  var candidates = [
-    v.inventoryQuantity,
-    v.inventory_quantity,
-    v.product && v.product.inventoryQuantity,
-    v.totalInventory,
-    v.total_inventory,
-  ];
-  for (var i = 0; i < candidates.length; i++) {
-    var n = safeNumber(candidates[i]);
-    if (n != null) return n;
-  }
-  return null;
+  return line.merchandise || line.variant || null;
 }
 
 function readVariantId(line) {
-  if (!line) return null;
-  var v = line.merchandise || line.variant || null;
+  var v = readVariant(line);
   if (!v) return null;
+  // GID strings (`gid://shopify/ProductVariant/12345`) — server understands both.
   return safeString(v.id || v.variantId || v.variant_id);
 }
 
 function readProductId(line) {
-  if (!line) return null;
-  var v = line.merchandise || line.variant || null;
+  var v = readVariant(line);
   if (!v || !v.product) return null;
   return safeString(v.product.id || v.product.productId);
 }
 
 function readProductTitle(line) {
-  if (!line) return null;
-  var v = line.merchandise || line.variant || null;
+  var v = readVariant(line);
   if (!v) return null;
   if (v.product && v.product.title) return safeString(v.product.title);
   return safeString(v.title);
 }
 
 function readVariantTitle(line) {
-  if (!line) return null;
-  var v = line.merchandise || line.variant || null;
+  var v = readVariant(line);
   if (!v) return null;
   return safeString(v.title);
 }
@@ -197,22 +161,17 @@ function readQuantity(line) {
 }
 
 /**
- * The lowest stock level across all lines decides the cart bucket
- * (last_one beats low_stock beats normal). For checkout events we may have
- * multiple lines, so this picks the most "critical" one.
+ * Pick the “most interesting” line at checkout: stock-level decisions belong
+ * to the server, but we still need to point it at *some* variant id so it
+ * can fetch inventory. We prefer the first line with a numeric variant id,
+ * else fall back to the first line.
  */
-function pickWorstLine(lines) {
+function pickPrimaryLine(lines) {
   if (!Array.isArray(lines) || lines.length === 0) return null;
-  var lastOne = null;
-  var low = null;
-  var any = lines[0];
   for (var i = 0; i < lines.length; i++) {
-    var line = lines[i];
-    var inv = readInventoryRemaining(line);
-    if (inv === 1 && !lastOne) lastOne = line;
-    else if (inv != null && inv > 1 && inv < 7 && !low) low = line;
+    if (readVariantId(lines[i])) return lines[i];
   }
-  return lastOne || low || any;
+  return lines[0];
 }
 
 function nowIso() {
@@ -234,7 +193,6 @@ function sendEvent(payload) {
     if (!payload || !payload.event_name || !payload.session_id) return;
     var json = JSON.stringify(payload);
 
-    // Prefer fetch() with `keepalive` so we can read the response when needed.
     if (typeof fetch === "function") {
       try {
         fetch(CART_INTELLIGENCE_ENDPOINT, {
@@ -246,9 +204,7 @@ function sendEvent(payload) {
           body: json,
         }).catch(function () {});
         return;
-      } catch (e) {
-        // Fall through to sendBeacon.
-      }
+      } catch (e) {}
     }
     if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
       try {
@@ -260,13 +216,13 @@ function sendEvent(payload) {
 }
 
 /**
- * Build a payload for `product_added_to_cart` from the Shopify event.
- * Shopify event docs: data.cartLine (newly added line).
+ * Build a payload for `product_added_to_cart`. We deliberately do NOT send
+ * `inventory_remaining`, `low_stock`, or `last_one`; the server fetches the
+ * variant from Shopify Admin and computes those.
  */
 function buildAddToCartPayload(event) {
   var data = (event && event.data) || {};
   var line = data.cartLine || data.line || null;
-  var inv = readInventoryRemaining(line);
   return {
     event_name: "product_added_to_cart",
     session_id: getSessionId(),
@@ -275,26 +231,16 @@ function buildAddToCartPayload(event) {
     product_title: readProductTitle(line),
     variant_title: readVariantTitle(line),
     quantity: readQuantity(line),
-    inventory_remaining: inv,
-    low_stock: deriveLowStock(inv),
-    last_one: deriveLastOne(inv),
     timestamp: nowIso(),
     source: "shopify_pixel",
   };
 }
 
-/**
- * Build a payload for checkout_started / checkout_completed. We tag the
- * event with the worst-stock line so the cart bucket reflects scarcity at
- * checkout time. Cart token / checkout token are forwarded for future
- * cross-event joining.
- */
 function buildCheckoutPayload(eventName, event) {
   var data = (event && event.data) || {};
   var checkout = data.checkout || {};
   var lineItems = checkout.lineItems || checkout.line_items || [];
-  var worst = pickWorstLine(lineItems);
-  var inv = readInventoryRemaining(worst);
+  var primary = pickPrimaryLine(lineItems);
   var totalPrice = checkout.totalPrice || checkout.totalPriceSet || null;
   var amount = null;
   var currency = null;
@@ -309,14 +255,11 @@ function buildCheckoutPayload(eventName, event) {
     session_id: getSessionId(),
     cart_token: safeString(checkout.token || checkout.cartToken),
     checkout_token: safeString(checkout.token),
-    product_id: readProductId(worst),
-    variant_id: readVariantId(worst),
-    product_title: readProductTitle(worst),
-    variant_title: readVariantTitle(worst),
-    quantity: readQuantity(worst),
-    inventory_remaining: inv,
-    low_stock: deriveLowStock(inv),
-    last_one: deriveLastOne(inv),
+    product_id: readProductId(primary),
+    variant_id: readVariantId(primary),
+    product_title: readProductTitle(primary),
+    variant_title: readVariantTitle(primary),
+    quantity: readQuantity(primary),
     cart_value: amount,
     currency: currency,
     timestamp: nowIso(),

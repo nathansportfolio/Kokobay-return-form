@@ -1,4 +1,5 @@
 import {
+  enrichEventWithShopifyInventory,
   hashClientIp,
   insertCartIntelligenceEvent,
   validateCartIntelligenceEvent,
@@ -79,16 +80,41 @@ export async function POST(request: Request) {
 
   const ip = clientIpFromRequest(request);
 
-  const meta = {
-    user_agent: ua || null,
-    ip_hash: hashClientIp(ip),
-  };
+  // Server-side enrichment: replace whatever the pixel sent for inventory
+  // with a fresh value from Shopify Admin REST. The helper has its own 3 s
+  // timeout + in-memory TTL cache, so this is bounded — and on failure we
+  // *still* save the event using whatever the pixel hinted at. Analytics
+  // ingest must never break the storefront.
+  const enriched = await enrichEventWithShopifyInventory(v.data);
+
+  if (enriched.lookup && !enriched.lookup.ok) {
+    console.warn("[cart-intelligence/event] inventory enrichment failed:", {
+      variant_id: v.data.variant_id,
+      reason: enriched.lookup.reason,
+      message: enriched.lookup.message,
+    });
+  }
 
   try {
-    await insertCartIntelligenceEvent(v.data, meta);
+    await insertCartIntelligenceEvent(enriched.data, {
+      user_agent: ua || null,
+      ip_hash: hashClientIp(ip),
+      inventory_source: enriched.inventory_source,
+    });
 
     return Response.json(
-      { ok: true },
+      {
+        ok: true,
+        inventory_remaining: enriched.data.inventory_remaining,
+        low_stock: enriched.data.low_stock,
+        last_one: enriched.data.last_one,
+        stock_bucket: enriched.data.last_one
+          ? "last_one"
+          : enriched.data.low_stock
+            ? "low_stock"
+            : "normal",
+        inventory_source: enriched.inventory_source,
+      },
       { status: 202, headers: { ...cors, "Cache-Control": "no-store" } },
     );
   } catch (e) {

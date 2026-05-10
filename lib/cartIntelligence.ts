@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { Document, Filter } from "mongodb";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
+import {
+  fetchShopifyVariantInventory,
+  type VariantInventoryLookupResult,
+} from "@/lib/shopifyVariantInventory";
 
 /**
  * MongoDB collection storing every Cart Intelligence pixel event sent from
@@ -29,6 +33,17 @@ export type CartIntelligenceStockBucket =
   (typeof CART_INTELLIGENCE_STOCK_BUCKETS)[number];
 
 /**
+ * How the `inventory_remaining` field was sourced for this row. Useful for
+ * monitoring data quality (e.g. how often Shopify enrichment fell back).
+ */
+export type CartIntelligenceInventorySource =
+  | "shopify_admin"
+  | "shopify_admin_cached"
+  | "pixel_hint"
+  | "missing"
+  | "shopify_admin_error";
+
+/**
  * Persisted shape (matches the `cart_intelligence_events` collection).
  * We never store raw IPs — only a salted SHA-256 hash for spam/abuse triage.
  */
@@ -42,9 +57,14 @@ export interface CartIntelligenceEventDoc {
   product_title: string | null;
   variant_title: string | null;
   quantity: number | null;
+  /**
+   * Live `inventory_quantity` from Shopify Admin REST when we successfully
+   * looked the variant up; otherwise the pixel’s hint (or null).
+   */
   inventory_remaining: number | null;
-  /** Set on add-to-cart payloads; computed server-side as a fallback. */
+  /** True when `inventory_remaining > 1 && inventory_remaining <= 7`. */
   low_stock: boolean;
+  /** True when `inventory_remaining === 1`. */
   last_one: boolean;
   /** Derived bucket for fast aggregation in the report query. */
   stock_bucket: CartIntelligenceStockBucket;
@@ -54,6 +74,8 @@ export interface CartIntelligenceEventDoc {
   user_agent: string | null;
   /** Salted SHA-256 of the client IP (never stored raw). */
   ip_hash: string | null;
+  /** Provenance of `inventory_remaining` so we can audit data quality. */
+  inventory_source: CartIntelligenceInventorySource;
   created_at: Date;
 }
 
@@ -168,7 +190,7 @@ function parseClientTimestamp(raw: unknown): Date | null {
  * Recompute `low_stock` / `last_one` from `inventory_remaining` when present;
  * trust the pixel’s explicit boolean otherwise. Definitions:
  *   - `last_one` = inventory_remaining === 1
- *   - `low_stock` = inventory_remaining > 1 && inventory_remaining < 7
+ *   - `low_stock` = inventory_remaining > 1 && inventory_remaining <= 7
  */
 export function deriveStockFlags(input: {
   inventory_remaining: number | null;
@@ -179,7 +201,7 @@ export function deriveStockFlags(input: {
     const inv = input.inventory_remaining;
     return {
       last_one: inv === 1,
-      low_stock: inv > 1 && inv < 7,
+      low_stock: inv > 1 && inv <= 7,
     };
   }
   // `last_one` and `low_stock` are mutually exclusive — prefer last_one.
@@ -305,13 +327,105 @@ async function ensureCartIntelligenceIndexes(): Promise<void> {
   return indexesEnsured;
 }
 
+export interface ServerEnrichmentResult {
+  data: IncomingCartIntelligenceEvent;
+  inventory_source: CartIntelligenceInventorySource;
+  /** Raw lookup result, kept for the route handler to log on failure. */
+  lookup: VariantInventoryLookupResult | null;
+}
+
 /**
- * Inserts a validated pixel event into Mongo. Caller is expected to have
- * already passed the body through {@link validateCartIntelligenceEvent}.
+ * Server-side enrichment: takes the validated pixel payload and replaces
+ * `inventory_remaining` (plus the derived `low_stock` / `last_one` flags)
+ * with a fresh value from the Shopify Admin API.
+ *
+ * - Variant id can be numeric or a Storefront/Admin GID.
+ * - On any Shopify error/timeout we keep whatever the pixel sent and tag
+ *   the row with `inventory_source: "shopify_admin_error"`. We never drop
+ *   the event because of an enrichment failure.
+ *
+ * This is the single source of truth for stock bucketing: the pixel is
+ * intentionally dumb so we can change the rules in one place.
+ */
+export async function enrichEventWithShopifyInventory(
+  data: IncomingCartIntelligenceEvent,
+  options?: { timeoutMs?: number },
+): Promise<ServerEnrichmentResult> {
+  const lookup = data.variant_id
+    ? await fetchShopifyVariantInventory(data.variant_id, options)
+    : null;
+
+  if (lookup && lookup.ok) {
+    const inv = lookup.inventoryQuantity;
+    const flags = deriveStockFlags({
+      inventory_remaining: inv,
+      // Force-recompute from the freshly-fetched inventory.
+      low_stock: false,
+      last_one: false,
+    });
+    const enriched: IncomingCartIntelligenceEvent = {
+      ...data,
+      inventory_remaining: inv,
+      low_stock: flags.low_stock,
+      last_one: flags.last_one,
+      // Backfill product / variant titles & ids when the pixel didn’t supply them.
+      product_id:
+        data.product_id ??
+        (lookup.productId != null ? String(lookup.productId) : null),
+      variant_title: data.variant_title ?? lookup.variantTitle,
+    };
+    return {
+      data: enriched,
+      inventory_source: lookup.cached ? "shopify_admin_cached" : "shopify_admin",
+      lookup,
+    };
+  }
+
+  // No usable variant id, Shopify not configured, 404, timeout, etc.
+  if (lookup == null) {
+    // No variant id sent at all. Keep whatever the pixel hinted.
+    if (data.inventory_remaining != null) {
+      return {
+        data,
+        inventory_source: "pixel_hint",
+        lookup: null,
+      };
+    }
+    return {
+      data,
+      inventory_source: "missing",
+      lookup: null,
+    };
+  }
+
+  // Shopify call attempted but failed — fall back to the pixel’s hint.
+  if (data.inventory_remaining != null) {
+    return {
+      data,
+      inventory_source: "shopify_admin_error",
+      lookup,
+    };
+  }
+  // Nothing to bucket on; mark as missing so we know it was unenriched.
+  return {
+    data: { ...data, low_stock: false, last_one: false },
+    inventory_source: "shopify_admin_error",
+    lookup,
+  };
+}
+
+/**
+ * Inserts a validated (and ideally Shopify-enriched) pixel event into Mongo.
+ * Caller is expected to have already passed the body through
+ * {@link validateCartIntelligenceEvent} and {@link enrichEventWithShopifyInventory}.
  */
 export async function insertCartIntelligenceEvent(
   data: IncomingCartIntelligenceEvent,
-  meta: { user_agent: string | null; ip_hash: string | null },
+  meta: {
+    user_agent: string | null;
+    ip_hash: string | null;
+    inventory_source: CartIntelligenceInventorySource;
+  },
 ): Promise<void> {
   await ensureCartIntelligenceIndexes();
   const client = await clientPromise;
@@ -347,6 +461,7 @@ export async function insertCartIntelligenceEvent(
     source: data.source,
     user_agent: meta.user_agent,
     ip_hash: meta.ip_hash,
+    inventory_source: meta.inventory_source,
     created_at,
   };
 
