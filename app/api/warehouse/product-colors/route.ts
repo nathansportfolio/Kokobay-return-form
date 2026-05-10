@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { apiJsonCacheHeaders } from "@/lib/apiCacheHeaders";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import { ensureProductCatalogSyncedForWarehouseDay } from "@/lib/shopifyProductCatalog";
 import { listDistinctVariantColorsFromProductCatalog } from "@/lib/warehouseProductColors";
 
 export const dynamic = "force-dynamic";
 
-const noCache = { headers: { "Cache-Control": "private, no-store" } };
+const okCache = { headers: apiJsonCacheHeaders() };
+const errHeaders = { headers: { "Cache-Control": "no-store" } };
 
 /**
  * GET /api/warehouse/product-colors
@@ -33,14 +35,14 @@ export async function GET() {
     );
     return NextResponse.json(
       { ok: true, colors } as const,
-      noCache,
+      okCache,
     );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     console.error("[api/warehouse/product-colors]", e);
     return NextResponse.json(
       { ok: false, error: message } as const,
-      { status: 500, ...noCache },
+      { status: 500, ...errHeaders },
     );
   }
 }

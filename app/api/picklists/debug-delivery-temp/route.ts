@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiJsonCacheHeaders } from "@/lib/apiCacheHeaders";
 import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
 import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import { isShopifyWarehouseDataEnabled } from "@/lib/shopifyWarehouseDayOrders";
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
   if (!isShopifyWarehouseDataEnabled()) {
     return NextResponse.json(
       { ok: false, error: "SHOPIFY_STORE is not set" },
-      { status: 400 },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
 
@@ -67,7 +68,7 @@ export async function GET(request: Request) {
       if (inDay.length === 0) {
         return NextResponse.json(
           { ok: false, error: "Shopify orders request failed", status, dayKey },
-          { status: 502 },
+          { status: 502, headers: { "Cache-Control": "no-store" } },
         );
       }
       break;
@@ -216,14 +217,17 @@ export async function GET(request: Request) {
   // eslint-disable-next-line no-console
   console.log([...codeSet].sort());
 
-  return NextResponse.json({
-    ok: true,
-    dayKey,
-    dayNote:
-      "Same as pick list order day: yesterday in Europe/London unless ?dayKey= is passed.",
-    orderCount: inDay.length,
-    uniqueShippingLineTitles: [...titleSet].sort(),
-    uniqueShippingLineCodes: [...codeSet].sort(),
-    orders: perOrder,
-  });
+  return NextResponse.json(
+    {
+      ok: true,
+      dayKey,
+      dayNote:
+        "Same as pick list order day: yesterday in Europe/London unless ?dayKey= is passed.",
+      orderCount: inDay.length,
+      uniqueShippingLineTitles: [...titleSet].sort(),
+      uniqueShippingLineCodes: [...codeSet].sort(),
+      orders: perOrder,
+    },
+    { headers: apiJsonCacheHeaders() },
+  );
 }

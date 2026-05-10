@@ -20,6 +20,18 @@ function isProductsApiPath(pathname: string): boolean {
   return /^\/api\/products\/[0-9]+\/?$/.test(pathname);
 }
 
+/** Storefront GraphQL proxies (`/api/search`, `/api/collections/:handle`) — same model as products. */
+function isStorefrontApiPath(pathname: string): boolean {
+  if (pathname === "/api/search" || pathname.startsWith("/api/search/")) {
+    return true;
+  }
+  // Dynamic collection by handle, not the Admin list at `/api/collections`.
+  if (/^\/api\/collections\/[^/]+\/?$/.test(pathname)) {
+    return true;
+  }
+  return false;
+}
+
 /** Unauthenticated access for Next internals, static assets, login, and customer return form + its APIs. */
 function isPublicPath(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
@@ -45,7 +57,7 @@ function isPublicPath(req: NextRequest) {
   if (pathname === "/api/picklists/debug-delivery-temp") {
     return true;
   }
-  if (isProductsApiPath(pathname)) {
+  if (isProductsApiPath(pathname) || isStorefrontApiPath(pathname)) {
     return true;
   }
   if (/\.(ico|png|jpg|jpeg|gif|svg|webp|woff2?|txt|webmanifest|map|json)$/i.test(pathname)) {

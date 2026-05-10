@@ -14,12 +14,20 @@ function coerceProductIdForPagination(id: unknown): number | null {
   return null;
 }
 
+export type ShopifyProductStatus = "active" | "archived" | "draft";
+
 export type FetchAllShopifyProductsOptions = {
   /**
    * REST: `status` (Shopify: `active`, `archived`, or `draft`).
-   * When omitted, all statuses are returned (API default).
+   * When omitted, only active products are returned (Shopify REST default).
    */
-  status?: "active" | "archived" | "draft";
+  status?: ShopifyProductStatus;
+  /**
+   * REST: comma-separated multiple statuses (e.g. `["active","draft","archived"]`).
+   * When set, takes precedence over `status` and is forwarded as `status=active,draft,archived`.
+   * Use this to include drafts (e.g. SKU Maker collision check across the whole shop).
+   */
+  statuses?: ShopifyProductStatus[];
 };
 
 /**
@@ -35,15 +43,20 @@ export async function fetchAllShopifyProducts(
   if (!process.env.SHOPIFY_STORE?.trim()) {
     return { ok: false, error: "SHOPIFY_STORE is not set" };
   }
+  const statuses = options?.statuses?.filter(Boolean) ?? null;
   const statusFilter = options?.status;
+  const statusParam =
+    statuses && statuses.length > 0
+      ? [...new Set(statuses)].join(",")
+      : statusFilter ?? null;
   try {
     const products: ShopifyProduct[] = [];
     let sinceId: number | undefined;
     for (let page = 0; page < MAX_PAGES; page += 1) {
       const q = new URLSearchParams();
       q.set("limit", "250");
-      if (statusFilter) {
-        q.set("status", statusFilter);
+      if (statusParam) {
+        q.set("status", statusParam);
       }
       if (sinceId != null) {
         q.set("since_id", String(sinceId));

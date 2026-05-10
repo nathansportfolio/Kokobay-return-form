@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
+import { apiJsonCacheHeaders } from "@/lib/apiCacheHeaders";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import {
   ensureProductCatalogSyncedForWarehouseDay,
@@ -12,6 +12,8 @@ import {
   type ProductCatalogEntry,
 } from "@/lib/shopifyProductCatalog";
 
+export const dynamic = "force-dynamic";
+
 type OkItems = { ok: true; items: ProductCatalogEntry[] };
 type OkMeta = {
   ok: true;
@@ -21,7 +23,10 @@ type OkMeta = {
 };
 
 function bad(message: string, status = 400) {
-  return NextResponse.json({ ok: false, error: message } as const, { status });
+  return NextResponse.json(
+    { ok: false, error: message } as const,
+    { status, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 /**
@@ -33,7 +38,7 @@ function bad(message: string, status = 400) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const noCache = { headers: { "Cache-Control": "private, no-store" } };
+    const okCache = { headers: apiJsonCacheHeaders() };
     const client = await clientPromise;
     const db = client.db(kokobayDbName);
     await ensureProductCatalogSyncedForWarehouseDay(db);
@@ -47,7 +52,7 @@ export async function GET(request: NextRequest) {
           lastSync: m.lastSync,
           lastSyncDay: m.lastSyncDay,
         } satisfies OkMeta,
-        noCache,
+        okCache,
       );
     }
     if (p.get("all") === "1") {
@@ -55,7 +60,7 @@ export async function GET(request: NextRequest) {
       const items = await getAllProductCatalog(db, cap);
       return NextResponse.json(
         { ok: true, items } satisfies OkItems,
-        noCache,
+        okCache,
       );
     }
     const skusP = p.get("skus");
@@ -67,13 +72,13 @@ export async function GET(request: NextRequest) {
       if (!list.length) {
         return NextResponse.json(
           { ok: true, items: [] } satisfies OkItems,
-          noCache,
+          okCache,
         );
       }
       const items = await getProductCatalogBySkus(db, list);
       return NextResponse.json(
         { ok: true, items } satisfies OkItems,
-        noCache,
+        okCache,
       );
     }
     const q = p.get("q");
@@ -82,7 +87,7 @@ export async function GET(request: NextRequest) {
       const items = await searchProductCatalog(db, { q, limit, minLength: 1 });
       return NextResponse.json(
         { ok: true, items } satisfies OkItems,
-        noCache,
+        okCache,
       );
     }
 

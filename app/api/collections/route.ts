@@ -1,3 +1,4 @@
+import { API_JSON_CACHE_CONTROL } from "@/lib/apiCacheHeaders";
 import { shopifyAdminGet } from "@/lib/shopifyAdminApi";
 
 type AdminCollectionImage = {
@@ -107,7 +108,7 @@ export async function GET() {
     return Response.json(
       { collections },
       {
-        headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300" },
+        headers: { "Cache-Control": API_JSON_CACHE_CONTROL },
       },
     );
   } catch (e) {

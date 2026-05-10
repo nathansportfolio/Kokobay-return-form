@@ -1,3 +1,4 @@
+import { API_JSON_CACHE_CONTROL } from "@/lib/apiCacheHeaders";
 import { shopifyAdminGet } from "@/lib/shopifyAdminApi";
 import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import type { ShopifyOrdersResponse } from "@/types/shopify";
@@ -24,7 +25,7 @@ export async function GET() {
     }
 
     return Response.json(data, {
-      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" },
+      headers: { "Cache-Control": API_JSON_CACHE_CONTROL },
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";

@@ -1,3 +1,4 @@
+import { API_JSON_CACHE_CONTROL } from "@/lib/apiCacheHeaders";
 import { fetchAllShopifyProducts } from "@/lib/fetchAllShopifyProducts";
 import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import { shopifyAdminGet } from "@/lib/shopifyAdminApi";
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
       const products = r.products.filter(isActiveShopifyProduct);
       return Response.json(
         { products },
-        { headers: { "Cache-Control": "no-store" } },
+        { headers: { "Cache-Control": API_JSON_CACHE_CONTROL } },
       );
     }
 
@@ -48,7 +49,7 @@ export async function GET(request: Request) {
     return Response.json(
       { ...data, products },
       {
-        headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" },
+        headers: { "Cache-Control": API_JSON_CACHE_CONTROL },
       },
     );
   } catch (e) {

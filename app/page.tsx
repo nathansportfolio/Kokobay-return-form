@@ -240,6 +240,20 @@ export default async function Home() {
                 </span>
               </Link>
             </li>
+            <li>
+              <Link
+                href="/sku-maker"
+                className="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/80 p-5 transition-colors hover:border-zinc-300 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950/50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900/80"
+              >
+                <span className="text-sm font-semibold text-foreground">
+                  SKU Maker
+                </span>
+                <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  Search any product (drafts included) and generate canonical
+                  SKUs per variant — auto-deduped against the whole shop
+                </span>
+              </Link>
+            </li>
           </ul>
         </section>
 
@@ -258,19 +272,6 @@ export default async function Home() {
                 </span>
                 <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                   Live Shopify for the warehouse day (or sample from Mongo)
-                </span>
-              </Link>
-            </li>
-            <li className="flex h-full min-h-0 flex-col">
-              <Link
-                href="/orders/overnight-uk"
-                className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-200 border-l-4 border-l-teal-500/85 bg-zinc-50/80 p-5 transition-colors hover:border-zinc-300 hover:bg-zinc-100 dark:border-zinc-800 dark:border-l-teal-500/75 dark:bg-zinc-950/50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900/80"
-              >
-                <span className="text-sm font-semibold text-foreground">
-                  Overnight orders
-                </span>
-                <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                  Yesterday 5pm–today 8:30am UK — customer, email, line items
                 </span>
               </Link>
             </li>

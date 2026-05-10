@@ -1,3 +1,4 @@
+import { API_JSON_CACHE_CONTROL } from "@/lib/apiCacheHeaders";
 import { shopifyAdminGetNoCache } from "@/lib/shopifyAdminApi";
 import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import type { ShopifySingleProductResponse } from "@/types/shopify";
@@ -53,7 +54,7 @@ export async function GET(
       );
     }
     return Response.json(data, {
-      headers: { "Cache-Control": "private, no-store" },
+      headers: { "Cache-Control": API_JSON_CACHE_CONTROL },
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
