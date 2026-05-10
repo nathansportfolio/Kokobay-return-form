@@ -11,6 +11,7 @@ interface BucketReport {
 
 interface ReportPayload {
   date_range: { from: string | null; to: string | null };
+  total_sessions: number;
   total_events: number;
   low_stock: BucketReport;
   last_one: BucketReport;
@@ -324,7 +325,9 @@ export function CartIntelligenceClient() {
         </div>
         {data ? (
           <p className="mt-3 text-xs tabular-nums text-zinc-500">
-            Showing {formatCount(data.total_events)} pixel event
+            Showing {formatCount(data.total_sessions)} session
+            {data.total_sessions === 1 ? "" : "s"} from{" "}
+            {formatCount(data.total_events)} pixel event
             {data.total_events === 1 ? "" : "s"}{" "}
             {data.date_range.from
               ? `from ${new Date(data.date_range.from).toLocaleString()}`
@@ -551,12 +554,20 @@ export function CartIntelligenceClient() {
             </li>
           </ul>
           <p>
-            For each cohort we count distinct sessions per event type (add to
-            cart, checkout started, checkout completed) and apply{" "}
-            <code>
-              (add - completed) / add × 100
-            </code>{" "}
-            for the abandonment rate.
+            Each session is pinned to <em>one</em> cohort — the most-restricted
+            stock level it ever touched (<code>last_one</code> &gt;{" "}
+            <code>low_stock</code> &gt; <code>normal</code>). All of that
+            shopper&apos;s events (add, started, completed) then count under
+            that single cohort, so an add → completion lifecycle stays
+            together even if Shopify&apos;s checkout-completed event arrives
+            without line-item context.
+          </p>
+          <p>
+            Within a cohort, we count distinct sessions per event type and
+            apply{" "}
+            <code>(add - completed) / add × 100</code>{" "}
+            for the abandonment rate. This means the figure reflects shoppers,
+            not items, and is robust to incomplete pixel payloads.
           </p>
         </div>
       </details>

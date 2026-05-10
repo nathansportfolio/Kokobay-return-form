@@ -95,6 +95,45 @@ export async function POST(request: Request) {
     });
   }
 
+  const stockBucket = enriched.data.last_one
+    ? "last_one"
+    : enriched.data.low_stock
+      ? "low_stock"
+      : "normal";
+
+  // Sanity log so we can debug “why didn’t this cart land in the X cohort?”
+  // – Shows the raw variant id, what Shopify Admin returned, and the bucket
+  //   we’ll persist. Set CART_INTELLIGENCE_LOG_EVENTS=0 to silence in prod.
+  if (process.env.CART_INTELLIGENCE_LOG_EVENTS !== "0") {
+    console.log("[cart-intelligence/event] received:", {
+      event_name: enriched.data.event_name,
+      session_id: enriched.data.session_id,
+      variant_id: v.data.variant_id,
+      product_id: enriched.data.product_id,
+      quantity: enriched.data.quantity,
+      shopify_lookup: enriched.lookup
+        ? enriched.lookup.ok
+          ? {
+              ok: true,
+              cached: enriched.lookup.cached,
+              variantId: enriched.lookup.variantId,
+              inventoryQuantity: enriched.lookup.inventoryQuantity,
+            }
+          : {
+              ok: false,
+              reason: enriched.lookup.reason,
+              message: enriched.lookup.message,
+            }
+        : null,
+      inventory_remaining: enriched.data.inventory_remaining,
+      low_stock: enriched.data.low_stock,
+      last_one: enriched.data.last_one,
+      stock_bucket: stockBucket,
+      inventory_source: enriched.inventory_source,
+      source: enriched.data.source,
+    });
+  }
+
   try {
     await insertCartIntelligenceEvent(enriched.data, {
       user_agent: ua || null,
@@ -108,11 +147,7 @@ export async function POST(request: Request) {
         inventory_remaining: enriched.data.inventory_remaining,
         low_stock: enriched.data.low_stock,
         last_one: enriched.data.last_one,
-        stock_bucket: enriched.data.last_one
-          ? "last_one"
-          : enriched.data.low_stock
-            ? "low_stock"
-            : "normal",
+        stock_bucket: stockBucket,
         inventory_source: enriched.inventory_source,
       },
       { status: 202, headers: { ...cors, "Cache-Control": "no-store" } },

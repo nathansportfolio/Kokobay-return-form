@@ -299,6 +299,38 @@ export function hashClientIp(ip: string | null | undefined): string | null {
   return createHash("sha256").update(`${salt}::${trimmed}`).digest("hex");
 }
 
+/**
+ * Returns every event in `[from, to]` (inclusive) sorted oldest → newest.
+ * Excludes PII (`ip_hash`, `user_agent`) so the result is safe to log to
+ * stdout in development. Used by the report route's debug dump and any
+ * future internal triage tooling.
+ */
+export async function listCartIntelligenceEvents(input: {
+  from: Date | null;
+  to: Date | null;
+  limit?: number;
+}): Promise<CartIntelligenceEventDoc[]> {
+  await ensureCartIntelligenceIndexes();
+  const client = await clientPromise;
+  const col = client
+    .db(kokobayDbName)
+    .collection<CartIntelligenceEventDoc>(CART_INTELLIGENCE_EVENTS_COLLECTION);
+
+  const filter: Filter<CartIntelligenceEventDoc> = {};
+  if (input.from || input.to) {
+    const range: { $gte?: Date; $lte?: Date } = {};
+    if (input.from) range.$gte = input.from;
+    if (input.to) range.$lte = input.to;
+    filter.created_at = range;
+  }
+
+  const cursor = col
+    .find(filter, { projection: { ip_hash: 0, user_agent: 0 } })
+    .sort({ created_at: 1 });
+  if (input.limit && input.limit > 0) cursor.limit(input.limit);
+  return cursor.toArray();
+}
+
 let indexesEnsured: Promise<void> | null = null;
 
 async function ensureCartIntelligenceIndexes(): Promise<void> {
@@ -482,6 +514,9 @@ export interface CartIntelligenceReport {
     /** Inclusive ISO end (UTC). `null` means now. */
     to: string | null;
   };
+  /** Distinct session_ids in the report window. */
+  total_sessions: number;
+  /** Raw pixel event count in the report window. */
   total_events: number;
   low_stock: CartIntelligenceBucketReport;
   last_one: CartIntelligenceBucketReport;
@@ -510,11 +545,22 @@ function emptyBucketReport(): CartIntelligenceBucketReport {
 }
 
 /**
- * Aggregates events into bucket-level counts. We group by the *session* so a
- * single shopper who added 4 things still counts once per bucket per event
- * type — this gives a meaningful abandonment ratio, not an item-count ratio.
+ * Aggregates events into cohort-level counts using **session-level cohort
+ * assignment**:
  *
- * `cart_token` and `checkout_token` are stored alongside `session_id` so a
+ *   1. Group by `session_id` and collect every `stock_bucket` and
+ *      `event_name` the session ever touched.
+ *   2. Pin a single cohort to the session: `last_one` wins over `low_stock`,
+ *      which wins over `normal`. This way a shopper who added a last-one
+ *      item still counts as a last-one session even if their
+ *      `checkout_completed` event arrived without a variant id (Shopify’s
+ *      pixel sometimes omits line items at completion).
+ *   3. For each cohort, count the number of sessions that fired each event
+ *      type. A session with both `product_added_to_cart` and
+ *      `checkout_completed` cleanly lands in *both* counts under the same
+ *      cohort, so the abandonment ratio reflects shoppers, not events.
+ *
+ * `cart_token` / `checkout_token` are stored alongside `session_id` so a
  * future improvement can join across devices once Shopify exposes a stable
  * customer id at all stages.
  */
@@ -537,36 +583,61 @@ export async function getCartIntelligenceReport(input: {
   }
 
   type AggRow = {
-    _id: { stock_bucket: CartIntelligenceStockBucket; event_name: CartIntelligenceEventName };
-    /** Distinct session count for this (bucket, event). */
-    sessions: number;
+    _id: CartIntelligenceStockBucket;
+    /** Distinct sessions pinned to this dominant cohort. */
+    session_count: number;
+    add_to_cart_count: number;
+    checkout_started_count: number;
+    checkout_completed_count: number;
   };
 
   const pipeline: Document[] = [
     { $match: match },
     {
+      // Roll every session up into its set of buckets touched and event types fired.
       $group: {
-        _id: {
-          stock_bucket: "$stock_bucket",
-          event_name: "$event_name",
-          session_id: "$session_id",
+        _id: "$session_id",
+        buckets: { $addToSet: "$stock_bucket" },
+        events: { $addToSet: "$event_name" },
+      },
+    },
+    {
+      // Pin one cohort per session: last_one > low_stock > normal.
+      $project: {
+        session_cohort: {
+          $cond: [
+            { $in: ["last_one", "$buckets"] },
+            "last_one",
+            {
+              $cond: [
+                { $in: ["low_stock", "$buckets"] },
+                "low_stock",
+                "normal",
+              ],
+            },
+          ],
         },
+        has_add: { $in: ["product_added_to_cart", "$events"] },
+        has_started: { $in: ["checkout_started", "$events"] },
+        has_completed: { $in: ["checkout_completed", "$events"] },
       },
     },
     {
       $group: {
-        _id: {
-          stock_bucket: "$_id.stock_bucket",
-          event_name: "$_id.event_name",
+        _id: "$session_cohort",
+        session_count: { $sum: 1 },
+        add_to_cart_count: { $sum: { $cond: ["$has_add", 1, 0] } },
+        checkout_started_count: {
+          $sum: { $cond: ["$has_started", 1, 0] },
         },
-        sessions: { $sum: 1 },
+        checkout_completed_count: {
+          $sum: { $cond: ["$has_completed", 1, 0] },
+        },
       },
     },
   ];
 
-  const rows = (await col
-    .aggregate<AggRow>(pipeline)
-    .toArray()) as AggRow[];
+  const rows = (await col.aggregate<AggRow>(pipeline).toArray()) as AggRow[];
 
   const buckets: Record<CartIntelligenceStockBucket, CartIntelligenceBucketReport> = {
     low_stock: emptyBucketReport(),
@@ -574,20 +645,18 @@ export async function getCartIntelligenceReport(input: {
     normal: emptyBucketReport(),
   };
   const overall = emptyBucketReport();
+  let total_sessions = 0;
 
   for (const r of rows) {
-    const bucket = buckets[r._id.stock_bucket];
+    const bucket = buckets[r._id];
     if (!bucket) continue;
-    if (r._id.event_name === "product_added_to_cart") {
-      bucket.add_to_cart_count += r.sessions;
-      overall.add_to_cart_count += r.sessions;
-    } else if (r._id.event_name === "checkout_started") {
-      bucket.checkout_started_count += r.sessions;
-      overall.checkout_started_count += r.sessions;
-    } else if (r._id.event_name === "checkout_completed") {
-      bucket.checkout_completed_count += r.sessions;
-      overall.checkout_completed_count += r.sessions;
-    }
+    total_sessions += r.session_count;
+    bucket.add_to_cart_count = r.add_to_cart_count;
+    bucket.checkout_started_count = r.checkout_started_count;
+    bucket.checkout_completed_count = r.checkout_completed_count;
+    overall.add_to_cart_count += r.add_to_cart_count;
+    overall.checkout_started_count += r.checkout_started_count;
+    overall.checkout_completed_count += r.checkout_completed_count;
   }
 
   for (const k of CART_INTELLIGENCE_STOCK_BUCKETS) {
@@ -609,6 +678,7 @@ export async function getCartIntelligenceReport(input: {
       from: input.from ? input.from.toISOString() : null,
       to: input.to ? input.to.toISOString() : null,
     },
+    total_sessions,
     total_events,
     low_stock: buckets.low_stock,
     last_one: buckets.last_one,
