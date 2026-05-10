@@ -57,6 +57,22 @@ function isPublicPath(req: NextRequest) {
   if (pathname === "/api/picklists/debug-delivery-temp") {
     return true;
   }
+  /**
+   * Cart Intelligence pixel ingest — Shopify Custom Pixel runs in a
+   * sandboxed iframe with no Kokobay cookies, so it must bypass the PIN.
+   *
+   * Public for **any** request method (POST, OPTIONS preflight, HEAD, etc.)
+   * and for both with-/without trailing slash, so a Shopify shop hitting it
+   * from a sandboxed Web Pixel iframe is never redirected to `/login`.
+   *
+   * The `report` endpoint is *not* listed here; that one stays admin-only.
+   */
+  if (
+    pathname === "/api/cart-intelligence/event" ||
+    pathname === "/api/cart-intelligence/event/"
+  ) {
+    return true;
+  }
   if (isProductsApiPath(pathname) || isStorefrontApiPath(pathname)) {
     return true;
   }

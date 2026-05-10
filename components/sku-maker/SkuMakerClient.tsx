@@ -100,31 +100,62 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+interface SearchState {
+  loading: boolean;
+  error: string | null;
+  results: SkuMakerSearchHit[] | null;
+  shopTotal: number | null;
+}
+
+interface ProductState {
+  loading: boolean;
+  error: string | null;
+  product: SkuMakerProductResult | null;
+}
+
 export function SkuMakerClient() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [searchPending, setSearchPending] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [results, setResults] = useState<SkuMakerSearchHit[] | null>(null);
-  const [shopTotal, setShopTotal] = useState<number | null>(null);
+  const [searchState, setSearchState] = useState<SearchState>({
+    loading: true,
+    error: null,
+    results: null,
+    shopTotal: null,
+  });
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [productPending, setProductPending] = useState(false);
-  const [productError, setProductError] = useState<string | null>(null);
-  const [product, setProduct] = useState<SkuMakerProductResult | null>(null);
+  const [productState, setProductState] = useState<ProductState>({
+    loading: false,
+    error: null,
+    product: null,
+  });
   const [refreshTick, setRefreshTick] = useState(0);
   const productRequestId = useRef(0);
 
-  // Debounce the query for the search call.
+  const { loading: searchPending, error: searchError, results, shopTotal } =
+    searchState;
+  const {
+    loading: productPending,
+    error: productError,
+    product,
+  } = productState;
+
+  // Debounce the query — `setState` here runs from the timer callback, not
+  // synchronously inside the effect body, so it satisfies the
+  // `react-hooks/set-state-in-effect` rule. We also flip `loading: true` here
+  // so the search UI shows a pending state immediately after the user types.
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 280);
+    const t = window.setTimeout(() => {
+      setDebouncedQuery(query.trim());
+      setSearchState((prev) => ({ ...prev, loading: true, error: null }));
+    }, 280);
     return () => window.clearTimeout(t);
   }, [query]);
 
-  // Search whenever the debounced query (or refresh) changes.
+  // Search whenever the debounced query (or refresh) changes. All `setState`
+  // calls run after the first `await`, so they are not synchronous within the
+  // effect body (avoids cascading-render lint).
   useEffect(() => {
     const ac = new AbortController();
-    setSearchPending(true);
-    setSearchError(null);
     void (async () => {
       try {
         const url =
@@ -136,18 +167,28 @@ export function SkuMakerClient() {
         const data = (await res.json()) as SearchResponse;
         if (ac.signal.aborted) return;
         if (!res.ok) {
-          setResults(null);
-          setSearchError(data.error ?? `Search failed (HTTP ${res.status})`);
+          setSearchState({
+            loading: false,
+            error: data.error ?? `Search failed (HTTP ${res.status})`,
+            results: null,
+            shopTotal: null,
+          });
           return;
         }
-        setResults(data.results);
-        setShopTotal(data.total);
+        setSearchState({
+          loading: false,
+          error: null,
+          results: data.results,
+          shopTotal: data.total,
+        });
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return;
-        setResults(null);
-        setSearchError(e instanceof Error ? e.message : "Search failed");
-      } finally {
-        if (!ac.signal.aborted) setSearchPending(false);
+        setSearchState({
+          loading: false,
+          error: e instanceof Error ? e.message : "Search failed",
+          results: null,
+          shopTotal: null,
+        });
       }
     })();
     return () => {
@@ -155,17 +196,16 @@ export function SkuMakerClient() {
     };
   }, [debouncedQuery, refreshTick]);
 
-  // Load product proposals when a product is selected.
+  // Load product proposals when a product is selected. Same pattern: `setState`
+  // is reached only after at least one `await`. Clearing state when the user
+  // deselects is handled via `selectedId == null` checks in the JSX, so we
+  // don’t need to call setState synchronously here.
   useEffect(() => {
     if (selectedId == null) {
-      setProduct(null);
-      setProductError(null);
-      return;
+      return undefined;
     }
     const myId = ++productRequestId.current;
     const ac = new AbortController();
-    setProductPending(true);
-    setProductError(null);
     void (async () => {
       try {
         const url = `/api/sku-maker/product/${selectedId}${
@@ -175,26 +215,43 @@ export function SkuMakerClient() {
         const data = (await res.json()) as ProductResponse;
         if (myId !== productRequestId.current || ac.signal.aborted) return;
         if (!res.ok || !data.product) {
-          setProduct(null);
-          setProductError(data.error ?? `Load failed (HTTP ${res.status})`);
+          setProductState({
+            loading: false,
+            error: data.error ?? `Load failed (HTTP ${res.status})`,
+            product: null,
+          });
           return;
         }
-        setProduct(data.product);
+        setProductState({
+          loading: false,
+          error: null,
+          product: data.product,
+        });
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return;
         if (myId !== productRequestId.current) return;
-        setProduct(null);
-        setProductError(e instanceof Error ? e.message : "Load failed");
-      } finally {
-        if (myId === productRequestId.current && !ac.signal.aborted) {
-          setProductPending(false);
-        }
+        setProductState({
+          loading: false,
+          error: e instanceof Error ? e.message : "Load failed",
+          product: null,
+        });
       }
     })();
     return () => {
       ac.abort();
     };
   }, [selectedId, refreshTick]);
+
+  // When the user picks a different product (or clears the selection),
+  // reset the panel state in the same event — no useEffect setState.
+  const selectProduct = useCallback((nextId: number | null) => {
+    setSelectedId(nextId);
+    setProductState({
+      loading: nextId != null,
+      error: null,
+      product: null,
+    });
+  }, []);
 
   const handleCopyOne = useCallback(async (sku: string) => {
     if (!sku) return;
@@ -250,8 +307,16 @@ export function SkuMakerClient() {
   }, [product]);
 
   const handleReload = useCallback(() => {
+    setSearchState((prev) => ({ ...prev, loading: true, error: null }));
+    if (selectedId != null) {
+      setProductState({
+        loading: true,
+        error: null,
+        product: null,
+      });
+    }
     setRefreshTick((t) => t + 1);
-  }, []);
+  }, [selectedId]);
 
   const selectedHit = useMemo(
     () => results?.find((r) => r.id === selectedId) ?? null,
@@ -340,7 +405,7 @@ export function SkuMakerClient() {
                   <li key={hit.id}>
                     <button
                       type="button"
-                      onClick={() => setSelectedId(hit.id)}
+                      onClick={() => selectProduct(hit.id)}
                       aria-pressed={isSelected}
                       className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
                         isSelected

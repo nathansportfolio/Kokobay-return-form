@@ -32,6 +32,7 @@ function getParentHref(pathname: string, search: URLSearchParams): string {
     path === "/racking-map" ||
     path === "/products" ||
     path === "/sku-maker" ||
+    path === "/admin/cart-intelligence" ||
     path === "/warehouse/racks" ||
     path === "/warehouse/barcodes"
   ) {
