@@ -54,9 +54,13 @@ export async function GET(request: Request) {
       );
     }
 
-    const filter: Filter<CartIntelligenceEventDoc> = {
-      created_at: { $gte: range.from, $lte: range.to },
-    };
+    const filter: Filter<CartIntelligenceEventDoc> = {};
+    if (range.from || range.to) {
+      const createdAt: { $gte?: Date; $lte?: Date } = {};
+      if (range.from) createdAt.$gte = range.from;
+      if (range.to) createdAt.$lte = range.to;
+      filter.created_at = createdAt;
+    }
     if (variant_id) {
       // Match both numeric ("43092839858229") and GID variants we might have
       // ingested at different points in the pipeline.
@@ -146,8 +150,8 @@ export async function GET(request: Request) {
           variant_id,
           session_id,
           product_id,
-          from: range.from.toISOString(),
-          to: range.to.toISOString(),
+          from: range.from ? range.from.toISOString() : null,
+          to: range.to ? range.to.toISOString() : null,
           limit,
         },
         summary: {
