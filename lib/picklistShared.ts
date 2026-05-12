@@ -86,6 +86,11 @@ export type PickStep = {
    * one order with the same SKU → that order has `lineRows: 2`.
    */
   forOrderLineRowCounts?: { orderNumber: string; lineRows: number }[];
+  /**
+   * Units at this stop per order (sums of merged line quantities). Used when
+   * pausing a pick for “no stock at bin” so each order’s short qty is known.
+   */
+  forOrderQuantities?: { orderNumber: string; quantity: number }[];
   /** Product colour for this stop (merged with " · " if several lines differ). */
   color?: string;
   /**
@@ -133,6 +138,8 @@ export type TodaysPickListBatch = {
    */
   displayPickListNumber: number;
   orderNumbers: string[];
+  /** Full batch orders (same as pick list); used to rebuild steps when pausing one order mid-walk. */
+  orders: OrderForPick[];
   steps: PickStep[];
   /** Original line order per order — use when assembling after the pick walk. */
   assembly: OrderAssembly[];

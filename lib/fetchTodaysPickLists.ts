@@ -2,6 +2,7 @@ import {
   countCompletedPicklistsForDay,
   getCompletedOrderNumbersSetForPicklistContext,
 } from "@/lib/completedPicklist";
+import { getPausedOrderNumbersSetForPicklistContext } from "@/lib/orderPickPause";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import type { WarehouseOrderLine } from "@/lib/warehouseMockOrders";
 import {
@@ -14,23 +15,22 @@ import {
   PICKLIST_LIST_KIND_STANDARD,
   PICKLIST_LIST_KIND_UK_PREMIUM,
 } from "@/lib/picklistListKind";
-import { parseDashedProductTitle } from "@/lib/assemblyLineTitle";
-import { compareKokobayLocation } from "@/lib/kokobayLocationFormat";
 import {
   getTodaysShopifyOrderForPicks,
   getUkPremiumShopifyOrdersForPicks,
   isShopifyWarehouseDataEnabled,
 } from "@/lib/shopifyWarehouseDayOrders";
-import { hexForProductColorName } from "@/lib/warehouseProductColors";
 import { withPickableLinesOnly } from "@/lib/warehousePickableLine";
+import {
+  buildAssemblyFromOrders,
+  buildSortedStepsFromOrders,
+  lineLocationForPick,
+} from "@/lib/picklistStepsFromOrders";
 import {
   clampItemsPerList,
   clampOrdersPerList,
   itemUnitsForOrder,
-  type AssemblyLine,
-  type OrderAssembly,
   type OrderForPick,
-  type PickStep,
   type TodaysPickListBatch,
 } from "@/lib/picklistShared";
 
@@ -100,16 +100,9 @@ function assertOrderQueueUnique(orders: OrderForPick[], label: string) {
   }
 }
 
-const DEFAULT_LINE_LOCATION = "U-20-F3";
-
-/** Resolves a line to the same `location` string the pick walk / merge use. */
-function lineLocationForPick(line: { location?: string }): string {
-  return String(line.location ?? "").trim() || DEFAULT_LINE_LOCATION;
-}
-
 /**
  * One key per resolvable **pick stop** for an order, aligned with
- * `buildSortedSteps` (`location` + `SKU` → merged qty on one walk line).
+ * `buildSortedStepsFromOrders` (`location` + `SKU` → merged qty on one walk line).
  * Preferring max overlap of these keys keeps orders that need the same bin+SKU
  * together so you do not revisit that stop on a second pick.
  */
@@ -214,179 +207,6 @@ function chunkOrdersGreedyStopOverlap(
   return out;
 }
 
-/**
- * One stop per SKU+location, quantities merged across the batch; walk order is
- * rack → bay → level (legacy `B-04-C3` also uses slot) → SKU.
- */
-function addLineColor(set: Set<string>, line: WarehouseOrderLine) {
-  const c = line.color?.trim();
-  if (c) set.add(c);
-}
-
-function addLineSize(set: Set<string>, line: WarehouseOrderLine) {
-  const s = line.size?.trim();
-  if (s) set.add(s);
-}
-
-function lineThumbnailImageUrl(
-  line: WarehouseOrderLine,
-): string | undefined {
-  const u = line.thumbnailImageUrl?.trim();
-  return u || undefined;
-}
-
-/**
- * One short product line for the pick walk: drops `- colour` / `- size` so the
- * name matches across lines; keeps mock category `(…)` stripped.
- */
-function pickListLineName(line: WarehouseOrderLine): string {
-  const sku = String(line.sku);
-  const base = String(line.name ?? "").trim() || sku;
-  const p = parseDashedProductTitle(base);
-  if (p.colour != null && p.colour !== "") {
-    const t = p.product.trim();
-    if (t) {
-      return t;
-    }
-  }
-  const without = base.replace(/\s+\([^)]+\)\s*$/u, "").trim();
-  return without || base;
-}
-
-function buildSortedSteps(orders: OrderForPick[]): PickStep[] {
-  type Agg = {
-    sku: string;
-    name: string;
-    location: string;
-    qty: number;
-    /** Merged line-item rows contributing to this stop. */
-    sourceLineItemCount: number;
-    orders: Set<string>;
-    /** orderNumber → how many line rows in this order hit this (location+SKU) stop. */
-    lineRowsByOrder: Map<string, number>;
-    colors: Set<string>;
-    sizes: Set<string>;
-    thumbnailImageUrl?: string;
-  };
-  const map = new Map<string, Agg>();
-
-  for (const ord of orders) {
-    for (const line of ord.items) {
-      const location = lineLocationForPick(line);
-      const sku = String(line.sku);
-      const key = `${location}\t${sku}`;
-      const prev = map.get(key);
-      const name = pickListLineName(line);
-      if (prev) {
-        prev.qty += line.quantity;
-        prev.sourceLineItemCount += 1;
-        prev.orders.add(ord.orderNumber);
-        {
-          const on = ord.orderNumber;
-          prev.lineRowsByOrder.set(
-            on,
-            (prev.lineRowsByOrder.get(on) ?? 0) + 1,
-          );
-        }
-        addLineColor(prev.colors, line);
-        addLineSize(prev.sizes, line);
-        if (!prev.thumbnailImageUrl) {
-          const t = lineThumbnailImageUrl(line);
-          if (t) prev.thumbnailImageUrl = t;
-        }
-      } else {
-        const colors = new Set<string>();
-        const sizes = new Set<string>();
-        addLineColor(colors, line);
-        addLineSize(sizes, line);
-        const thumb = lineThumbnailImageUrl(line);
-        const rowsMap = new Map<string, number>();
-        rowsMap.set(ord.orderNumber, 1);
-        map.set(key, {
-          sku,
-          name,
-          location,
-          qty: line.quantity,
-          sourceLineItemCount: 1,
-          orders: new Set([ord.orderNumber]),
-          lineRowsByOrder: rowsMap,
-          colors,
-          sizes,
-          ...(thumb ? { thumbnailImageUrl: thumb } : {}),
-        });
-      }
-    }
-  }
-
-  const rows = [...map.values()].sort((a, b) => {
-    const c = compareKokobayLocation(a.location, b.location);
-    if (c !== 0) return c;
-    return a.sku.localeCompare(b.sku);
-  });
-
-  return rows.map((r, i) => {
-    const forOrderLineRowCounts = [...r.lineRowsByOrder.entries()]
-      .map(([orderNumber, lineRows]) => ({ orderNumber, lineRows }))
-      .sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
-    const color =
-      r.colors.size > 0
-        ? [...r.colors].sort((x, y) => x.localeCompare(y)).join(" · ")
-        : undefined;
-    const single =
-      r.colors.size === 1 ? [...r.colors][0]!.trim() : "";
-    const colorHex =
-      single && single !== "—" ? hexForProductColorName(single) : undefined;
-    const size =
-      r.sizes.size > 0
-        ? [...r.sizes].sort((x, y) => x.localeCompare(y)).join(" · ")
-        : undefined;
-    return {
-      step: i + 1,
-      sku: r.sku,
-      name: r.name,
-      location: r.location,
-      quantity: r.qty,
-      sourceLineItemCount: r.sourceLineItemCount,
-      forOrders: [...r.orders].sort((x, y) => x.localeCompare(y)),
-      forOrderLineRowCounts,
-      ...(color ? { color } : {}),
-      ...(colorHex ? { colorHex } : {}),
-      ...(size ? { size } : {}),
-      ...(r.thumbnailImageUrl
-        ? { thumbnailImageUrl: r.thumbnailImageUrl }
-        : {}),
-    };
-  });
-}
-
-function buildAssemblyByOrder(orders: OrderForPick[]): OrderAssembly[] {
-  return orders.map((o) => ({
-    orderNumber: o.orderNumber,
-    ...(o.customerFirstName != null && String(o.customerFirstName).trim() !== ""
-      ? { customerFirstName: String(o.customerFirstName).trim() }
-      : {}),
-    ...(o.customerLastName != null && String(o.customerLastName).trim() !== ""
-      ? { customerLastName: String(o.customerLastName).trim() }
-      : {}),
-    lines: o.items.map((line, i) => ({
-      lineIndex: i + 1,
-      sku: String(line.sku),
-      quantity: line.quantity,
-      name: pickListLineName(line),
-      ...(line.color?.trim() && line.color.trim() !== "—"
-        ? {
-            color: line.color.trim(),
-            colorHex: hexForProductColorName(line.color.trim()),
-          }
-        : {}),
-      ...(line.size?.trim() ? { size: line.size.trim() } : {}),
-      ...(line.thumbnailImageUrl?.trim()
-        ? { thumbnailImageUrl: line.thumbnailImageUrl.trim() }
-        : {}),
-    })),
-  }));
-}
-
 export async function fetchTodaysPickLists(
   ordersPerList: number,
   itemsPerList: number,
@@ -461,15 +281,21 @@ export async function fetchTodaysPickLists(
         ).length;
   const dayOrderCount = allTodays.length;
 
-  const [completedSet, completedPicklistCount] = await Promise.all([
+  const [completedSet, completedPicklistCount, pausedSet] = await Promise.all([
     getCompletedOrderNumbersSetForPicklistContext(
       dayKey,
       PICKLIST_LIST_KIND_STANDARD,
     ),
     countCompletedPicklistsForDay(dayKey, PICKLIST_LIST_KIND_STANDARD),
+    getPausedOrderNumbersSetForPicklistContext(
+      dayKey,
+      PICKLIST_LIST_KIND_STANDARD,
+    ),
   ]);
 
-  const todays = allTodays.filter((o) => !completedSet.has(o.orderNumber));
+  const todays = allTodays.filter(
+    (o) => !completedSet.has(o.orderNumber) && !pausedSet.has(o.orderNumber),
+  );
   assertOrderQueueUnique(todays, "fetchTodaysPickLists");
 
   const groups = chunkOrdersGreedyStopOverlap(
@@ -485,8 +311,9 @@ export async function fetchTodaysPickLists(
       batchIndex,
       displayPickListNumber: completedPicklistCount + batchIndex,
       orderNumbers: group.map((o) => o.orderNumber),
-      steps: buildSortedSteps(group),
-      assembly: buildAssemblyByOrder(group),
+      orders: group,
+      steps: buildSortedStepsFromOrders(group),
+      assembly: buildAssemblyFromOrders(group),
     };
   });
 
@@ -549,15 +376,21 @@ export async function fetchUkPremiumPickLists(
         ).length;
   const dayOrderCount = allTodays.length;
 
-  const [completedSet, completedPicklistCount] = await Promise.all([
+  const [completedSet, completedPicklistCount, pausedSet] = await Promise.all([
     getCompletedOrderNumbersSetForPicklistContext(
       dayKey,
       PICKLIST_LIST_KIND_UK_PREMIUM,
     ),
     countCompletedPicklistsForDay(dayKey, PICKLIST_LIST_KIND_UK_PREMIUM),
+    getPausedOrderNumbersSetForPicklistContext(
+      dayKey,
+      PICKLIST_LIST_KIND_UK_PREMIUM,
+    ),
   ]);
 
-  const todays = allTodays.filter((o) => !completedSet.has(o.orderNumber));
+  const todays = allTodays.filter(
+    (o) => !completedSet.has(o.orderNumber) && !pausedSet.has(o.orderNumber),
+  );
   assertOrderQueueUnique(todays, "fetchUkPremiumPickLists");
   const groups = chunkOrdersGreedyStopOverlap(
     todays,
@@ -572,8 +405,9 @@ export async function fetchUkPremiumPickLists(
       batchIndex,
       displayPickListNumber: completedPicklistCount + batchIndex,
       orderNumbers: group.map((o) => o.orderNumber),
-      steps: buildSortedSteps(group),
-      assembly: buildAssemblyByOrder(group),
+      orders: group,
+      steps: buildSortedStepsFromOrders(group),
+      assembly: buildAssemblyFromOrders(group),
     };
   });
 

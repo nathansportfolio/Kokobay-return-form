@@ -79,6 +79,7 @@ export default async function UkPremiumWalkPage({ searchParams }: PageProps) {
       steps={batch.steps}
       pickListNumber={batch.displayPickListNumber}
       orderNumbers={batch.orderNumbers}
+      batchOrders={batch.orders}
       ordersPerList={applied}
       itemsPerList={appliedItems}
       dayKey={dayKey}

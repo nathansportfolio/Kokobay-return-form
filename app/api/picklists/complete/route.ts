@@ -77,6 +77,15 @@ function isPickStepArray(x: unknown): x is PickStep[] {
         if (typeof e.lineRows !== "number") return false;
       }
     }
+    if (o.forOrderQuantities !== undefined) {
+      if (!Array.isArray(o.forOrderQuantities)) return false;
+      for (const row of o.forOrderQuantities) {
+        if (!row || typeof row !== "object") return false;
+        const e = row as Record<string, unknown>;
+        if (typeof e.orderNumber !== "string") return false;
+        if (typeof e.quantity !== "number") return false;
+      }
+    }
   }
   return true;
 }
@@ -215,6 +224,12 @@ export async function POST(request: Request) {
   } catch (e) {
     const err = e as Error & { code?: string };
     if (err.code === "ALREADY_COMPLETED") {
+      return NextResponse.json(
+        { ok: false, error: err.message },
+        { status: 409 },
+      );
+    }
+    if (err.code === "ORDER_PAUSED") {
       return NextResponse.json(
         { ok: false, error: err.message },
         { status: 409 },

@@ -11,6 +11,8 @@ import {
   parseOrdersPerListParam,
   pickStepForOrdersLabel,
 } from "@/lib/fetchTodaysPickLists";
+import { countOrderPickPausesForDay } from "@/lib/orderPickPause";
+import { PICKLIST_LIST_KIND_STANDARD } from "@/lib/picklistListKind";
 import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
 import { AssemblyOrdersPanel } from "@/components/picklist/AssemblyOrdersPanel";
@@ -78,6 +80,16 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
   const showProgress =
     totalPicklistsForDay > 0 || completedPicklistCount > 0;
 
+  let missingStockPauseCount = 0;
+  try {
+    missingStockPauseCount = await countOrderPickPausesForDay(
+      dayKey,
+      PICKLIST_LIST_KIND_STANDARD,
+    );
+  } catch {
+    missingStockPauseCount = 0;
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-4 pb-12 sm:p-6">
       <PicklistPicksConsoleLogger dayKey={dayKey} batches={batches} />
@@ -101,8 +113,37 @@ export default async function TodaysPickListsPage({ searchParams }: PageProps) {
             >
               Print all order labels
             </Link>
+            <Link
+              href="/picklists/today/missing-stock"
+              className={`${PICK_LIST_TB_ACTION} ${PICK_LIST_TB_SECONDARY}`}
+            >
+              Missing stock
+              {missingStockPauseCount > 0
+                ? ` (${missingStockPauseCount})`
+                : ""}
+            </Link>
           </div>
         </div>
+        {missingStockPauseCount > 0 ? (
+          <div
+            className="rounded-xl border border-amber-300/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/80 dark:bg-amber-950/40 dark:text-amber-100/95"
+            role="status"
+          >
+            <span className="font-semibold text-foreground">
+              {missingStockPauseCount} order
+              {missingStockPauseCount === 1 ? "" : "s"} on hold
+            </span>{" "}
+            (missing stock at a bin). They are excluded from active pick lists
+            until you clear each hold.{" "}
+            <Link
+              href="/picklists/today/missing-stock"
+              className="font-medium text-foreground underline underline-offset-2"
+            >
+              View missing stock
+            </Link>
+            .
+          </div>
+        ) : null}
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           Picks are <span className="font-medium text-foreground">yesterday’s orders</span> (ship
           today, pick the prior calendar day in the warehouse).{" "}

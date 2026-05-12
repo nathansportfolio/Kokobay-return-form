@@ -88,7 +88,7 @@ export default async function TodaysOrdersPage() {
                   Order
                 </th>
                 <th className="px-4 py-3 font-semibold text-foreground">Status</th>
-                <th className="px-4 py-3 font-semibold text-foreground">Picked</th>
+                <th className="px-4 py-3 font-semibold text-foreground">Picked / hold</th>
                 <th className="px-4 py-3 font-semibold text-foreground text-right">
                   Lines
                 </th>
@@ -116,16 +116,27 @@ export default async function TodaysOrdersPage() {
                     {o.status}
                   </td>
                   <td className="px-4 py-3 text-zinc-800 dark:text-zinc-200">
-                    {o.picked ? (
-                      <span
-                        className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:border-emerald-800/80 dark:bg-emerald-950/50 dark:text-emerald-200"
-                        title="This order was included in a completed pick for today’s warehouse day"
-                      >
-                        Picked
-                      </span>
-                    ) : (
-                      <span className="text-xs text-zinc-500">—</span>
-                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                      {o.picked ? (
+                        <span
+                          className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:border-emerald-800/80 dark:bg-emerald-950/50 dark:text-emerald-200"
+                          title="This order was included in a completed pick for today’s warehouse day"
+                        >
+                          Picked
+                        </span>
+                      ) : null}
+                      {o.pausedMissingStock ? (
+                        <span
+                          className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-950 dark:border-amber-700/80 dark:bg-amber-950/45 dark:text-amber-100"
+                          title="Paused: missing stock at a bin — excluded from active pick lists"
+                        >
+                          On hold
+                        </span>
+                      ) : null}
+                      {!o.picked && !o.pausedMissingStock ? (
+                        <span className="text-xs text-zinc-500">—</span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-zinc-800 dark:text-zinc-200">
                     {o.lineCount}

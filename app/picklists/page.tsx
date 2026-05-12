@@ -79,6 +79,33 @@ export default function PicklistsPage() {
             </div>
           </Link>
         </li>
+        <li>
+          <div className="flex flex-row gap-4 rounded-xl border border-amber-200/90 bg-amber-50/70 p-5 dark:border-amber-900/60 dark:bg-amber-950/30">
+            <div className="min-w-0 flex flex-col gap-2">
+              <span className="text-sm font-semibold text-foreground">
+                Missing stock (holds)
+              </span>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                Orders paused when a bin was empty. Clear holds here when stock
+                is back so those orders rejoin the active queue.
+              </span>
+              <div className="flex flex-wrap gap-3 text-sm font-medium">
+                <Link
+                  href="/picklists/today/missing-stock"
+                  className="text-amber-950 underline decoration-amber-800/40 underline-offset-2 dark:text-amber-100"
+                >
+                  Standard holds
+                </Link>
+                <Link
+                  href="/picklists/uk-premium/missing-stock"
+                  className="text-amber-950 underline decoration-amber-800/40 underline-offset-2 dark:text-amber-100"
+                >
+                  Next Day holds
+                </Link>
+              </div>
+            </div>
+          </div>
+        </li>
       </ul>
     </div>
   );

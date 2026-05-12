@@ -13,6 +13,7 @@ import {
   parseOrdersPerListParam,
   pickStepForOrdersLabel,
 } from "@/lib/fetchTodaysPickLists";
+import { countOrderPickPausesForDay } from "@/lib/orderPickPause";
 import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
 import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
 import { AssemblyOrdersPanel } from "@/components/picklist/AssemblyOrdersPanel";
@@ -81,6 +82,16 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
   printQuery.set("itemsPerList", String(appliedItemsPerList));
   const showProgress = totalPicklistsForDay > 0 || completedPicklistCount > 0;
 
+  let missingStockPauseCount = 0;
+  try {
+    missingStockPauseCount = await countOrderPickPausesForDay(
+      dayKey,
+      PICKLIST_LIST_KIND_UK_PREMIUM,
+    );
+  } catch {
+    missingStockPauseCount = 0;
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-4 pb-12 sm:p-6">
       <PicklistPicksConsoleLogger dayKey={dayKey} batches={batches} />
@@ -104,8 +115,36 @@ export default async function UkPremiumPicklistsPage({ searchParams }: PageProps
             >
               Print all order labels
             </Link>
+            <Link
+              href={`${LIST}/missing-stock`}
+              className={`${PICK_LIST_TB_ACTION} ${PICK_LIST_TB_SECONDARY}`}
+            >
+              Missing stock
+              {missingStockPauseCount > 0
+                ? ` (${missingStockPauseCount})`
+                : ""}
+            </Link>
           </div>
         </div>
+        {missingStockPauseCount > 0 ? (
+          <div
+            className="rounded-xl border border-amber-300/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/80 dark:bg-amber-950/40 dark:text-amber-100/95"
+            role="status"
+          >
+            <span className="font-semibold text-foreground">
+              {missingStockPauseCount} order
+              {missingStockPauseCount === 1 ? "" : "s"} on hold
+            </span>{" "}
+            (missing stock at a bin).{" "}
+            <Link
+              href={`${LIST}/missing-stock`}
+              className="font-medium text-foreground underline underline-offset-2"
+            >
+              View missing stock
+            </Link>
+            .
+          </div>
+        ) : null}
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           <span className="font-medium text-foreground">Shipping line:</span>{" "}
           {UK_PREMIUM_NDD_LINE_TITLE}. <span className="font-medium text-foreground">Cut-off:</span> same

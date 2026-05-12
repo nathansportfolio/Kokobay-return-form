@@ -6,6 +6,8 @@ import {
   unitsToPick,
 } from "@/lib/warehouseOrderPricing";
 import { getCompletedOrderNumbersSetForDay } from "@/lib/completedPicklist";
+import { getPausedOrderNumbersSetForPicklistContext } from "@/lib/orderPickPause";
+import { PICKLIST_LIST_KIND_STANDARD } from "@/lib/picklistListKind";
 import {
   getTodaysShopifyOrderForPicks,
   isShopifyWarehouseDataEnabled,
@@ -31,6 +33,8 @@ export type TodaysOrderSummary = {
   pickPreview: string;
   /** `true` if this order was included in a completed pick for this warehouse day. */
   picked: boolean;
+  /** True when this order is paused (missing stock at bin) for this warehouse day — excluded from active picks. */
+  pausedMissingStock: boolean;
 };
 
 function buildPickPreview(items: WarehouseOrderLine[], maxParts = 3): string {
@@ -62,7 +66,13 @@ export async function fetchTodaysOrderSummaries(
     dayMode === "pickList"
       ? getPickListOrderDayKey()
       : calendarDateKeyInTz(new Date(), WAREHOUSE_TZ);
-  const pickedSet = await getCompletedOrderNumbersSetForDay(dayKey);
+  const [pickedSet, pausedSet] = await Promise.all([
+    getCompletedOrderNumbersSetForDay(dayKey),
+    getPausedOrderNumbersSetForPicklistContext(
+      dayKey,
+      PICKLIST_LIST_KIND_STANDARD,
+    ),
+  ]);
 
   if (isShopifyWarehouseDataEnabled()) {
     const forPick = await getTodaysShopifyOrderForPicks(dayKey);
@@ -74,6 +84,7 @@ export async function fetchTodaysOrderSummaries(
       totalFormatted: formatGbp(orderTotalPence(o.items)),
       pickPreview: buildPickPreview(o.items),
       picked: pickedSet.has(o.orderNumber),
+      pausedMissingStock: pausedSet.has(o.orderNumber),
     }));
     return { dayKey, orders, dataSource: "shopify" };
   }
@@ -119,6 +130,7 @@ export async function fetchTodaysOrderSummaries(
       totalFormatted: formatGbp(orderTotalPence(items)),
       pickPreview: buildPickPreview(items),
       picked: pickedSet.has(orderNumber),
+      pausedMissingStock: pausedSet.has(orderNumber),
     });
   }
 

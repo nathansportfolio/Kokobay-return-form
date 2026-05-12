@@ -135,6 +135,20 @@ export default async function Home() {
                 >
                   View pick lists →
                 </Link>
+                {stats.orderStatsOk && stats.pickListDayOrdersPausedMissingStock > 0 ? (
+                  <p className="mt-2 text-sm text-amber-900/95 dark:text-amber-200/90">
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {stats.pickListDayOrdersPausedMissingStock}
+                    </span>{" "}
+                    on hold (missing stock).{" "}
+                    <Link
+                      href="/picklists/today/missing-stock"
+                      className="font-medium underline decoration-amber-800/35 underline-offset-2 dark:decoration-amber-300/40"
+                    >
+                      Missing stock
+                    </Link>
+                  </p>
+                ) : null}
               </div>
             </li>
             <li className="flex h-full min-h-0 flex-col">
@@ -173,6 +187,21 @@ export default async function Home() {
                 >
                   Open Next Day →
                 </Link>
+                {stats.ukPremiumSpecialStatsOk &&
+                stats.ukPremiumOrdersPausedMissingStock > 0 ? (
+                  <p className="mt-2 text-sm text-amber-900/95 dark:text-amber-200/90">
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {stats.ukPremiumOrdersPausedMissingStock}
+                    </span>{" "}
+                    Next Day on hold (missing stock).{" "}
+                    <Link
+                      href="/picklists/uk-premium/missing-stock"
+                      className="font-medium underline decoration-amber-800/35 underline-offset-2 dark:decoration-amber-300/40"
+                    >
+                      Missing stock
+                    </Link>
+                  </p>
+                ) : null}
               </div>
             </li>
             <li className="flex h-full min-h-0 flex-col sm:col-span-2 lg:col-span-1">

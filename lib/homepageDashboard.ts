@@ -1,4 +1,5 @@
 import { getCompletedOrderNumbersSetForPicklistContext } from "@/lib/completedPicklist";
+import { countOrderPickPausesForDay } from "@/lib/orderPickPause";
 import { fetchTodaysOrderSummaries } from "@/lib/fetchTodaysOrderSummaries";
 import { PICKLIST_LIST_KIND_UK_PREMIUM } from "@/lib/picklistListKind";
 import { countReturnLogsPendingFullRefund } from "@/lib/returnLog";
@@ -10,11 +11,15 @@ export type HomepageDashboardStats = {
   /** Orders in a completed pick for the pick-list day, vs total in that set. */
   pickListDayOrdersPicked: number;
   pickListDayOrderTotal: number;
+  /** Standard pipeline: orders paused (missing stock), excluded from active picks. */
+  pickListDayOrdersPausedMissingStock: number;
   /**
    * UK Premium NDD (Shopify) orders for today, London, not yet in a completed
    * `uk_premium` pick. Requires Shopify; otherwise `ukPremiumSpecialStatsOk` is false.
    */
   ukPremiumSpecialOrdersYetToPick: number;
+  /** UK Premium pipeline: orders on missing-stock hold for today’s London day. */
+  ukPremiumOrdersPausedMissingStock: number;
   returnsPendingRefund: number;
   orderStatsOk: boolean;
   returnsCountOk: boolean;
@@ -35,11 +40,13 @@ export type HomepageDashboardStats = {
 export async function getHomepageDashboardStats(): Promise<HomepageDashboardStats> {
   let pickListDayOrdersPicked = 0;
   let pickListDayOrderTotal = 0;
+  let pickListDayOrdersPausedMissingStock = 0;
   let orderStatsOk = false;
   let returnsPendingRefund = 0;
   let returnsCountOk = false;
   let pickListOrderDayKey: string | null = null;
   let ukPremiumSpecialOrdersYetToPick = 0;
+  let ukPremiumOrdersPausedMissingStock = 0;
   let ukPremiumSpecialStatsOk = false;
   let ukPremiumOrderDayKey: string | null = null;
 
@@ -49,6 +56,9 @@ export async function getHomepageDashboardStats(): Promise<HomepageDashboardStat
     pickListOrderDayKey = dayKey;
     pickListDayOrderTotal = orders.length;
     pickListDayOrdersPicked = orders.filter((o) => o.picked).length;
+    pickListDayOrdersPausedMissingStock = orders.filter(
+      (o) => o.pausedMissingStock,
+    ).length;
   } catch {
     orderStatsOk = false;
   }
@@ -65,6 +75,10 @@ export async function getHomepageDashboardStats(): Promise<HomepageDashboardStat
       ukPremiumSpecialOrdersYetToPick = premium.filter(
         (o) => !completed.has(o.orderNumber),
       ).length;
+      ukPremiumOrdersPausedMissingStock = await countOrderPickPausesForDay(
+        dayKey,
+        PICKLIST_LIST_KIND_UK_PREMIUM,
+      );
       ukPremiumOrderDayKey = dayKey;
       ukPremiumSpecialStatsOk = true;
     }
@@ -82,7 +96,9 @@ export async function getHomepageDashboardStats(): Promise<HomepageDashboardStat
   return {
     pickListDayOrdersPicked,
     pickListDayOrderTotal,
+    pickListDayOrdersPausedMissingStock,
     ukPremiumSpecialOrdersYetToPick,
+    ukPremiumOrdersPausedMissingStock,
     returnsPendingRefund,
     orderStatsOk,
     returnsCountOk,

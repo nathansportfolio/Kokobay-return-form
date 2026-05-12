@@ -7,9 +7,14 @@ import { useRouter } from "next/navigation";
 import { WarehouseLocationLine } from "@/components/WarehouseLocationLine";
 import {
   type OrderAssembly,
+  type OrderForPick,
   type PickStep,
   pickStepForOrdersLabel,
 } from "@/lib/picklistShared";
+import {
+  buildAssemblyFromOrders,
+  buildSortedStepsFromOrders,
+} from "@/lib/picklistStepsFromOrders";
 import {
   PICKLIST_LIST_KIND_STANDARD,
   type PicklistListKind,
@@ -26,6 +31,8 @@ type Props = {
   /** Daily pick list number (includes completed work earlier in the day). */
   pickListNumber: number;
   orderNumbers: string[];
+  /** Full batch (same as list); required to drop one order and rebuild steps mid-walk. */
+  batchOrders: OrderForPick[];
   ordersPerList: number;
   itemsPerList: number;
   dayKey: string;
@@ -82,6 +89,26 @@ function WalkCurrentProductThumb({
   );
 }
 
+function mergeReturnBinsByOrder(
+  hints: { orderNumber: string; returnToLocations: string[] }[],
+): { orderNumber: string; returnToLocations: string[] }[] {
+  const m = new Map<string, Set<string>>();
+  for (const h of hints) {
+    const set = m.get(h.orderNumber) ?? new Set<string>();
+    for (const loc of h.returnToLocations ?? []) {
+      const t = String(loc).trim();
+      if (t) set.add(t);
+    }
+    m.set(h.orderNumber, set);
+  }
+  return [...m.entries()]
+    .map(([orderNumber, set]) => ({
+      orderNumber,
+      returnToLocations: [...set].sort(),
+    }))
+    .sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
+}
+
 function PostPickStatusBar({
   current,
 }: {
@@ -129,13 +156,14 @@ function PostPickStatusBar({
 }
 
 export function PicklistWalkClient({
-  steps,
+  steps: initialSteps,
   pickListNumber,
-  orderNumbers,
+  orderNumbers: initialOrderNumbers,
+  batchOrders,
   ordersPerList,
   itemsPerList,
   dayKey,
-  assembly,
+  assembly: initialAssembly,
   listPathBase: listPathBaseIn,
   listKind: listKindIn,
 }: Props) {
@@ -153,18 +181,33 @@ export function PicklistWalkClient({
     "assembly" | "assembled" | "packed" | null
   >(null);
   const walkSessionStartedAt = useRef<number | null>(null);
-  const n = steps.length;
+  const [walkSteps, setWalkSteps] = useState(initialSteps);
+  const [walkOrderNumbers, setWalkOrderNumbers] = useState(initialOrderNumbers);
+  const [walkAssembly, setWalkAssembly] = useState(initialAssembly);
+  const [excludedPauseOrders, setExcludedPauseOrders] = useState<string[]>([]);
+  const [sessionPauseHints, setSessionPauseHints] = useState<
+    { orderNumber: string; returnToLocations: string[] }[]
+  >([]);
+  const [pauseToast, setPauseToast] = useState<string | null>(null);
+  const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
+  const [skipWorking, setSkipWorking] = useState(false);
+  const [skipError, setSkipError] = useState<string | null>(null);
+  const [selectedPauseOrder, setSelectedPauseOrder] = useState<string | null>(
+    null,
+  );
 
+  const n = walkSteps.length;
   useEffect(() => {
     // eslint-disable-next-line no-console -- intentional client debug
     console.log("[kokobay picks walk]", {
       dayKey,
       pickListNumber,
-      orderNumbers,
-      steps,
+      walkOrderNumbers,
+      walkSteps,
+      excludedPauseOrders,
     });
-  }, [dayKey, pickListNumber, orderNumbers, steps]);
-  const current = complete ? null : (steps[index] ?? null);
+  }, [dayKey, excludedPauseOrders, pickListNumber, walkOrderNumbers, walkSteps]);
+  const current = complete ? null : (walkSteps[index] ?? null);
   const currentSkuIsVariantPlaceholder = current
     ? isVariantIdPlaceholderSku(current.sku)
     : false;
@@ -175,8 +218,8 @@ export function PicklistWalkClient({
   const walkShowSize = walkLineSize.length > 0;
   const atStart = !complete && index === 0;
   const atEnd = !complete && index === n - 1;
-  const totalItemsQty = steps.reduce((s, st) => s + st.quantity, 0);
-  const orderCount = orderNumbers.length;
+  const totalItemsQty = walkSteps.reduce((s, st) => s + st.quantity, 0);
+  const orderCount = walkOrderNumbers.length;
 
   useEffect(() => {
     walkSessionStartedAt.current = Date.now();
@@ -205,12 +248,12 @@ export function PicklistWalkClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             dayKey,
-            orderNumbers,
+            orderNumbers: walkOrderNumbers,
             batchIndex: pickListNumber,
             ordersPerList,
             itemsPerList,
-            steps,
-            assembly,
+            steps: walkSteps,
+            assembly: walkAssembly,
             totalItemsQty,
             orderCount,
             durationMs,
@@ -235,7 +278,7 @@ export function PicklistWalkClient({
     }
   }, [
     apiSaved,
-    assembly,
+    walkAssembly,
     listKind,
     pickListNumber,
     complete,
@@ -243,10 +286,10 @@ export function PicklistWalkClient({
     index,
     n,
     orderCount,
-    orderNumbers,
+    walkOrderNumbers,
     ordersPerList,
     itemsPerList,
-    steps,
+    walkSteps,
     totalItemsQty,
   ]);
 
@@ -259,15 +302,16 @@ export function PicklistWalkClient({
       }
       if (!apiSaved) {
         setComplete(false);
-        setIndex(n - 1);
+        setIndex(Math.max(0, walkSteps.length - 1));
       }
       return;
     }
     if (index > 0) setIndex((i) => i - 1);
-  }, [apiSaved, complete, index, n, postPickPhase]);
+  }, [apiSaved, complete, index, n, postPickPhase, walkSteps.length]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (skipConfirmOpen) return;
       if (e.key === "ArrowRight" || e.key === "Enter") {
         e.preventDefault();
         void goNext();
@@ -278,12 +322,32 @@ export function PicklistWalkClient({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [goNext, goPrev]);
+  }, [goNext, goPrev, skipConfirmOpen]);
 
   if (n === 0) {
+    const allPaused =
+      batchOrders.length > 0 && excludedPauseOrders.length === batchOrders.length;
     return (
       <div className="mx-auto w-full max-w-lg px-4 py-8 text-center text-sm text-zinc-500">
-        No pick steps in this list.
+        {allPaused ? (
+          <>
+            <p className="font-medium text-foreground">
+              Every order on this list was paused for missing stock.
+            </p>
+            <p className="mt-2">
+              Nothing left to pick here. Use{" "}
+              <Link
+                href={`${listPathBase}/missing-stock`}
+                className="text-foreground underline"
+              >
+                Missing stock
+              </Link>{" "}
+              for return hints, then go back when holds are cleared.
+            </p>
+          </>
+        ) : (
+          <p>No pick steps in this list.</p>
+        )}
         <div className="mt-4">
           <Link
             href={listHref(ordersPerList, itemsPerList)}
@@ -305,7 +369,13 @@ export function PicklistWalkClient({
             <p className="text-lg font-semibold text-foreground">
               Pick list {pickListNumber}
             </p>
-            <p className="text-xs text-zinc-500">{orderNumbers.join(" · ")}</p>
+            <p className="text-xs text-zinc-500">{walkOrderNumbers.join(" · ")}</p>
+            {excludedPauseOrders.length > 0 ? (
+              <p className="text-xs font-medium text-amber-900 dark:text-amber-200/90">
+                Paused this walk (missing stock):{" "}
+                <span className="font-mono">{excludedPauseOrders.join(" · ")}</span>
+              </p>
+            ) : null}
             <PostPickStatusBar
               current={phase}
             />
@@ -317,11 +387,49 @@ export function PicklistWalkClient({
                 Order assembly
               </h2>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                Picked. Build each order from its lines in order, then mark as
-                assembled.
+                Picked for the orders still on this list. Build each from its
+                lines, then mark assembled. For any order paused during the walk,
+                return picked units to the bins below, then handle the hold on{" "}
+                <Link
+                  href={`${listPathBase}/missing-stock`}
+                  className="font-medium text-foreground underline"
+                >
+                  Missing stock
+                </Link>
+                .
               </p>
+              {mergeReturnBinsByOrder(sessionPauseHints).length > 0 ? (
+                <div className="rounded-xl border border-amber-300/90 bg-amber-50/90 p-4 text-sm dark:border-amber-800/70 dark:bg-amber-950/40">
+                  <p className="font-semibold text-amber-950 dark:text-amber-100">
+                    Paused orders — put picked stock back in these bins
+                  </p>
+                  <ul className="mt-3 list-none space-y-3 p-0">
+                    {mergeReturnBinsByOrder(sessionPauseHints).map((h) => (
+                      <li key={h.orderNumber}>
+                        <p className="font-mono text-xs font-semibold text-foreground">
+                          {h.orderNumber}
+                        </p>
+                        {h.returnToLocations.length > 0 ? (
+                          <ol className="mt-1 list-decimal pl-5 text-xs text-zinc-800 dark:text-zinc-200">
+                            {h.returnToLocations.map((loc) => (
+                              <li key={`${h.orderNumber}-${loc}`}>
+                                <span className="font-mono">{loc}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                            No earlier bins on this walk (pause was at the first
+                            stop).
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <AssemblyOrdersPanel
-                orders={assembly}
+                orders={walkAssembly}
                 showDoneToggle
                 includeThumbnails
                 listClassName="flex flex-col gap-5 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-950/40 sm:p-5"
@@ -372,6 +480,7 @@ export function PicklistWalkClient({
               </p>
               <Link
                 href={listHref(ordersPerList, itemsPerList)}
+                onClick={() => router.refresh()}
                 className="inline-flex min-h-11 w-full min-w-0 max-w-sm items-center justify-center rounded-lg border-2 border-zinc-200 bg-zinc-100 px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
               >
                 Back to all pick lists
@@ -429,13 +538,193 @@ export function PicklistWalkClient({
           {finishError}
         </p>
       )}
+      {pauseToast ? (
+        <p
+          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800/80 dark:bg-emerald-950/50 dark:text-emerald-100"
+          role="status"
+        >
+          {pauseToast}
+        </p>
+      ) : null}
+      {skipError ? (
+        <p
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
+          role="alert"
+        >
+          {skipError}
+        </p>
+      ) : null}
+      {skipConfirmOpen && current && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="skip-dialog-title"
+        >
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+            <h2
+              id="skip-dialog-title"
+              className="text-base font-semibold text-foreground"
+            >
+              Pause one order — no stock at this bin?
+            </h2>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              Only the order you choose is paused and dropped from{" "}
+              <span className="font-medium text-foreground">this</span> walk. The
+              rest of the pick continues with updated quantities. That order stays
+              off future pick lists until you clear the hold on Missing stock.
+            </p>
+            <p className="mt-2 text-xs text-amber-900/95 dark:text-amber-200/85">
+              Do not refresh this page mid-walk — your batch is frozen in the
+              browser until you finish.
+            </p>
+            <p className="mt-3 font-mono text-xs text-zinc-700 dark:text-zinc-300">
+              Stop covers: {pickStepForOrdersLabel(current)}
+            </p>
+            <p className="mt-3 text-xs text-zinc-500">
+              Bin:{" "}
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                {current.location}
+              </span>{" "}
+              · SKU{" "}
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                {formatKokobaySkuDisplay(current.sku)}
+              </span>
+            </p>
+            {current.forOrders.length > 1 ? (
+              <fieldset className="mt-4 space-y-2">
+                <legend className="text-xs font-semibold text-foreground">
+                  Which order is short at this bin?
+                </legend>
+                {current.forOrders.map((on) => (
+                  <label
+                    key={on}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800/80"
+                  >
+                    <input
+                      type="radio"
+                      name="pause-order"
+                      checked={selectedPauseOrder === on}
+                      onChange={() => setSelectedPauseOrder(on)}
+                      className="h-4 w-4 border-zinc-400 text-amber-600"
+                    />
+                    <span className="font-mono text-xs">{on}</span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : (
+              <p className="mt-3 text-xs text-zinc-600 dark:text-zinc-400">
+                Order:{" "}
+                <span className="font-mono font-medium text-foreground">
+                  {current.forOrders[0]}
+                </span>
+              </p>
+            )}
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={skipWorking}
+                onClick={() => {
+                  setSkipConfirmOpen(false);
+                  setSkipError(null);
+                }}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 px-4 text-sm font-medium text-foreground dark:border-zinc-600 dark:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  skipWorking ||
+                  !selectedPauseOrder ||
+                  !current.forOrders.includes(selectedPauseOrder)
+                }
+                onClick={async () => {
+                  const step = walkSteps[index];
+                  const toPause = selectedPauseOrder;
+                  if (!step || !toPause || !step.forOrders.includes(toPause)) {
+                    setSkipError("Choose an order on this stop");
+                    return;
+                  }
+                  setSkipWorking(true);
+                  setSkipError(null);
+                  try {
+                    const res = await fetch("/api/picklists/pause-missing-stock", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        dayKey,
+                        listKind,
+                        affectedOrderNumbers: [toPause],
+                        steps: walkSteps,
+                        currentStepIndex: index,
+                        currentStep: step,
+                      }),
+                    });
+                    const data = (await res.json().catch(() => ({}))) as {
+                      ok?: boolean;
+                      error?: string;
+                      returnHints?: {
+                        orderNumber: string;
+                        returnToLocations: string[];
+                      }[];
+                    };
+                    if (!res.ok || !data.ok) {
+                      setSkipError(data.error ?? "Could not pause order");
+                      return;
+                    }
+                    const nextExcluded = [...excludedPauseOrders, toPause];
+                    const remaining = batchOrders.filter(
+                      (o) => !nextExcluded.includes(o.orderNumber),
+                    );
+                    const newSteps = buildSortedStepsFromOrders(remaining);
+                    const newAssembly = buildAssemblyFromOrders(remaining);
+                    let nextIdx = 0;
+                    if (newSteps.length > 0) {
+                      const ni = newSteps.findIndex(
+                        (s) =>
+                          s.location === step.location && s.sku === step.sku,
+                      );
+                      nextIdx =
+                        ni >= 0
+                          ? ni
+                          : Math.min(index, newSteps.length - 1);
+                    }
+                    setExcludedPauseOrders(nextExcluded);
+                    setWalkSteps(newSteps);
+                    setWalkAssembly(newAssembly);
+                    setWalkOrderNumbers(remaining.map((o) => o.orderNumber));
+                    setIndex(Math.max(0, nextIdx));
+                    setSessionPauseHints((p) => [
+                      ...p,
+                      ...(Array.isArray(data.returnHints)
+                        ? data.returnHints
+                        : []),
+                    ]);
+                    setSkipConfirmOpen(false);
+                    setPauseToast(
+                      `Order ${toPause} paused — pick continues for the other orders.`,
+                    );
+                    window.setTimeout(() => setPauseToast(null), 6500);
+                  } finally {
+                    setSkipWorking(false);
+                  }
+                }}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg bg-amber-600 px-4 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60 dark:bg-amber-500 dark:text-amber-950 dark:hover:bg-amber-400"
+              >
+                {skipWorking ? "Pausing…" : "Confirm pause"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold text-foreground">
             Pick list {pickListNumber}
           </h1>
           <p className="mt-0.5 text-xs text-zinc-500">
-            {orderNumbers.join(" · ")}
+            {walkOrderNumbers.join(" · ")}
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1 text-right text-xs text-zinc-500">
@@ -582,6 +871,23 @@ export function PicklistWalkClient({
               : "Next"}
         </button>
       </div>
+      {current && current.forOrders.length > 0 && (
+        <button
+          type="button"
+          disabled={skipWorking || finishing}
+          onClick={() => {
+            setSkipError(null);
+            const fo = current.forOrders;
+            setSelectedPauseOrder(
+              fo.length === 1 ? fo[0]! : fo[0] ?? null,
+            );
+            setSkipConfirmOpen(true);
+          }}
+          className="text-center text-sm font-medium text-amber-800 underline decoration-amber-700/40 underline-offset-2 hover:text-amber-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-amber-300 dark:decoration-amber-400/40 dark:hover:text-amber-200"
+        >
+          Pause 1 order — no stock at this bin (pick continues)
+        </button>
+      )}
       <p className="text-center text-[0.65rem] text-zinc-400">
         Use ← / → or Enter for Next
       </p>

@@ -7,6 +7,7 @@ import {
   PICKLIST_LIST_KIND_UK_PREMIUM,
   type PicklistListKind,
 } from "@/lib/picklistListKind";
+import { getPausedOrderNumbersSetForPicklistContext } from "@/lib/orderPickPause";
 
 export const COMPLETED_PICKLISTS_COLLECTION = "completedPicklists";
 
@@ -172,7 +173,18 @@ export async function insertCompletedPicklist(
     dayKey,
     listKind,
   );
+  const paused = await getPausedOrderNumbersSetForPicklistContext(
+    dayKey,
+    listKind,
+  );
   for (const o of sorted) {
+    if (paused.has(o)) {
+      const err = new Error(
+        "One or more orders in this batch are paused (missing stock) and cannot be completed until the hold is cleared",
+      ) as Error & { code: string };
+      err.code = "ORDER_PAUSED";
+      throw err;
+    }
     if (existing.has(o)) {
       const err = new Error(
         "One or more orders in this batch are already completed for today",
