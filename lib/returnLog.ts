@@ -9,12 +9,14 @@ import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import { returnReasonLabel } from "@/lib/returnReasons";
 import { clampReturnLineNotes } from "@/lib/returnLineNotes";
 import { normalizeShopifyOrderIdForStorage } from "@/lib/shopifyOrderAdminUrl";
+import { dispositionCountsTowardCustomerRefund } from "@/lib/returnRefundDisposition";
 import {
   normalizeReturnLineDisposition,
   type InsertReturnLogInput,
   type ReturnLogLineEntry,
   type ReturnLogListItem,
 } from "@/lib/returnLogTypes";
+import { insertReturnRefundLedgerEntry } from "@/lib/returnRefundLedger";
 import type { SiteAccessRole } from "@/lib/siteAccess";
 
 export const RETURN_LOGS_COLLECTION = "returnLogs";
@@ -36,8 +38,11 @@ type ReturnLogMongo = {
   fullRefundIssuedAt?: Date;
   updatedAt: Date;
   loggedByRole?: SiteAccessRole;
+  loggedByOperator?: string;
   customerEmailMarkedByRole?: SiteAccessRole;
+  customerEmailMarkedByOperator?: string;
   fullRefundMarkedByRole?: SiteAccessRole;
+  fullRefundMarkedByOperator?: string;
 };
 
 function lineTotal(quantity: number, unit: number) {
@@ -84,7 +89,12 @@ export async function insertReturnLog(
   });
 
   const totalRefundGbp =
-    Math.round(lines.reduce((s, l) => s + l.lineTotalGbp, 0) * 100) / 100;
+    Math.round(
+      lines.reduce((s, l) => {
+        if (!dispositionCountsTowardCustomerRefund(l.disposition)) return s;
+        return s + l.lineTotalGbp;
+      }, 0) * 100,
+    ) / 100;
 
   const returnUid = randomUUID();
   const now = new Date();
@@ -100,6 +110,9 @@ export async function insertReturnLog(
     fullRefundIssued: false,
     updatedAt: now,
     ...(input.loggedByRole ? { loggedByRole: input.loggedByRole } : {}),
+    ...(input.loggedByOperator?.trim()
+      ? { loggedByOperator: input.loggedByOperator.trim() }
+      : {}),
   };
 
   const client = await clientPromise;
@@ -142,11 +155,22 @@ const mapDocToListItem = (d: ReturnLogMongo): ReturnLogListItem => ({
     ? { fullRefundIssuedAt: d.fullRefundIssuedAt.toISOString() }
     : {}),
   ...(d.loggedByRole ? { loggedByRole: d.loggedByRole } : {}),
+  ...(typeof d.loggedByOperator === "string" && d.loggedByOperator.trim()
+    ? { loggedByOperator: d.loggedByOperator.trim() }
+    : {}),
   ...(d.customerEmailMarkedByRole
     ? { customerEmailMarkedByRole: d.customerEmailMarkedByRole }
     : {}),
+  ...(typeof d.customerEmailMarkedByOperator === "string" &&
+  d.customerEmailMarkedByOperator.trim()
+    ? { customerEmailMarkedByOperator: d.customerEmailMarkedByOperator.trim() }
+    : {}),
   ...(d.fullRefundMarkedByRole
     ? { fullRefundMarkedByRole: d.fullRefundMarkedByRole }
+    : {}),
+  ...(typeof d.fullRefundMarkedByOperator === "string" &&
+  d.fullRefundMarkedByOperator.trim()
+    ? { fullRefundMarkedByOperator: d.fullRefundMarkedByOperator.trim() }
     : {}),
 });
 
@@ -290,7 +314,10 @@ function escRegex(s: string) {
 
 export async function markReturnCustomerEmailSent(
   returnUid: string,
-  opts?: { markedByRole?: SiteAccessRole },
+  opts?: {
+    markedByRole?: SiteAccessRole;
+    markedByOperator?: string | null;
+  },
 ): Promise<boolean> {
   const client = await clientPromise;
   const col = client
@@ -305,6 +332,9 @@ export async function markReturnCustomerEmailSent(
   if (opts?.markedByRole) {
     set.customerEmailMarkedByRole = opts.markedByRole;
   }
+  if (opts?.markedByOperator?.trim()) {
+    set.customerEmailMarkedByOperator = opts.markedByOperator.trim();
+  }
   const res = await col.updateOne({ returnUid: String(returnUid) }, { $set: set });
   return res.matchedCount === 1;
 }
@@ -312,14 +342,22 @@ export async function markReturnCustomerEmailSent(
 export async function markReturnFullRefund(
   returnUid: string,
   fullRefundAmountGbp: number,
-  opts?: { markedByRole?: SiteAccessRole },
+  opts?: {
+    markedByRole?: SiteAccessRole;
+    markedByOperator?: string | null;
+  },
 ): Promise<boolean> {
   const client = await clientPromise;
   const col = client
     .db(kokobayDbName)
     .collection(RETURN_LOGS_COLLECTION);
+  const uid = String(returnUid).trim();
+  const prev = await col.findOne({ returnUid: uid });
+  if (!prev) return false;
+
   const now = new Date();
-  const amt = Math.max(0, fullRefundAmountGbp);
+  const amt = Math.round(Math.max(0, fullRefundAmountGbp) * 100) / 100;
+  const wasAlreadyIssued = prev.fullRefundIssued === true;
   const set: Record<string, unknown> = {
     fullRefundIssued: true,
     fullRefundAmountGbp: amt,
@@ -329,6 +367,21 @@ export async function markReturnFullRefund(
   if (opts?.markedByRole) {
     set.fullRefundMarkedByRole = opts.markedByRole;
   }
-  const res = await col.updateOne({ returnUid: String(returnUid) }, { $set: set });
-  return res.matchedCount === 1;
+  if (opts?.markedByOperator?.trim()) {
+    set.fullRefundMarkedByOperator = opts.markedByOperator.trim();
+  }
+  await col.updateOne({ returnUid: uid }, { $set: set });
+
+  if (!wasAlreadyIssued) {
+    await insertReturnRefundLedgerEntry({
+      returnUid: uid,
+      orderRef: String(prev.orderRef ?? "").trim() || "—",
+      amountGbp: amt,
+      recordedAt: now,
+      markedByRole: opts?.markedByRole,
+      markedByOperator: opts?.markedByOperator,
+    });
+  }
+
+  return true;
 }

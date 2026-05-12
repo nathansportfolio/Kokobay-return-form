@@ -12,7 +12,10 @@ import {
   colourValueFromLineDisplayName,
   isLikelySizeOnlyToken,
 } from "@/lib/shopifyProductCatalog";
-import { splitSizeFromColourParens } from "@/lib/splitSizeFromColourParens";
+import {
+  splitSizeAndColourFromSlashToken,
+  splitSizeFromColourParens,
+} from "@/lib/splitSizeFromColourParens";
 import { displaySkuForShopifyLineItem } from "@/lib/shopifyLineItemSku";
 import { lineItemTitle } from "@/lib/shopifyLineItemTitle";
 import { sizeFromShopifyLineItem } from "@/lib/variantTitleSizeLabel";
@@ -226,7 +229,16 @@ function toWarehouseLines(
       fromMongo !== "—" &&
       !isLikelySizeOnlyToken(fromMongo);
     let lineColor: string | undefined = (mongoSane ? fromMongo : fromTitle) || undefined;
-    let size: string | undefined = sizeFromShopifyLineItem(li, lineColor);
+    let sizeHintFromSlashColour: string | undefined;
+    if (lineColor) {
+      const slash = splitSizeAndColourFromSlashToken(lineColor);
+      if (slash) {
+        lineColor = slash.colourOnly;
+        sizeHintFromSlashColour = slash.sizeIfSplit;
+      }
+    }
+    let size: string | undefined =
+      sizeFromShopifyLineItem(li, lineColor) ?? sizeHintFromSlashColour;
     if (lineColor) {
       const { colour, sizeFromParens } = splitSizeFromColourParens(lineColor);
       lineColor = colour || undefined;
@@ -238,6 +250,16 @@ function toWarehouseLines(
       0,
       Math.round(Number.parseFloat(String(li.price) || "0") * 100) || 0,
     );
+    const lineItemId =
+      typeof li.id === "number" && Number.isFinite(li.id) ? li.id : undefined;
+    const variantId =
+      typeof li.variant_id === "number" && Number.isFinite(li.variant_id)
+        ? li.variant_id
+        : undefined;
+    const productId =
+      typeof li.product_id === "number" && Number.isFinite(li.product_id)
+        ? li.product_id
+        : undefined;
     return {
       sku,
       quantity: Math.max(1, Math.trunc(Number(li.quantity) || 0)),
@@ -251,6 +273,9 @@ function toWarehouseLines(
       location,
       unitPricePence: pence,
       requiresShipping: li.requires_shipping,
+      ...(lineItemId != null ? { shopifyLineItemId: lineItemId } : {}),
+      ...(variantId != null ? { shopifyVariantId: variantId } : {}),
+      ...(productId != null ? { shopifyProductId: productId } : {}),
     } satisfies WarehouseOrderLine;
   });
 }
@@ -361,11 +386,6 @@ export function orderPlacedInLondonOnDayBefore14(
 export async function getUkPremiumShopifyOrdersForPicks(): Promise<
   OrderForPick[]
 > {
-  const client = await clientPromise;
-  await ensureProductCatalogSyncedForWarehouseDay(
-    client.db(kokobayDbName),
-  );
-
   const dayKey = getTodayCalendarDateKeyInLondon();
   const raw = await getShopifyOrdersInWarehouseDay(dayKey);
   const filtered = raw.filter(
@@ -374,10 +394,31 @@ export async function getUkPremiumShopifyOrdersForPicks(): Promise<
       orderHasShippingLineTitle(o, UK_PREMIUM_NDD_LINE_TITLE),
   );
 
+  return enrichShopifyOrdersAsOrderForPick(filtered);
+}
+
+export type EnrichShopifyOrdersOptions = {
+  /** Server `console.log` each warehouse line after enrich (debug / drills). */
+  logEachPickItem?: boolean;
+};
+
+/**
+ * Turn arbitrary Shopify orders (same shape as Admin REST) into pick rows:
+ * Mongo `products` / `stock`, variant images, bins — same pipeline as the
+ * main pick list, without filtering by warehouse day.
+ */
+export async function enrichShopifyOrdersAsOrderForPick(
+  orders: ShopifyOrder[],
+  options?: EnrichShopifyOrdersOptions,
+): Promise<OrderForPick[]> {
+  if (orders.length === 0) return [];
+  const client = await clientPromise;
+  await ensureProductCatalogSyncedForWarehouseDay(client.db(kokobayDbName));
+
   const allSkus: string[] = [];
   const allVariantIds: number[] = [];
-  for (const o of filtered) {
-    for (const li of o.line_items) {
+  for (const o of orders) {
+    for (const li of o.line_items ?? []) {
       if ((li.quantity ?? 0) <= 0) continue;
       allSkus.push(displaySkuForShopifyLineItem(li));
       const v = li.variant_id;
@@ -389,20 +430,90 @@ export async function getUkPremiumShopifyOrdersForPicks(): Promise<
   const [m, binByVariantId, lineImageByLineId] = await Promise.all([
     loadMongoBySkus(allSkus),
     loadBinCodeByVariantId(allVariantIds),
-    lineItemImageUrlByLineId(filtered),
+    lineItemImageUrlByLineId(orders),
   ]);
 
-  return filtered.map((o) => {
+  const logItems = options?.logEachPickItem === true;
+
+  return orders.map((o) => {
     const { firstName, lastName } = displayCustomerNameParts(o);
+    const items = toWarehouseLines(o, m, binByVariantId, lineImageByLineId);
+    if (logItems) {
+      for (const item of items) {
+        // eslint-disable-next-line no-console -- intentional debug
+        console.log("[pick enrich line]", o.name, {
+          sku: item.sku,
+          qty: item.quantity,
+          name: item.name,
+          color: item.color,
+          size: item.size,
+          location: item.location,
+          unitPricePence: item.unitPricePence,
+          requiresShipping: item.requiresShipping,
+          thumbnailImageUrl: item.thumbnailImageUrl,
+        });
+      }
+    }
     return {
       orderNumber: o.name,
       status: shopifyOrderStatusLabel(o),
-      items: toWarehouseLines(o, m, binByVariantId, lineImageByLineId),
+      items,
       ...(firstName || lastName
         ? { customerFirstName: firstName, customerLastName: lastName }
         : {}),
     } satisfies OrderForPick;
   });
+}
+
+const SPEED_TEST_MAX_LATEST = 250;
+
+/**
+ * Most recently created orders (any status), for warehouse timing drills.
+ * Capped at 250 (Shopify REST page limit).
+ */
+export async function fetchLatestShopifyOrdersForSpeedTest(
+  limit: number,
+): Promise<ShopifyOrder[]> {
+  const lim = Math.min(
+    SPEED_TEST_MAX_LATEST,
+    Math.max(1, Math.floor(Number(limit) || 1)),
+  );
+  const { ok, data } = await shopifyAdminGetNoCache<ShopifyOrdersResponse>(
+    `orders.json?status=any&order=created_at+desc&limit=${lim}`,
+  );
+  if (!ok) return [];
+  return data.orders ?? [];
+}
+
+/**
+ * Load specific orders by Shopify numeric id (REST `ids` query).
+ * Result order matches `ids` (skips ids not returned).
+ */
+export async function fetchShopifyOrdersByIdsForSpeedTest(
+  ids: number[],
+): Promise<ShopifyOrder[]> {
+  const uniq = [...new Set(ids.map((n) => Math.floor(Number(n))))].filter(
+    (n) => Number.isFinite(n) && n > 0,
+  );
+  if (uniq.length === 0) return [];
+  const byId = new Map<number, ShopifyOrder>();
+  const chunkSize = 50;
+  for (let i = 0; i < uniq.length; i += chunkSize) {
+    const slice = uniq.slice(i, i + chunkSize);
+    const { ok, data } = await shopifyAdminGetNoCache<ShopifyOrdersResponse>(
+      `orders.json?ids=${slice.join(",")}&limit=${slice.length}`,
+    );
+    if (!ok) continue;
+    for (const o of data.orders ?? []) {
+      byId.set(o.id, o);
+    }
+  }
+  const out: ShopifyOrder[] = [];
+  for (const id of uniq) {
+    const o = byId.get(id);
+    if (o) out.push(o);
+  }
+  return out;
 }
 
 /**
@@ -417,40 +528,7 @@ export async function getUkPremiumShopifyOrdersForPicks(): Promise<
 export async function getTodaysShopifyOrderForPicks(
   dayKey: string,
 ): Promise<OrderForPick[]> {
-  const client = await clientPromise;
-  await ensureProductCatalogSyncedForWarehouseDay(
-    client.db(kokobayDbName),
-  );
   const inDay = await getShopifyOrdersInWarehouseDay(dayKey);
   if (inDay.length === 0) return [];
-
-  const allSkus: string[] = [];
-  const allVariantIds: number[] = [];
-  for (const o of inDay) {
-    for (const li of o.line_items) {
-      if ((li.quantity ?? 0) <= 0) continue;
-      allSkus.push(displaySkuForShopifyLineItem(li));
-      const v = li.variant_id;
-      if (typeof v === "number" && Number.isFinite(v)) {
-        allVariantIds.push(v);
-      }
-    }
-  }
-  const [m, binByVariantId, lineImageByLineId] = await Promise.all([
-    loadMongoBySkus(allSkus),
-    loadBinCodeByVariantId(allVariantIds),
-    lineItemImageUrlByLineId(inDay),
-  ]);
-
-  return inDay.map((o) => {
-    const { firstName, lastName } = displayCustomerNameParts(o);
-    return {
-      orderNumber: o.name,
-      status: shopifyOrderStatusLabel(o),
-      items: toWarehouseLines(o, m, binByVariantId, lineImageByLineId),
-      ...(firstName || lastName
-        ? { customerFirstName: firstName, customerLastName: lastName }
-        : {}),
-    } satisfies OrderForPick;
-  });
+  return enrichShopifyOrdersAsOrderForPick(inDay);
 }

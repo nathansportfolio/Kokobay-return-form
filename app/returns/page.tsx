@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { RefundedTodaySoFar } from "@/components/RefundedTodaySoFar";
 import { ReturnsOrderForm } from "@/components/ReturnsOrderForm";
 
-/** Server-rendered shell; form is a client island — safe to prerender. */
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Returns",
   description: "Process warehouse returns",
 };
 
-export default function ReturnsPage() {
+export default async function ReturnsPage() {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-4 sm:p-6">
       <div>
@@ -21,6 +21,7 @@ export default function ReturnsPage() {
           We resolve your entry in <strong>Shopify</strong>, then open the return
           screen for that order (name, id, and customer from live order data).
         </p>
+        <RefundedTodaySoFar className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" />
         <div className="mt-4 flex flex-wrap gap-1.5" aria-label="Return lists">
           <Link
             href="/returns/logged"

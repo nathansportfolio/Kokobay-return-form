@@ -8,7 +8,9 @@ import {
   shopifyOrderAdminUrlFromOrderRef,
 } from "@/lib/shopifyOrderAdminUrl";
 import { formatGbp } from "@/lib/kokobayOrderLines";
-import { warehouseSiteRoleAuditLabel } from "@/lib/returnAuditUi";
+import {
+  warehouseReturnAuditWho,
+} from "@/lib/returnAuditUi";
 import { returnLineHandlingListingLabel } from "@/lib/returnLogTypes";
 import type { SiteAccessRole } from "@/lib/siteAccess";
 import { formatKokobaySkuDisplay } from "@/lib/skuDisplay";
@@ -25,9 +27,22 @@ function formatIso(d: Date | string | undefined): string {
   return formatDateAsOrdinalInTimeZone(dt, WAREHOUSE_TZ);
 }
 
-function byRoleSuffix(role: SiteAccessRole | undefined): string | null {
-  if (!role) return null;
-  return ` · Logged by ${warehouseSiteRoleAuditLabel(role)}`;
+function loggedSuffix(
+  operator?: string | null,
+  role?: SiteAccessRole | undefined,
+): string | null {
+  const who = warehouseReturnAuditWho(operator, role);
+  if (who === "—") return null;
+  return ` · Logged by ${who}`;
+}
+
+function markedSuffix(
+  operator?: string | null,
+  role?: SiteAccessRole | undefined,
+): string | null {
+  const who = warehouseReturnAuditWho(operator, role);
+  if (who === "—") return null;
+  return ` · Marked by ${who}`;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -93,7 +108,7 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
           <dt className="text-zinc-500">Registered</dt>
           <dd className="text-foreground">
             {formatIso(doc.createdAt)}
-            {byRoleSuffix(doc.loggedByRole)}
+            {loggedSuffix(doc.loggedByOperator, doc.loggedByRole)}
           </dd>
         </div>
         <div>
@@ -109,8 +124,12 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
             {doc.customerEmailSentAt
               ? `· ${formatIso(doc.customerEmailSentAt)}`
               : null}
-            {doc.customerEmailMarkedByRole
-              ? ` · Marked by ${warehouseSiteRoleAuditLabel(doc.customerEmailMarkedByRole)}`
+            {doc.customerEmailMarkedByRole != null ||
+            doc.customerEmailMarkedByOperator?.trim()
+              ? markedSuffix(
+                  doc.customerEmailMarkedByOperator,
+                  doc.customerEmailMarkedByRole,
+                )
               : null}
           </dd>
         </div>
@@ -130,8 +149,12 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
             {doc.fullRefundIssuedAt
               ? `· ${formatIso(doc.fullRefundIssuedAt)}`
               : null}
-            {doc.fullRefundMarkedByRole
-              ? ` · Marked by ${warehouseSiteRoleAuditLabel(doc.fullRefundMarkedByRole)}`
+            {doc.fullRefundMarkedByRole != null ||
+            doc.fullRefundMarkedByOperator?.trim()
+              ? markedSuffix(
+                  doc.fullRefundMarkedByOperator,
+                  doc.fullRefundMarkedByRole,
+                )
               : null}
           </dd>
         </div>

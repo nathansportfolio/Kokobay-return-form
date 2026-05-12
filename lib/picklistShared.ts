@@ -66,6 +66,20 @@ export type OrderForPick = {
   customerLastName?: string;
 };
 
+/** Per contributing order line merged into one pick stop (same bin + SKU). */
+export type PickStepLineSourceMeta = {
+  orderNumber: string;
+  quantity: number;
+  shopifyLineItemId?: number;
+  shopifyVariantId?: number;
+  shopifyProductId?: number;
+  unitPricePence?: number;
+};
+
+export type PickStepMeta = {
+  sources: PickStepLineSourceMeta[];
+};
+
 export type PickStep = {
   step: number;
   sku: string;
@@ -105,7 +119,51 @@ export type PickStep = {
    * from `WarehouseOrderLine.size` and dashed titles; not in older archives.
    */
   size?: string;
+  /**
+   * Shopify ids and per-line qty for debugging / support. Omitted on older
+   * builds and mock-only orders.
+   */
+  meta?: PickStepMeta;
 };
+
+/** Validates optional `PickStep.meta` on API bodies (complete / pause). */
+export function pickStepMetaIsValid(meta: unknown): boolean {
+  if (meta === undefined) {
+    return true;
+  }
+  if (!meta || typeof meta !== "object") {
+    return false;
+  }
+  const m = meta as Record<string, unknown>;
+  if (!Array.isArray(m.sources)) {
+    return false;
+  }
+  for (const row of m.sources) {
+    if (!row || typeof row !== "object") {
+      return false;
+    }
+    const e = row as Record<string, unknown>;
+    if (typeof e.orderNumber !== "string") {
+      return false;
+    }
+    if (typeof e.quantity !== "number" || !Number.isFinite(e.quantity)) {
+      return false;
+    }
+    for (const k of [
+      "shopifyLineItemId",
+      "shopifyVariantId",
+      "shopifyProductId",
+      "unitPricePence",
+    ] as const) {
+      if (e[k] !== undefined) {
+        if (typeof e[k] !== "number" || !Number.isFinite(e[k] as number)) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
 
 export type AssemblyLine = {
   /** 1-based line order within the order (for packing). */

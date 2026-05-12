@@ -40,16 +40,37 @@ type Props = {
   /** e.g. `/picklists/today` or `/picklists/uk-premium` (no trailing slash). */
   listPathBase?: string;
   listKind?: PicklistListKind;
+  /**
+   * When false, Finish does not call the warehouse complete API (timing drill
+   * only). Default true.
+   */
+  submitPickCompleteToServer?: boolean;
+  /**
+   * When false, hides “pause missing stock” (e.g. speed test). Default true.
+   */
+  enablePauseMissingStock?: boolean;
+  /**
+   * Extra query params appended to “back to list” links (e.g. speed test
+   * `ids` so the hub reloads the same batch).
+   */
+  listUrlSearchParams?: Record<string, string>;
 };
 
 function makeListListHref(
   ordersPerList: number,
   itemsPerList: number,
   listPathBase: string,
+  extra?: Record<string, string>,
 ) {
   const p = new URLSearchParams();
   p.set("ordersPerList", String(ordersPerList));
   p.set("itemsPerList", String(itemsPerList));
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) {
+      const t = v.trim();
+      if (t) p.set(k, t);
+    }
+  }
   return `${listPathBase}?${p.toString()}`;
 }
 
@@ -166,11 +187,15 @@ export function PicklistWalkClient({
   assembly: initialAssembly,
   listPathBase: listPathBaseIn,
   listKind: listKindIn,
+  submitPickCompleteToServer = true,
+  enablePauseMissingStock = true,
+  listUrlSearchParams,
 }: Props) {
   const router = useRouter();
   const listPathBase = listPathBaseIn ?? "/picklists/today";
   const listKind = listKindIn ?? PICKLIST_LIST_KIND_STANDARD;
-  const listHref = (o: number, it: number) => makeListListHref(o, it, listPathBase);
+  const listHref = (o: number, it: number) =>
+    makeListListHref(o, it, listPathBase, listUrlSearchParams);
   const [index, setIndex] = useState(0);
   const [complete, setComplete] = useState(false);
   const [apiSaved, setApiSaved] = useState(false);
@@ -237,12 +262,19 @@ export function PicklistWalkClient({
         setComplete(true);
         return;
       }
-      setFinishing(true);
       setFinishError(null);
       const t0 = walkSessionStartedAt.current;
       const durationMs =
         t0 != null ? Math.max(0, Date.now() - t0) : 0;
       try {
+        if (!submitPickCompleteToServer) {
+          void durationMs;
+          setApiSaved(true);
+          setPostPickPhase("assembly");
+          setComplete(true);
+          return;
+        }
+        setFinishing(true);
         const res = await fetch("/api/picklists/complete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -291,6 +323,7 @@ export function PicklistWalkClient({
     itemsPerList,
     walkSteps,
     totalItemsQty,
+    submitPickCompleteToServer,
   ]);
 
   const goPrev = useCallback(() => {
@@ -334,16 +367,22 @@ export function PicklistWalkClient({
             <p className="font-medium text-foreground">
               Every order on this list was paused for missing stock.
             </p>
-            <p className="mt-2">
-              Nothing left to pick here. Use{" "}
-              <Link
-                href={`${listPathBase}/missing-stock`}
-                className="text-foreground underline"
-              >
-                Missing stock
-              </Link>{" "}
-              for return hints, then go back when holds are cleared.
-            </p>
+            {submitPickCompleteToServer ? (
+              <p className="mt-2">
+                Nothing left to pick here. Use{" "}
+                <Link
+                  href={`${listPathBase}/missing-stock`}
+                  className="text-foreground underline"
+                >
+                  Missing stock
+                </Link>{" "}
+                for return hints, then go back when holds are cleared.
+              </p>
+            ) : (
+              <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+                Speed test — use Back to leave this screen.
+              </p>
+            )}
           </>
         ) : (
           <p>No pick steps in this list.</p>
@@ -353,7 +392,9 @@ export function PicklistWalkClient({
             href={listHref(ordersPerList, itemsPerList)}
             className="font-medium text-foreground underline"
           >
-            Back to pick lists
+            {submitPickCompleteToServer
+              ? "Back to pick lists"
+              : "Back to speed test"}
           </Link>
         </div>
       </div>
@@ -388,17 +429,31 @@ export function PicklistWalkClient({
               </h2>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
                 Picked for the orders still on this list. Build each from its
-                lines, then mark assembled. For any order paused during the walk,
-                return picked units to the bins below, then handle the hold on{" "}
-                <Link
-                  href={`${listPathBase}/missing-stock`}
-                  className="font-medium text-foreground underline"
-                >
-                  Missing stock
-                </Link>
-                .
+                lines, then mark assembled.
+                {!submitPickCompleteToServer ? (
+                  <>
+                    {" "}
+                    <span className="font-medium text-sky-800 dark:text-sky-200">
+                      Speed test — nothing is saved to completed picklists.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {" "}
+                    For any order paused during the walk, return picked units to
+                    the bins below, then handle the hold on{" "}
+                    <Link
+                      href={`${listPathBase}/missing-stock`}
+                      className="font-medium text-foreground underline"
+                    >
+                      Missing stock
+                    </Link>
+                    .
+                  </>
+                )}
               </p>
-              {mergeReturnBinsByOrder(sessionPauseHints).length > 0 ? (
+              {submitPickCompleteToServer &&
+              mergeReturnBinsByOrder(sessionPauseHints).length > 0 ? (
                 <div className="rounded-xl border border-amber-300/90 bg-amber-50/90 p-4 text-sm dark:border-amber-800/70 dark:bg-amber-950/40">
                   <p className="font-semibold text-amber-950 dark:text-amber-100">
                     Paused orders — put picked stock back in these bins
@@ -467,23 +522,31 @@ export function PicklistWalkClient({
           {phase === "packed" && (
             <div className="flex flex-col gap-4">
               <h2 className="text-sm font-semibold text-foreground">Packed</h2>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                This pick is complete. Orders stay off the active list unless
-                undone in{" "}
-                <Link
-                  href={`${listPathBase}/completed?ordersPerList=${ordersPerList}&itemsPerList=${itemsPerList}`}
-                  className="font-medium text-foreground underline"
-                >
-                  View completed
-                </Link>
-                .
-              </p>
+              {submitPickCompleteToServer ? (
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  This pick is complete. Orders stay off the active list unless
+                  undone in{" "}
+                  <Link
+                    href={`${listPathBase}/completed?ordersPerList=${ordersPerList}&itemsPerList=${itemsPerList}`}
+                    className="font-medium text-foreground underline"
+                  >
+                    View completed
+                  </Link>
+                  .
+                </p>
+              ) : (
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  Speed test run finished (no warehouse records were written).
+                </p>
+              )}
               <Link
                 href={listHref(ordersPerList, itemsPerList)}
                 onClick={() => router.refresh()}
                 className="inline-flex min-h-11 w-full min-w-0 max-w-sm items-center justify-center rounded-lg border-2 border-zinc-200 bg-zinc-100 px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
               >
-                Back to all pick lists
+                {submitPickCompleteToServer
+                  ? "Back to all pick lists"
+                  : "Back to speed test"}
               </Link>
             </div>
           )}
@@ -505,7 +568,9 @@ export function PicklistWalkClient({
             href={listHref(ordersPerList, itemsPerList)}
             className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-100 px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
           >
-            Back to all pick lists
+            {submitPickCompleteToServer
+              ? "Back to all pick lists"
+              : "Back to speed test"}
           </Link>
           <button
             type="button"
@@ -554,7 +619,7 @@ export function PicklistWalkClient({
           {skipError}
         </p>
       ) : null}
-      {skipConfirmOpen && current && (
+      {enablePauseMissingStock && skipConfirmOpen && current && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
           role="dialog"
@@ -865,13 +930,15 @@ export function PicklistWalkClient({
           className="order-1 inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-60 dark:bg-amber-500 dark:text-amber-950 sm:order-2 sm:max-w-xs"
         >
           {finishing
-            ? "Saving…"
+            ? submitPickCompleteToServer
+              ? "Saving…"
+              : "Finishing…"
             : atEnd
               ? "Finish"
               : "Next"}
         </button>
       </div>
-      {current && current.forOrders.length > 0 && (
+      {enablePauseMissingStock && current && current.forOrders.length > 0 && (
         <button
           type="button"
           disabled={skipWorking || finishing}
@@ -897,7 +964,7 @@ export function PicklistWalkClient({
           href={listHref(ordersPerList, itemsPerList)}
           className="text-sm text-zinc-500 underline"
         >
-          View full list
+          {submitPickCompleteToServer ? "View full list" : "Speed test home"}
         </Link>
       </p>
     </div>

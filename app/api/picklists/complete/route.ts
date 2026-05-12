@@ -6,7 +6,7 @@ import {
   PICKLIST_LIST_KIND_UK_PREMIUM,
   type PicklistListKind,
 } from "@/lib/picklistListKind";
-import { clampItemsPerList } from "@/lib/picklistShared";
+import { clampItemsPerList, pickStepMetaIsValid } from "@/lib/picklistShared";
 
 type Body = {
   dayKey?: string;
@@ -85,6 +85,9 @@ function isPickStepArray(x: unknown): x is PickStep[] {
         if (typeof e.orderNumber !== "string") return false;
         if (typeof e.quantity !== "number") return false;
       }
+    }
+    if (!pickStepMetaIsValid(o.meta)) {
+      return false;
     }
   }
   return true;

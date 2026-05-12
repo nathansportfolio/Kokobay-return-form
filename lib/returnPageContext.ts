@@ -118,6 +118,9 @@ export async function getReturnPageLinesAndResume(
         returnUid: last.returnUid,
         customerEmailSent: last.customerEmailSent,
         fullRefundIssued: last.fullRefundIssued,
+        ...(typeof last.loggedByOperator === "string" && last.loggedByOperator.trim()
+          ? { loggedByOperator: last.loggedByOperator.trim() }
+          : {}),
         byLine,
       },
       formContext: { kind: "returnLog" },

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { PickStep } from "@/lib/picklistShared";
+import { pickStepMetaIsValid, type PickStep } from "@/lib/picklistShared";
 import {
   PICKLIST_LIST_KIND_STANDARD,
   PICKLIST_LIST_KIND_UK_PREMIUM,
@@ -74,6 +74,9 @@ function isPickStepArray(x: unknown): x is PickStep[] {
         if (typeof e.orderNumber !== "string") return false;
         if (typeof e.quantity !== "number") return false;
       }
+    }
+    if (!pickStepMetaIsValid(o.meta)) {
+      return false;
     }
   }
   return true;

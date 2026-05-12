@@ -1,6 +1,6 @@
 import type { SiteAccessRole } from "@/lib/siteAccess";
 
-/** Short label for warehouse PIN sessions stored on return logs. */
+/** Short label for warehouse PIN sessions stored on return logs (no signature). */
 export function warehouseSiteRoleAuditLabel(role: SiteAccessRole): string {
   return role === "admin" ? "Admin session" : "Team session";
 }
@@ -15,4 +15,25 @@ export function warehouseSiteRoleAuditDigit(
   if (role === "admin") return "2";
   if (role === "user") return "1";
   return "—";
+}
+
+/** Prefer PIN signature (Helen, KURT, …); else role-based label; else em dash. */
+export function warehouseReturnAuditWho(
+  operator?: string | null,
+  role?: SiteAccessRole | undefined,
+): string {
+  const o = operator?.trim();
+  if (o) return o;
+  if (role) return warehouseSiteRoleAuditLabel(role);
+  return "—";
+}
+
+/** Table / card cell: signature when stored, else legacy digit. */
+export function warehouseReturnAuditListCell(
+  operator?: string | null,
+  role?: SiteAccessRole | undefined,
+): string {
+  const o = operator?.trim();
+  if (o) return o;
+  return warehouseSiteRoleAuditDigit(role);
 }

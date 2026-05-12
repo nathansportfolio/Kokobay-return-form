@@ -1,5 +1,6 @@
 import { parseDashedProductTitle } from "@/lib/assemblyLineTitle";
 import { lineItemTitle } from "@/lib/shopifyLineItemTitle";
+import { isLikelySizeOnlyToken } from "@/lib/shopifyProductCatalog";
 import type { ShopifyLineItem } from "@/types/shopify";
 
 /**
@@ -16,7 +17,16 @@ export function sizeLabelFromShopifyVariantTitle(
   }
   const segs = t.split(/\s*\/\s*/).map((s) => s.trim()).filter(Boolean);
   if (segs.length >= 2) {
+    const first = segs[0]!;
     const last = segs[segs.length - 1]!;
+    const firstSize = isLikelySizeOnlyToken(first);
+    const lastSize = isLikelySizeOnlyToken(last);
+    if (lastSize && !firstSize) {
+      return last || undefined;
+    }
+    if (firstSize && !lastSize) {
+      return first || undefined;
+    }
     return last || undefined;
   }
   const one = segs[0]!;

@@ -8,6 +8,27 @@ import {
 } from "@/lib/returnPageContext";
 import { resolveOrderRefFromPathSegment } from "@/lib/orderRefAliases";
 import { fetchShopifyOrderDisplay } from "@/lib/shopifyReturnOrderLookup";
+import { cookies } from "next/headers";
+import {
+  WAREHOUSE_OPERATOR_COOKIE,
+  parseWarehouseOperatorLabelFromEncodedValue,
+} from "@/lib/siteAccess";
+
+function firstNameForKlaviyo(input: {
+  customerFirstName: string;
+  customerName: string;
+  email: string;
+}): string {
+  const direct = input.customerFirstName.trim();
+  if (direct) return direct;
+  const full = input.customerName.trim();
+  if (full && full !== "—") {
+    const token = full.split(/\s+/)[0];
+    if (token) return token;
+  }
+  const local = input.email.split("@")[0]?.trim();
+  return local || "Customer";
+}
 
 type PageProps = {
   params: Promise<{ orderNumber: string }>;
@@ -81,6 +102,33 @@ export default async function OrderReturnPage({ params }: PageProps) {
 
   const orderTitle = shopifyOrder?.orderName ?? label;
   const orderIdForLink = shopifyOrder?.shopifyOrderId;
+
+  const notifyCustomer =
+    shopifyOrder?.email?.trim()
+      ? {
+          email: shopifyOrder.email.trim(),
+          firstName: firstNameForKlaviyo({
+            customerFirstName: shopifyOrder.customerFirstName ?? "",
+            customerName: shopifyOrder.customerName,
+            email: shopifyOrder.email.trim(),
+          }),
+        }
+      : formContext.kind === "customerForm" &&
+          formContext.customerEmail?.trim()
+        ? {
+            email: formContext.customerEmail.trim(),
+            firstName: firstNameForKlaviyo({
+              customerFirstName: "",
+              customerName: formContext.customerName,
+              email: formContext.customerEmail.trim(),
+            }),
+          }
+        : null;
+
+  const cookieStore = await cookies();
+  const currentOperatorLabel = parseWarehouseOperatorLabelFromEncodedValue(
+    cookieStore.get(WAREHOUSE_OPERATOR_COOKIE)?.value ?? null,
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-4 sm:p-6">
@@ -260,6 +308,8 @@ export default async function OrderReturnPage({ params }: PageProps) {
           shopifyOrderId={orderIdForLink}
           lines={lines}
           resume={resume}
+          notifyCustomer={notifyCustomer}
+          currentOperatorLabel={currentOperatorLabel}
         />
       )}
     </div>

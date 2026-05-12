@@ -16,6 +16,10 @@ export type WarehouseOrderLine = {
    * racks (e.g. digital, fee). Omitted = legacy / mock, treated as shippable.
    */
   requiresShipping?: boolean;
+  /** Present when the line was built from Shopify Admin REST line items. */
+  shopifyLineItemId?: number;
+  shopifyVariantId?: number;
+  shopifyProductId?: number;
 };
 
 export type WarehouseOrder = {

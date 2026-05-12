@@ -4,7 +4,10 @@ import {
   markReturnCustomerEmailSent,
   markReturnFullRefund,
 } from "@/lib/returnLog";
-import { parseSiteAccessRoleFromCookieHeader } from "@/lib/siteAccess";
+import {
+  parseSiteAccessRoleFromCookieHeader,
+  parseWarehouseOperatorLabelFromCookieHeader,
+} from "@/lib/siteAccess";
 
 type PatchBody = {
   markEmailSent?: boolean;
@@ -56,7 +59,16 @@ export async function PATCH(
   const markedByRole = parseSiteAccessRoleFromCookieHeader(
     request.headers.get("cookie"),
   );
-  const auditOpts = markedByRole ? { markedByRole } : undefined;
+  const markedByOperator = parseWarehouseOperatorLabelFromCookieHeader(
+    request.headers.get("cookie"),
+  );
+  const auditOpts =
+    markedByRole || markedByOperator
+      ? {
+          ...(markedByRole ? { markedByRole } : {}),
+          ...(markedByOperator ? { markedByOperator } : {}),
+        }
+      : undefined;
 
   try {
     if (hasEmail) {

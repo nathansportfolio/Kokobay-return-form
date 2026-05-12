@@ -5,7 +5,12 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
-import { SITE_ACCESS_COOKIE, type SiteAccessRole } from "@/lib/siteAccess";
+import {
+  SITE_ACCESS_COOKIE,
+  WAREHOUSE_OPERATOR_COOKIE,
+  type SiteAccessRole,
+} from "@/lib/siteAccess";
+import { matchWarehousePinToSession } from "@/lib/warehouseOperatorPin";
 
 const MAX_AGE_SEC = 60 * 60 * 24 * 7; // 7 days
 const COOKIE_BASE = `path=/; max-age=${MAX_AGE_SEC}; SameSite=Lax`;
@@ -16,30 +21,25 @@ function setSiteAccessCookie(role: SiteAccessRole) {
   document.cookie = `auth=; path=/; max-age=0`;
 }
 
+function setWarehouseOperatorCookie(operatorLabel: string) {
+  const encoded = encodeURIComponent(operatorLabel);
+  document.cookie = `${WAREHOUSE_OPERATOR_COOKIE}=${encoded}; ${COOKIE_BASE}`;
+}
+
 export default function Login() {
   const [pin, setPin] = useState("");
 
   const handleLogin = () => {
     const value = pin.trim();
-    const userPin = String(
-      process.env.NEXT_PUBLIC_SITE_PIN_USER ?? "",
-    ).trim();
-    const adminPin = String(
-      process.env.NEXT_PUBLIC_SITE_PIN_ADMIN ?? "",
-    ).trim();
-
-    if (adminPin.length > 0 && value === adminPin) {
-      setSiteAccessCookie("admin");
-      window.location.href = "/";
-      return;
-    }
-    if (userPin.length > 0 && value === userPin) {
-      setSiteAccessCookie("user");
+    const match = matchWarehousePinToSession(value);
+    if (match) {
+      setSiteAccessCookie(match.role);
+      setWarehouseOperatorCookie(match.operatorLabel);
       window.location.href = "/";
       return;
     }
 
-    alert("Wrong PIN. Use the user or admin PIN you configured.");
+    alert("Wrong PIN. Use a PIN you were given for this warehouse.");
   };
 
   return (

@@ -59,10 +59,14 @@ export type ReturnLogDoc = {
   updatedAt: string | Date;
   /** PIN session role when the warehouse registered this return (`site_access`). */
   loggedByRole?: SiteAccessRole;
+  /** Display name from warehouse PIN at log time (`warehouse_operator` cookie). */
+  loggedByOperator?: string;
   /** PIN session role when “customer email sent” was marked. */
   customerEmailMarkedByRole?: SiteAccessRole;
+  customerEmailMarkedByOperator?: string;
   /** PIN session role when full refund was marked issued. */
   fullRefundMarkedByRole?: SiteAccessRole;
+  fullRefundMarkedByOperator?: string;
 };
 
 export type ReturnLogListItem = {
@@ -84,8 +88,11 @@ export type ReturnLogListItem = {
   fullRefundAmountGbp?: number;
   fullRefundIssuedAt?: string;
   loggedByRole?: SiteAccessRole;
+  loggedByOperator?: string;
   customerEmailMarkedByRole?: SiteAccessRole;
+  customerEmailMarkedByOperator?: string;
   fullRefundMarkedByRole?: SiteAccessRole;
+  fullRefundMarkedByOperator?: string;
 };
 
 /**
@@ -100,6 +107,8 @@ export type ReturnPageResume = {
   customerFormSubmissionUid?: string;
   customerEmailSent: boolean;
   fullRefundIssued: boolean;
+  /** Who registered the last warehouse return for this order (PIN signature). */
+  loggedByOperator?: string;
   byLine: Record<
     string,
     {
@@ -126,6 +135,8 @@ export type InsertReturnLogInput = {
   }[];
   /** From `site_access` cookie when the request is authenticated as warehouse. */
   loggedByRole?: SiteAccessRole | null;
+  /** From `warehouse_operator` cookie (PIN signature). */
+  loggedByOperator?: string | null;
 };
 
 /** Label for warehouse handling on refund / logged lists. */

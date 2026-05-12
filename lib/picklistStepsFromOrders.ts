@@ -9,6 +9,7 @@ import type {
   OrderAssembly,
   OrderForPick,
   PickStep,
+  PickStepLineSourceMeta,
 } from "@/lib/picklistShared";
 import type { WarehouseOrderLine } from "@/lib/warehouseMockOrders";
 import { hexForProductColorName } from "@/lib/warehouseProductColors";
@@ -50,6 +51,32 @@ function pickListLineName(line: WarehouseOrderLine): string {
   return without || base;
 }
 
+function lineSourceMetaFromWarehouseLine(
+  orderNumber: string,
+  line: WarehouseOrderLine,
+): PickStepLineSourceMeta {
+  const lid = line.shopifyLineItemId;
+  const vid = line.shopifyVariantId;
+  const pid = line.shopifyProductId;
+  const up = line.unitPricePence;
+  return {
+    orderNumber,
+    quantity: line.quantity,
+    ...(typeof lid === "number" && Number.isFinite(lid)
+      ? { shopifyLineItemId: lid }
+      : {}),
+    ...(typeof vid === "number" && Number.isFinite(vid)
+      ? { shopifyVariantId: vid }
+      : {}),
+    ...(typeof pid === "number" && Number.isFinite(pid)
+      ? { shopifyProductId: pid }
+      : {}),
+    ...(typeof up === "number" && Number.isFinite(up)
+      ? { unitPricePence: up }
+      : {}),
+  };
+}
+
 export function buildSortedStepsFromOrders(orders: OrderForPick[]): PickStep[] {
   type Agg = {
     sku: string;
@@ -63,6 +90,7 @@ export function buildSortedStepsFromOrders(orders: OrderForPick[]): PickStep[] {
     colors: Set<string>;
     sizes: Set<string>;
     thumbnailImageUrl?: string;
+    sources: PickStepLineSourceMeta[];
   };
   const map = new Map<string, Agg>();
 
@@ -90,6 +118,7 @@ export function buildSortedStepsFromOrders(orders: OrderForPick[]): PickStep[] {
         }
         addLineColor(prev.colors, line);
         addLineSize(prev.sizes, line);
+        prev.sources.push(lineSourceMetaFromWarehouseLine(ord.orderNumber, line));
         if (!prev.thumbnailImageUrl) {
           const t = lineThumbnailImageUrl(line);
           if (t) prev.thumbnailImageUrl = t;
@@ -115,6 +144,7 @@ export function buildSortedStepsFromOrders(orders: OrderForPick[]): PickStep[] {
           qtyByOrder: qtyMap,
           colors,
           sizes,
+          sources: [lineSourceMetaFromWarehouseLine(ord.orderNumber, line)],
           ...(thumb ? { thumbnailImageUrl: thumb } : {}),
         });
       }
@@ -162,6 +192,7 @@ export function buildSortedStepsFromOrders(orders: OrderForPick[]): PickStep[] {
       ...(r.thumbnailImageUrl
         ? { thumbnailImageUrl: r.thumbnailImageUrl }
         : {}),
+      meta: { sources: r.sources },
     };
   });
 }

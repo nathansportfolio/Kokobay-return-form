@@ -35,6 +35,8 @@ export type ShopifyOrderDisplay = {
   shopifyOrderNumber: number;
   email: string;
   customerName: string;
+  /** First name for transactional email (Klaviyo, etc.); may be empty. */
+  customerFirstName: string;
   createdAt: string;
   totalPrice: string;
   currency: string;
@@ -58,6 +60,12 @@ export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
   }
   if (!customerName) customerName = "—";
 
+  const customerFirstName = String(
+    c?.first_name ||
+      o.shipping_address?.first_name ||
+      "",
+  ).trim();
+
   const email = String(o.email || c?.email || "")
     .trim();
   const refundRecordCount = Array.isArray(o.refunds) ? o.refunds.length : 0;
@@ -71,6 +79,7 @@ export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
     shopifyOrderNumber: o.order_number,
     email,
     customerName,
+    customerFirstName,
     createdAt: o.created_at,
     totalPrice: o.total_price,
     currency: o.currency,

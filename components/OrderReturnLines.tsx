@@ -12,12 +12,17 @@ import {
 } from "@/lib/customerReturnFormReasons";
 import { mapCustomerFormReasonToWarehouse } from "@/lib/customerFormToWarehouseReturn";
 import { reasonValueForSharedReturnSelect } from "@/lib/returnReasonForSelect";
+import { buildKlaviyoReturnItemFromLineTitleAndReason } from "@/lib/klaviyoReturnItemFromOrderLine";
 import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
 import {
   normalizeReturnLineDisposition,
   type ReturnLineDisposition,
   type ReturnPageResume,
 } from "@/lib/returnLogTypes";
+import {
+  dispositionCountsTowardCustomerRefund,
+  sumRefundableTotalSelectedLinesGbp,
+} from "@/lib/returnRefundDisposition";
 import {
   MAX_RETURN_LINE_NOTES,
   clampReturnLineNotes,
@@ -27,8 +32,84 @@ import {
   shopifyOrderAdminUrlByOrderId,
   shopifyOrderAdminUrlFromOrderRef,
 } from "@/lib/shopifyOrderAdminUrl";
-import { CurrencyGbp, EnvelopeSimple, Plus, Storefront } from "@phosphor-icons/react";
+import {
+  CurrencyGbp,
+  EnvelopeSimple,
+  Plus,
+  Prohibit,
+  Storefront,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
+
+async function postKlaviyoReturnReceived(input: {
+  email: string;
+  firstName: string;
+  orderId: string;
+  refundAmount: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await fetch("/api/klaviyo/return-received", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    detail?: string;
+  };
+  if (!res.ok || !data.ok) {
+    const base = data.error ?? `Klaviyo request failed (${res.status})`;
+    const detail =
+      typeof data.detail === "string" && data.detail.trim()
+        ? ` ${data.detail.trim()}`
+        : "";
+    return { ok: false, error: `${base}${detail}` };
+  }
+  console.log("[returns] Klaviyo Return Received sent OK", {
+    orderId: input.orderId,
+    refundAmount: input.refundAmount,
+    firstName: input.firstName,
+    httpStatus: res.status,
+  });
+  return { ok: true };
+}
+
+async function postKlaviyoReturnRejected(input: {
+  email: string;
+  firstName: string;
+  orderId: string;
+  items: { name: string; size: string; reason: string }[];
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await fetch("/api/klaviyo/return-rejected", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    detail?: string;
+  };
+  if (!res.ok || !data.ok) {
+    const base = data.error ?? `Klaviyo request failed (${res.status})`;
+    const detail =
+      typeof data.detail === "string" && data.detail.trim()
+        ? ` ${data.detail.trim()}`
+        : "";
+    return { ok: false, error: `${base}${detail}` };
+  }
+  console.log(
+    `[returns] return-rejected sent OK http=${res.status} orderId=${input.orderId} items=${input.items.length}`,
+  );
+  console.log("[returns] return-rejected sent OK detail", {
+    orderId: input.orderId,
+    firstName: input.firstName,
+    itemCount: input.items.length,
+    returnItems: input.items,
+    httpStatus: res.status,
+  });
+  return { ok: true };
+}
 
 const WAREHOUSE_HANDLING_OPTIONS: ReadonlyArray<{
   value: ReturnLineDisposition;
@@ -57,6 +138,8 @@ type LineState = {
   reason: string;
   disposition: ReturnLineDisposition;
   notes: string;
+  /** When true, line is included in “rejected items” Klaviyo email (must also be selected). */
+  rejectNotifyCustomer: boolean;
 };
 
 function emptyLine(): LineState {
@@ -65,6 +148,7 @@ function emptyLine(): LineState {
     reason: CUSTOMER_FORM_REASON_UNSET,
     disposition: "restock",
     notes: "",
+    rejectNotifyCustomer: false,
   };
 }
 
@@ -96,6 +180,7 @@ function buildInitialState(
             reason: reasonValueForSharedReturnSelect(r.reason),
             disposition: normalizeReturnLineDisposition(r.disposition),
             notes: r.notes?.trim() ?? "",
+            rejectNotifyCustomer: false,
           } satisfies LineState,
         ];
       }
@@ -150,6 +235,8 @@ export function OrderReturnLines({
   shopifyOrderId,
   lines,
   resume = null,
+  notifyCustomer = null,
+  currentOperatorLabel = null,
 }: {
   /** From Shopify `order.name` (e.g. #1001) when known. */
   orderLabel: string;
@@ -161,6 +248,13 @@ export function OrderReturnLines({
   lines: KokobayOrderLine[];
   /** When present, pre-fill from the last return log for this order. */
   resume?: ReturnPageResume | null;
+  /**
+   * When set, “Log & notify customer” and “Email Customer Items Received” send
+   * Klaviyo “Return Received” before marking the email step complete.
+   */
+  notifyCustomer?: { email: string; firstName: string } | null;
+  /** Warehouse person from login PIN (`warehouse_operator` cookie). */
+  currentOperatorLabel?: string | null;
 }) {
   const router = useRouter();
   const [byId, setById] = useState(() => buildInitialState(lines, resume));
@@ -221,6 +315,7 @@ export function OrderReturnLines({
                 reason: CUSTOMER_FORM_REASON_UNSET,
                 disposition: "restock" as const,
                 notes: "",
+                rejectNotifyCustomer: false,
               }),
         },
       };
@@ -232,14 +327,58 @@ export function OrderReturnLines({
     [byId, lines],
   );
 
-  const selectedRefund = useMemo(() => {
-    let total = 0;
-    for (const line of lines) {
-      const s = byId[line.id];
-      if (s?.selected) total += line.unitPrice * line.quantity;
-    }
-    return total;
-  }, [byId, lines]);
+  const selectedRefund = useMemo(
+    () => sumRefundableTotalSelectedLinesGbp(lines, byId),
+    [byId, lines],
+  );
+
+  /**
+   * Reject → Klaviyo (“Return Submitted”) UI is hidden until at least one selected
+   * line uses Return to sender (warehouse asked to surface it that way).
+   */
+  const showRejectCustomerKlaviyoUi = useMemo(
+    () =>
+      lines.some((l) => {
+        const s = byId[l.id];
+        return (
+          Boolean(s?.selected) &&
+          normalizeReturnLineDisposition(s.disposition) === "return_to_sender"
+        );
+      }),
+    [byId, lines],
+  );
+
+  const rejectedNotifyReadyCount = useMemo(() => {
+    if (!showRejectCustomerKlaviyoUi) return 0;
+    return lines.filter((l) => {
+      const s = byId[l.id];
+      if (!s?.selected || !s.rejectNotifyCustomer) return false;
+      if (
+        !dispositionCountsTowardCustomerRefund(
+          normalizeReturnLineDisposition(s.disposition),
+        )
+      ) {
+        return false;
+      }
+      return clampReturnLineNotes(s.notes ?? "").trim().length > 0;
+    }).length;
+  }, [showRejectCustomerKlaviyoUi, byId, lines]);
+
+  useEffect(() => {
+    if (showRejectCustomerKlaviyoUi) return;
+    setById((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const line of lines) {
+        const row = { ...emptyLine(), ...next[line.id] };
+        if (row.rejectNotifyCustomer) {
+          next[line.id] = { ...row, rejectNotifyCustomer: false };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [showRejectCustomerKlaviyoUi, lineKey]);
 
   const allReturned =
     lines.length > 0 && lines.every((l) => byId[l.id]?.selected);
@@ -274,6 +413,7 @@ export function OrderReturnLines({
                   reason: CUSTOMER_FORM_REASON_UNSET,
                   disposition: "restock" as const,
                   notes: "",
+                  rejectNotifyCustomer: false,
                 }),
           };
         }
@@ -340,6 +480,26 @@ export function OrderReturnLines({
       const newUid = data.returnUid;
       setReturnUid(newUid);
 
+      const refundForNotify = sumRefundableTotalSelectedLinesGbp(lines, byId);
+      const refundAmountStr = formatGbp(refundForNotify);
+
+      if (notifyCustomer) {
+        const kl = await postKlaviyoReturnReceived({
+          email: notifyCustomer.email,
+          firstName: notifyCustomer.firstName,
+          orderId: orderLabel,
+          refundAmount: refundAmountStr,
+        });
+        if (!kl.ok) {
+          toast.error(kl.error, {
+            description:
+              "Return is saved. Fix Klaviyo or try “Email Customer Items Received”.",
+          });
+          router.refresh();
+          return;
+        }
+      }
+
       const patchRes = await fetch(
         `/api/returns/log/${encodeURIComponent(newUid)}`,
         {
@@ -372,7 +532,9 @@ export function OrderReturnLines({
         setRegRefund(false);
       }
       toast.success("Return registered", {
-        description: `${selectedCount} line(s) · Customer email marked as sent (return received). Connect your email API to actually send the email.`,
+        description: notifyCustomer
+          ? `${selectedCount} line(s) · Klaviyo “Return Received” sent (${refundAmountStr} refund).`
+          : `${selectedCount} line(s) · Customer notification step marked complete (no order email on file for Klaviyo).`,
       });
       router.push("/returns");
     } finally {
@@ -386,6 +548,7 @@ export function OrderReturnLines({
     router,
     selectedCount,
     shopifyOrderId,
+    notifyCustomer,
   ]);
 
   const sendReceivedEmail = useCallback(async () => {
@@ -401,6 +564,24 @@ export function OrderReturnLines({
     }
     setReturnBusy(true);
     try {
+      let refundAmountStr = "";
+      if (notifyCustomer) {
+        const refundForNotify = sumRefundableTotalSelectedLinesGbp(lines, byId);
+        refundAmountStr = formatGbp(refundForNotify);
+        const kl = await postKlaviyoReturnReceived({
+          email: notifyCustomer.email,
+          firstName: notifyCustomer.firstName,
+          orderId: orderLabel,
+          refundAmount: refundAmountStr,
+        });
+        if (!kl.ok) {
+          toast.error(kl.error, {
+            description: "Fix Klaviyo configuration or try again in a moment.",
+          });
+          return;
+        }
+      }
+
       const res = await fetch(`/api/returns/log/${encodeURIComponent(returnUid)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -419,12 +600,91 @@ export function OrderReturnLines({
       else setRegEmail(true);
       router.refresh();
       toast.success("Customer email marked as sent", {
-        description: "We received their return. Connect your email API to actually send email.",
+        description: notifyCustomer
+          ? `Klaviyo “Return Received” sent (${refundAmountStr} refund).`
+          : "No automated Klaviyo profile on file for this order.",
       });
     } finally {
       setReturnBusy(false);
     }
-  }, [applyLogFlags, regEmail, returnUid, router]);
+  }, [
+    applyLogFlags,
+    byId,
+    lines,
+    notifyCustomer,
+    orderLabel,
+    regEmail,
+    returnUid,
+    router,
+  ]);
+
+  const sendRejectedItemsKlaviyo = useCallback(async () => {
+    if (!showRejectCustomerKlaviyoUi) {
+      return;
+    }
+    if (!notifyCustomer) {
+      toast.error("No customer email on file", {
+        description: "Klaviyo needs an order or form email for this return.",
+      });
+      return;
+    }
+    if (rejectedNotifyReadyCount === 0) {
+      toast.warning("Select lines to reject", {
+        description:
+          "Tick a line, add a rejection note under Notes, then enable “Reject — email customer”.",
+      });
+      return;
+    }
+    setReturnBusy(true);
+    try {
+      const rejectedLines = lines.filter((l) => {
+        const row = { ...emptyLine(), ...byId[l.id] };
+        return (
+          row.selected &&
+          row.rejectNotifyCustomer &&
+          dispositionCountsTowardCustomerRefund(
+            normalizeReturnLineDisposition(row.disposition),
+          ) &&
+          clampReturnLineNotes(row.notes ?? "").trim().length > 0
+        );
+      });
+      const items = rejectedLines.map((l) => {
+        const row = { ...emptyLine(), ...byId[l.id] };
+        return buildKlaviyoReturnItemFromLineTitleAndReason(
+          l.title,
+          row.reason === CUSTOMER_FORM_REASON_UNSET ? null : row.reason,
+        );
+      });
+      const kl = await postKlaviyoReturnRejected({
+        email: notifyCustomer.email,
+        firstName: notifyCustomer.firstName,
+        orderId: orderLabel,
+        items,
+      });
+      if (!kl.ok) {
+        toast.error(kl.error);
+        return;
+      }
+      for (const l of rejectedLines) {
+        updateLine(l.id, { rejectNotifyCustomer: false });
+      }
+      router.refresh();
+      toast.success("Klaviyo “Return Submitted” sent", {
+        description: `${items.length} item(s) · ${orderLabel}`,
+      });
+    } finally {
+      setReturnBusy(false);
+    }
+  }, [
+    byId,
+    lines,
+    notifyCustomer,
+    orderLabel,
+    rejectedNotifyReadyCount,
+    router,
+    showRejectCustomerKlaviyoUi,
+    updateLine,
+  ]);
 
   const confirmFullRefund = useCallback(async () => {
     if (!returnUid) {
@@ -483,6 +743,14 @@ export function OrderReturnLines({
           <p className="font-mono text-lg font-semibold text-foreground">
             {orderLabel}
           </p>
+          {currentOperatorLabel?.trim() ? (
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Signed in as{" "}
+              <span className="font-medium text-foreground">
+                {currentOperatorLabel.trim()}
+              </span>
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
           <Link
@@ -524,6 +792,18 @@ export function OrderReturnLines({
         >
           <p className="font-medium text-emerald-900 dark:text-emerald-200">
             This return is registered
+            {(() => {
+              const fromLog =
+                resume?.source === "returnLog" && resume.loggedByOperator?.trim()
+                  ? resume.loggedByOperator.trim()
+                  : null;
+              const who =
+                fromLog ??
+                (returnUid && currentOperatorLabel?.trim()
+                  ? currentOperatorLabel.trim()
+                  : null);
+              return who ? ` · ${who}` : null;
+            })()}
           </p>
           <p className="mt-1.5 break-all font-mono text-xs text-emerald-800/90 dark:text-emerald-300/90">
             {returnUid}
@@ -577,6 +857,7 @@ export function OrderReturnLines({
             ...emptyLine(),
             ...row,
             reason: reasonValueForSharedReturnSelect(row?.reason),
+            rejectNotifyCustomer: Boolean(row?.rejectNotifyCustomer),
           };
           const lineTotal = line.unitPrice * line.quantity;
           const idBase = safeDomId(line.id);
@@ -657,6 +938,7 @@ export function OrderReturnLines({
                             updateLine(line.id, {
                               reason: CUSTOMER_FORM_REASON_UNSET,
                               disposition: "restock",
+                              rejectNotifyCustomer: false,
                             });
                             return;
                           }
@@ -686,9 +968,16 @@ export function OrderReturnLines({
                               type="radio"
                               name={`disp-${idBase}`}
                               checked={s.disposition === disp}
-                              onChange={() =>
-                                updateLine(line.id, { disposition: disp })
-                              }
+                              onChange={() => {
+                                const allowsReject =
+                                  dispositionCountsTowardCustomerRefund(disp);
+                                updateLine(line.id, {
+                                  disposition: disp,
+                                  ...(!allowsReject
+                                    ? { rejectNotifyCustomer: false }
+                                    : {}),
+                                });
+                              }}
                               className={
                                 s.disposition === disp
                                   ? "accent-zinc-900 dark:accent-zinc-100"
@@ -716,7 +1005,11 @@ export function OrderReturnLines({
                     >
                       <Plus className="h-4 w-4 shrink-0" weight="bold" aria-hidden />
                       Notes
-                      {s.notes.trim() ? (
+                      {showRejectCustomerKlaviyoUi && s.rejectNotifyCustomer ? (
+                        <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+                          (rejection note required)
+                        </span>
+                      ) : s.notes.trim() ? (
                         <span className="text-xs font-normal text-zinc-500">
                           (saved text)
                         </span>
@@ -735,10 +1028,23 @@ export function OrderReturnLines({
                           value={s.notes}
                           maxLength={MAX_RETURN_LINE_NOTES}
                           rows={3}
-                          placeholder="Optional notes for this line…"
-                          onChange={(e) =>
-                            updateLine(line.id, { notes: e.target.value })
+                          placeholder={
+                            showRejectCustomerKlaviyoUi && s.rejectNotifyCustomer
+                              ? "Required: why is this item being rejected for the customer?"
+                              : "Optional notes for this line…"
                           }
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            const noteTrim = clampReturnLineNotes(v).trim();
+                            updateLine(line.id, {
+                              notes: v,
+                              ...(showRejectCustomerKlaviyoUi &&
+                              noteTrim === "" &&
+                              s.rejectNotifyCustomer
+                                ? { rejectNotifyCustomer: false }
+                                : {}),
+                            });
+                          }}
                           className="w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-amber-500/50 dark:border-zinc-600 dark:bg-zinc-950"
                         />
                         <p className="mt-1 text-xs text-zinc-500">
@@ -750,12 +1056,118 @@ export function OrderReturnLines({
                       </div>
                     ) : null}
                   </div>
+                  {selected && showRejectCustomerKlaviyoUi ? (
+                    dispositionCountsTowardCustomerRefund(
+                      normalizeReturnLineDisposition(s.disposition),
+                    ) ? (
+                      <div className="mt-3">
+                        <label
+                          htmlFor={`reject-${idBase}`}
+                          className="flex cursor-pointer items-start gap-2 rounded-lg border border-rose-200 bg-rose-50/90 px-3 py-2.5 text-sm dark:border-rose-900/50 dark:bg-rose-950/25"
+                        >
+                          <input
+                            id={`reject-${idBase}`}
+                            type="checkbox"
+                            checked={Boolean(s.rejectNotifyCustomer)}
+                            onChange={(e) => {
+                              const on = e.currentTarget.checked;
+                              if (
+                                on &&
+                                !clampReturnLineNotes(s.notes ?? "").trim()
+                              ) {
+                                toast.warning("Add a rejection note first", {
+                                  description:
+                                    "Open Notes above and explain why this item is rejected before emailing the customer.",
+                                });
+                                setNotesOpenByLine((p) => ({
+                                  ...p,
+                                  [line.id]: true,
+                                }));
+                                return;
+                              }
+                              updateLine(line.id, {
+                                rejectNotifyCustomer: on,
+                              });
+                            }}
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded border-rose-400 text-rose-600 focus:ring-rose-500"
+                          />
+                          <span>
+                            <span className="font-medium text-rose-950 dark:text-rose-100">
+                              Reject — email customer (Klaviyo)
+                            </span>
+                            <span className="mt-0.5 block text-xs text-rose-900/90 dark:text-rose-200/85">
+                              Requires a{" "}
+                              <strong className="font-semibold">Notes</strong>{" "}
+                              explanation above. Sends this line in “Return Submitted”
+                              with product name, size, and return reason.
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                    ) : (
+                      <p className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2.5 text-xs leading-relaxed text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-400">
+                        <span className="font-medium text-foreground">
+                          Reject — email customer
+                        </span>{" "}
+                        is not used when handling is{" "}
+                        <span className="font-medium">Return to sender</span> or{" "}
+                        <span className="font-medium">Wrong item received</span> — the
+                        same lines are excluded from refund value above.
+                      </p>
+                    )
+                  ) : null}
                 </div>
               </div>
             </li>
           );
         })}
       </ul>
+
+      {showRejectCustomerKlaviyoUi ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 dark:border-rose-900/50 dark:bg-rose-950/25">
+          <p className="text-xs font-semibold uppercase tracking-wide text-rose-800 dark:text-rose-200/90">
+            Rejected items · customer email
+          </p>
+          <p className="mt-1.5 text-sm text-rose-900/95 dark:text-rose-100/90">
+            Shown because this return includes{" "}
+            <span className="font-medium">Return to sender</span> on at least one selected
+            line. On each <em className="not-italic">other</em> eligible line (not Return to
+            sender / Wrong item received), add a <strong className="font-semibold">Notes</strong>{" "}
+            explanation, then tick{" "}
+            <span className="font-medium">Reject — email customer</span>. Items without a
+            note cannot be emailed. Klaviyo receives{" "}
+            <span className="font-medium">Return Submitted</span> with name, size, and return
+            reason per line.
+          </p>
+          <p className="mt-2 text-sm text-foreground">
+            <span className="text-zinc-600 dark:text-zinc-400">
+              Lines ready to send (with note):{" "}
+            </span>
+            <span className="font-semibold tabular-nums">
+              {rejectedNotifyReadyCount}
+            </span>
+          </p>
+          {!notifyCustomer ? (
+            <p className="mt-2 text-xs text-rose-800/90 dark:text-rose-200/80">
+              No customer email on file for this order — add one in Shopify or use a
+              return with a customer form so Klaviyo can target the profile.
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="mt-3 inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-lg border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-950 shadow-sm transition-colors hover:bg-rose-50 disabled:opacity-50 sm:min-h-10 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-50 dark:hover:bg-rose-950/70"
+            disabled={
+              returnBusy || !notifyCustomer || rejectedNotifyReadyCount === 0
+            }
+            onClick={() => {
+              void sendRejectedItemsKlaviyo();
+            }}
+          >
+            <Prohibit className="h-5 w-5 shrink-0" weight="duotone" aria-hidden />
+            Email customer about rejected items
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
         <a
@@ -815,6 +1227,9 @@ export function OrderReturnLines({
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 pt-2 text-sm dark:border-zinc-800">
           <span className="text-zinc-600 dark:text-zinc-400">
             Refund value (selected lines)
+            <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+              Excludes “Return to sender” and “Wrong item received”.
+            </span>
           </span>
           <span className="font-semibold text-foreground">
             {formatGbp(selectedRefund)}
