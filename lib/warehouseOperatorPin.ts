@@ -7,65 +7,71 @@ export type WarehousePinMatch = {
 };
 
 /**
- * PIN env slots checked in order. First match wins.
+ * PIN slots checked in order. First match wins.
  * Optional override: `NEXT_PUBLIC_SITE_PIN_<SLOT>_SIGNATURE` (same slot key as the PIN var).
+ *
+ * **Important:** each `NEXT_PUBLIC_*` value must be read with a **static** `process.env.FOO`
+ * expression so Next.js inlines it into the client bundle. Dynamic `process.env[key]` does
+ * not get substituted in the browser, so `/login` would never see your PINs.
  */
-const PIN_SLOTS: ReadonlyArray<{
-  envPin: string;
-  envSignature: string;
+type PinSlot = {
+  pin: string;
+  signatureOverride: string;
   role: SiteAccessRole;
   defaultSignature: string;
-}> = [
-  {
-    envPin: "NEXT_PUBLIC_SITE_PIN_ADMIN",
-    envSignature: "NEXT_PUBLIC_SITE_PIN_ADMIN_SIGNATURE",
-    role: "admin",
-    defaultSignature: "KURT",
-  },
-  {
-    envPin: "NEXT_PUBLIC_SITE_PIN_USER",
-    envSignature: "NEXT_PUBLIC_SITE_PIN_USER_SIGNATURE",
-    role: "user",
-    defaultSignature: "ADMIN",
-  },
-  {
-    envPin: "NEXT_PUBLIC_SITE_PIN_USER_1",
-    envSignature: "NEXT_PUBLIC_SITE_PIN_USER_1_SIGNATURE",
-    role: "user",
-    defaultSignature: "Lana",
-  },
-  {
-    envPin: "NEXT_PUBLIC_SITE_PIN_USER_2",
-    envSignature: "NEXT_PUBLIC_SITE_PIN_USER_2_SIGNATURE",
-    role: "user",
-    defaultSignature: "Martha",
-  },
-  {
-    envPin: "NEXT_PUBLIC_SITE_PIN_USER_3",
-    envSignature: "NEXT_PUBLIC_SITE_PIN_USER_3_SIGNATURE",
-    role: "user",
-    defaultSignature: "Alice",
-  },
-  {
-    envPin: "NEXT_PUBLIC_SITE_PIN_USER_4",
-    envSignature: "NEXT_PUBLIC_SITE_PIN_USER_4_SIGNATURE",
-    role: "user",
-    defaultSignature: "Helen",
-  },
-];
+};
 
-function readPublicEnv(key: string): string {
-  return String(process.env[key] ?? "").trim();
-}
-
-function signatureForSlot(
-  envPin: string,
-  envSignature: string,
-  defaultSignature: string,
-): string {
-  const override = readPublicEnv(envSignature);
-  if (override) return override;
-  return defaultSignature;
+function pinSlotsFromEnv(): PinSlot[] {
+  return [
+    {
+      pin: String(process.env.NEXT_PUBLIC_SITE_PIN_ADMIN ?? "").trim(),
+      signatureOverride: String(
+        process.env.NEXT_PUBLIC_SITE_PIN_ADMIN_SIGNATURE ?? "",
+      ).trim(),
+      role: "admin",
+      defaultSignature: "KURT",
+    },
+    {
+      pin: String(process.env.NEXT_PUBLIC_SITE_PIN_USER ?? "").trim(),
+      signatureOverride: String(
+        process.env.NEXT_PUBLIC_SITE_PIN_USER_SIGNATURE ?? "",
+      ).trim(),
+      role: "user",
+      defaultSignature: "ADMIN",
+    },
+    {
+      pin: String(process.env.NEXT_PUBLIC_SITE_PIN_USER_1 ?? "").trim(),
+      signatureOverride: String(
+        process.env.NEXT_PUBLIC_SITE_PIN_USER_1_SIGNATURE ?? "",
+      ).trim(),
+      role: "user",
+      defaultSignature: "Lana",
+    },
+    {
+      pin: String(process.env.NEXT_PUBLIC_SITE_PIN_USER_2 ?? "").trim(),
+      signatureOverride: String(
+        process.env.NEXT_PUBLIC_SITE_PIN_USER_2_SIGNATURE ?? "",
+      ).trim(),
+      role: "user",
+      defaultSignature: "Martha",
+    },
+    {
+      pin: String(process.env.NEXT_PUBLIC_SITE_PIN_USER_3 ?? "").trim(),
+      signatureOverride: String(
+        process.env.NEXT_PUBLIC_SITE_PIN_USER_3_SIGNATURE ?? "",
+      ).trim(),
+      role: "user",
+      defaultSignature: "Alice",
+    },
+    {
+      pin: String(process.env.NEXT_PUBLIC_SITE_PIN_USER_4 ?? "").trim(),
+      signatureOverride: String(
+        process.env.NEXT_PUBLIC_SITE_PIN_USER_4_SIGNATURE ?? "",
+      ).trim(),
+      role: "user",
+      defaultSignature: "Helen",
+    },
+  ];
 }
 
 /** Resolve entered PIN to session role + display name for return audit. */
@@ -74,16 +80,14 @@ export function matchWarehousePinToSession(
 ): WarehousePinMatch | null {
   const value = enteredPin.trim();
   if (!value) return null;
-  for (const slot of PIN_SLOTS) {
-    const pin = readPublicEnv(slot.envPin);
-    if (pin.length > 0 && value === pin) {
+  for (const slot of pinSlotsFromEnv()) {
+    if (slot.pin.length > 0 && value === slot.pin) {
       return {
         role: slot.role,
-        operatorLabel: signatureForSlot(
-          slot.envPin,
-          slot.envSignature,
-          slot.defaultSignature,
-        ),
+        operatorLabel:
+          slot.signatureOverride.length > 0
+            ? slot.signatureOverride
+            : slot.defaultSignature,
       };
     }
   }
