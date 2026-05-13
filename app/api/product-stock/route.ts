@@ -1,31 +1,15 @@
 import { apiJsonCacheHeaders } from "@/lib/apiCacheHeaders";
 import { NextResponse } from "next/server";
 
-/** Optional: set to your storefront origin (e.g. `https://www.kokobay.co.uk`) instead of `*`. */
-function productStockCorsHeaders(request: Request): HeadersInit {
-  const fixed = process.env.PRODUCT_STOCK_CORS_ORIGIN?.trim();
-  const origin = request.headers.get("Origin");
-  if (fixed) {
-    if (origin === fixed) {
-      return {
-        "Access-Control-Allow-Origin": fixed,
-        Vary: "Origin",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      };
-    }
-    return {
-      Vary: "Origin",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    };
-  }
+function productStockCorsHeaders(): HeadersInit {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "*",
   };
 }
+
+
 
 function mergeHeaders(...parts: (HeadersInit | undefined)[]): Headers {
   const out = new Headers();
