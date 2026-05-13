@@ -1,21 +1,26 @@
 import { formatGbp } from "@/lib/kokobayOrderLines";
+import { sumRecordedRefundsGbpForLondonCalendarDay } from "@/lib/returnRefundLedger";
 import { sumShopifyRefundAmountsGbpForLondonCalendarDay } from "@/lib/shopifyRefundEvents";
 import { getTodayCalendarDateKeyInLondon } from "@/lib/warehouseLondonDay";
 
 /**
- * Server-only: sums **Shopify Admin** refunds recorded via `refunds/create`
- * webhook (`shopifyRefundEvents`), using each refund’s Shopify `created_at`
- * on the current London calendar day (not Kokobay return-log dates).
+ * Server-only: “Refunded today” = **Shopify** `refunds/create` webhooks (`shopifyRefundEvents`)
+ * **plus** **in-app** “mark refund complete” rows (`returnRefundLedger`), both filtered by
+ * London calendar day on the respective timestamps.
  */
 export async function RefundedTodaySoFar({ className }: { className?: string }) {
-  let total: number;
+  const dayKey = getTodayCalendarDateKeyInLondon();
+  let shopify = 0;
+  let inApp = 0;
   try {
-    total = await sumShopifyRefundAmountsGbpForLondonCalendarDay(
-      getTodayCalendarDateKeyInLondon(),
-    );
+    [shopify, inApp] = await Promise.all([
+      sumShopifyRefundAmountsGbpForLondonCalendarDay(dayKey),
+      sumRecordedRefundsGbpForLondonCalendarDay(dayKey),
+    ]);
   } catch {
     return null;
   }
+  const total = Math.round((shopify + inApp) * 100) / 100;
   return (
     <p className={className}>
       <span className="font-semibold text-foreground tabular-nums">
@@ -24,7 +29,7 @@ export async function RefundedTodaySoFar({ className }: { className?: string }) 
       refunded today so far
       <span className="text-zinc-500 dark:text-zinc-400">
         {" "}
-        (London · Shopify)
+        (London · Shopify {formatGbp(shopify)} + in-app {formatGbp(inApp)})
       </span>
     </p>
   );

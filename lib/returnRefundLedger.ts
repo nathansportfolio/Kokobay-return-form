@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Document } from "mongodb";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
 import type { SiteAccessRole } from "@/lib/siteAccess";
+import { getWarehouseDayCreatedAtQueryBoundsUtc } from "@/lib/warehouseLondonDay";
 
 /** One row per return when “full refund issued” is first recorded in the app. */
 export const RETURN_REFUND_LEDGER_COLLECTION = "returnRefundLedger";
@@ -74,5 +75,31 @@ export async function insertReturnRefundLedgerEntry(input: {
     }
     throw e;
   }
+}
+
+/**
+ * Sum `amountGbp` for in-app “full refund issued” marks on the given London calendar day.
+ */
+export async function sumRecordedRefundsGbpForLondonCalendarDay(
+  dayKey: string,
+): Promise<number> {
+  await ensureReturnRefundLedgerIndexes();
+  const { createdAtMin, createdAtMax } =
+    getWarehouseDayCreatedAtQueryBoundsUtc(dayKey);
+  const min = new Date(createdAtMin);
+  const max = new Date(createdAtMax);
+  const client = await clientPromise;
+  const col = client
+    .db(kokobayDbName)
+    .collection<ReturnRefundLedgerMongo>(RETURN_REFUND_LEDGER_COLLECTION);
+
+  const rows = await col
+    .aggregate<{ total: number }>([
+      { $match: { recordedAt: { $gte: min, $lte: max } } },
+      { $group: { _id: null, total: { $sum: "$amountGbp" } } },
+    ])
+    .toArray();
+  const raw = rows[0]?.total ?? 0;
+  return Math.round(Number(raw) * 100) / 100;
 }
 

@@ -1,4 +1,7 @@
-import { insertShopifyRefundEventFromWebhook } from "@/lib/shopifyRefundEvents";
+import {
+  extractRefundFromWebhookBody,
+  insertShopifyRefundEventFromWebhook,
+} from "@/lib/shopifyRefundEvents";
 import { verifyShopifyWebhookHmac } from "@/lib/shopifyWebhookHmac";
 import { NextResponse } from "next/server";
 
@@ -7,17 +10,22 @@ export const dynamic = "force-dynamic";
 /**
  * Shopify Admin HTTPS webhook: `refunds/create`.
  *
- * Register in Shopify Partner / custom app: **Event** `Refunds create`,
+ * Register in Shopify: **Event** `Refunds create`,
  * URL `https://<your-host>/api/webhooks/shopify/refunds-create`.
- * Signing secret: same as `SHOPIFY_CLIENT_SECRET` (client credentials app).
+ *
+ * HMAC signing: use **`SHOPIFY_WEBHOOK_SECRET`** if set (recommended: app “API secret key”
+ * copied when configuring webhooks), else **`SHOPIFY_CLIENT_SECRET`**, else **`SHOPIFY_API_SECRET`**.
  */
 export async function POST(request: Request) {
   const rawBody = await request.text();
   const secret =
+    process.env.SHOPIFY_WEBHOOK_SECRET?.trim() ||
     process.env.SHOPIFY_CLIENT_SECRET?.trim() ||
     process.env.SHOPIFY_API_SECRET?.trim();
   if (!secret) {
-    console.error("[webhook refunds/create] SHOPIFY_CLIENT_SECRET is not set");
+    console.error(
+      "[webhook refunds/create] no webhook signing secret (set SHOPIFY_WEBHOOK_SECRET or SHOPIFY_CLIENT_SECRET)",
+    );
     return new NextResponse("Server misconfigured", { status: 500 });
   }
 
@@ -26,6 +34,13 @@ export async function POST(request: Request) {
     request.headers.get("x-shopify-hmac-sha256");
 
   if (!verifyShopifyWebhookHmac(rawBody, hmac, secret)) {
+    console.warn("[webhook refunds/create] HMAC verification failed", {
+      hasHmacHeader: Boolean(hmac?.trim()),
+      rawBodyChars: rawBody.length,
+      shopDomain:
+        request.headers.get("X-Shopify-Shop-Domain") ??
+        request.headers.get("x-shopify-shop-domain"),
+    });
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
@@ -34,7 +49,9 @@ export async function POST(request: Request) {
     request.headers.get("x-shopify-topic") ??
     ""
   ).trim();
-  if (topic.toLowerCase() !== "refunds/create") {
+  const topicNorm = topic.toLowerCase().replace(/_/g, "/");
+  if (topicNorm !== "refunds/create") {
+    console.log("[webhook refunds/create] ignored topic", { topic });
     return new NextResponse("OK", { status: 200 });
   }
 
@@ -49,6 +66,12 @@ export async function POST(request: Request) {
     const result = await insertShopifyRefundEventFromWebhook(body);
     if (!result.ok) {
       console.warn("[webhook refunds/create] skipped:", result.error);
+    } else {
+      const r = extractRefundFromWebhookBody(body);
+      console.log("[webhook refunds/create] stored", {
+        refundId: r?.id,
+        orderId: r?.order_id,
+      });
     }
     return new NextResponse("OK", { status: 200 });
   } catch (e) {

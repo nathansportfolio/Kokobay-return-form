@@ -15,10 +15,13 @@ import {
 import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
 import type { ShopifyOrderDisplay } from "@/lib/shopifyReturnOrderLookup";
 import {
+  buildKokobayOrderLinesFromShopifyOrder,
   enrichKokobayOrderLinesWithShopify,
   fetchReturnOrderFromShopify,
   fetchShopifyOrderDisplay,
+  findShopifyOrderByQuery,
   shopifyOrderDisplayFromLookup,
+  toShopifyOrderDisplay,
 } from "@/lib/shopifyReturnOrderLookup";
 
 export type { ReturnPageResume };
@@ -77,6 +80,75 @@ export async function getReturnPageLinesAndResume(
 
   const last = await getLatestReturnLogForOrder(key);
   if (last?.lines.length) {
+    const logLineById = new Map(last.lines.map((l) => [l.lineId, l]));
+
+    if (process.env.SHOPIFY_STORE?.trim()) {
+      const order = await findShopifyOrderByQuery(key);
+      if (order) {
+        const shopifyLines = await buildKokobayOrderLinesFromShopifyOrder(order);
+        if (shopifyLines.length > 0) {
+          const shopifyIds = new Set(shopifyLines.map((l) => l.id));
+          const logIdsMatched = last.lines.filter((l) => shopifyIds.has(l.lineId))
+            .length;
+          if (
+            logIdsMatched !== last.lines.length ||
+            shopifyLines.length !== last.lines.length
+          ) {
+            console.warn(
+              "[getReturnPageLinesAndResume] return log lines differ from Shopify order; using live Shopify lines",
+              {
+                orderRef: key,
+                logLineCount: last.lines.length,
+                shopifyLineCount: shopifyLines.length,
+                logLinesMatchedShopify: logIdsMatched,
+              },
+            );
+          }
+
+          const byLine: ReturnPageResume["byLine"] = {};
+          for (const kl of shopifyLines) {
+            const match = logLineById.get(kl.id);
+            if (match) {
+              byLine[kl.id] = {
+                reason: match.reason,
+                disposition: normalizeReturnLineDisposition(match.disposition),
+                notes: match.notes?.trim() ? match.notes : "",
+              };
+            } else {
+              byLine[kl.id] = {
+                reason: null,
+                disposition: "restock",
+                notes: "",
+              };
+            }
+          }
+
+          const shopifyOrder = toShopifyOrderDisplay(order);
+          const linesForUi = shopifyLines.map((l) => ({
+            ...l,
+            sku: lineSkuForWarehouseUi(l),
+          }));
+          return {
+            lines: linesForUi,
+            resume: {
+              source: "returnLog",
+              returnUid: last.returnUid,
+              customerEmailSent: last.customerEmailSent,
+              fullRefundIssued: last.fullRefundIssued,
+              ...(typeof last.loggedByOperator === "string" &&
+              last.loggedByOperator.trim()
+                ? { loggedByOperator: last.loggedByOperator.trim() }
+                : {}),
+              byLine,
+            },
+            formContext: { kind: "returnLog" },
+            bareLineSource: null,
+            shopifyOrder,
+          };
+        }
+      }
+    }
+
     const skus = [...new Set(last.lines.map((l) => l.sku))];
     const thumbs = await getThumbnailsBySkus(skus);
 

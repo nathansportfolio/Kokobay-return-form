@@ -35,6 +35,7 @@ import {
 } from "@/lib/shopifyOrderAdminUrl";
 import { WAREHOUSE_TZ, formatDateAsOrdinalInTimeZone } from "@/lib/warehouseLondonDay";
 import { RefundedTodaySoFar } from "@/components/RefundedTodaySoFar";
+import { ReturnLogRefundPendingAutoRefresh } from "@/components/ReturnLogRefundPendingAutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -730,6 +731,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto min-w-0 max-w-5xl flex-1 px-3 py-4 sm:px-6 sm:py-6">
+      {q.refundPending ? <ReturnLogRefundPendingAutoRefresh /> : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-2">
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold sm:text-2xl">

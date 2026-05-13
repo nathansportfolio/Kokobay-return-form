@@ -177,6 +177,46 @@ export async function findShopifyOrderByQuery(
 }
 
 /**
+ * Map a Shopify Admin `order` to Kokobay lines (images from Shopify products + Mongo SKU gaps).
+ * Used by {@link fetchReturnOrderFromShopify} and when resyncing return-log rows to live Shopify.
+ */
+export async function buildKokobayOrderLinesFromShopifyOrder(
+  order: ShopifyOrder,
+): Promise<KokobayOrderLine[]> {
+  const withQty = order.line_items.filter((li) => (li.quantity ?? 0) > 0);
+  if (withQty.length === 0) return [];
+
+  const productMap = await fetchShopifyProductsForLineItemImages(
+    withQty.map((li) => li.product_id),
+  );
+  const skus = [
+    ...new Set(withQty.map((li) => displaySkuForShopifyLineItem(li))),
+  ];
+  const shopifyByLine = lineItemImageUrlsFromProductMap(
+    withQty,
+    productMap,
+  );
+  const thumbs = await getThumbnailsBySkus(skus);
+  return withQty.map((li) => {
+    const displaySku = displaySkuForShopifyLineItem(li);
+    const lineId = String(li.id);
+    const fromShop = shopifyByLine.get(lineId) ?? "";
+    const fromMongo = thumbs.get(displaySku) ?? "";
+    const imageUrl = (fromShop || fromMongo).trim();
+    const price = Math.max(0, Number.parseFloat(String(li.price)) || 0);
+    const qty = Math.max(1, Math.trunc(Number(li.quantity) || 0));
+    return {
+      id: lineId,
+      sku: displaySku,
+      title: lineItemTitle(li),
+      quantity: qty,
+      unitPrice: price,
+      imageUrl,
+    } satisfies KokobayOrderLine;
+  });
+}
+
+/**
  * Fetches a single order from the Shopify Admin API and maps line items to
  * {@link KokobayOrderLine} — images from **Shopify product/variant** (REST),
  * then any remaining gaps from Mongo `products` by SKU.
@@ -210,39 +250,10 @@ export async function fetchReturnOrderFromShopify(
     return { ok: false, error: "not_found" };
   }
 
-  const withQty = order.line_items.filter((li) => (li.quantity ?? 0) > 0);
-  if (withQty.length === 0) {
+  const lines = await buildKokobayOrderLinesFromShopifyOrder(order);
+  if (lines.length === 0) {
     return { ok: false, error: "not_found" };
   }
-
-  const productMap = await fetchShopifyProductsForLineItemImages(
-    withQty.map((li) => li.product_id),
-  );
-  const skus = [
-    ...new Set(withQty.map((li) => displaySkuForShopifyLineItem(li))),
-  ];
-  const shopifyByLine = lineItemImageUrlsFromProductMap(
-    withQty,
-    productMap,
-  );
-  const thumbs = await getThumbnailsBySkus(skus);
-  const lines: KokobayOrderLine[] = withQty.map((li) => {
-    const displaySku = displaySkuForShopifyLineItem(li);
-    const lineId = String(li.id);
-    const fromShop = shopifyByLine.get(lineId) ?? "";
-    const fromMongo = thumbs.get(displaySku) ?? "";
-    const imageUrl = (fromShop || fromMongo).trim();
-    const price = Math.max(0, Number.parseFloat(String(li.price)) || 0);
-    const qty = Math.max(1, Math.trunc(Number(li.quantity) || 0));
-    return {
-      id: lineId,
-      sku: displaySku,
-      title: lineItemTitle(li),
-      quantity: qty,
-      unitPrice: price,
-      imageUrl,
-    } satisfies KokobayOrderLine;
-  });
 
   const display = toShopifyOrderDisplay(order);
   return {

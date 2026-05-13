@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { KLAVIYO_RETURN_EVENTS_PRIVATE_KEY } from "@/lib/klaviyoReturnPrivateKey";
 import { postKlaviyoCreateEvent } from "@/lib/klaviyoPostEvent";
 
 export const dynamic = "force-dynamic";
@@ -46,18 +47,9 @@ function isReturnItemRow(x: unknown): x is { name: string; size: string; reason:
  * `reason` is the warehouse rejection **Notes** text per line (not the customer form reason).
  * Event properties flatten each item to primitives: item1Name, item1Size, item1Reason, …
  *
- * Env `KOKO_RETURN`: same as `/api/klaviyo/return-received` — Klaviyo private key with
- * **events:write**.
+ * Auth: same embedded key as `/api/klaviyo/return-received`.
  */
 export async function POST(request: Request) {
-  const apiKey = process.env.KOKO_RETURN?.trim();
-  if (!apiKey) {
-    return NextResponse.json(
-      { ok: false, error: "Klaviyo is not configured (KOKO_RETURN)" },
-      { status: 503 },
-    );
-  }
-
   let body: Body;
   try {
     body = (await request.json()) as Body;
@@ -111,7 +103,7 @@ export async function POST(request: Request) {
   });
 
   const result = await postKlaviyoCreateEvent({
-    apiKey,
+    apiKey: KLAVIYO_RETURN_EVENTS_PRIVATE_KEY,
     metricName: METRIC_NAME,
     properties,
     profile: { email, first_name: firstName },

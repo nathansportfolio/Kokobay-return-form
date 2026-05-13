@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OrderReturnLines } from "@/components/OrderReturnLines";
 import {
+  ReturnPageStatusToast,
+  type ReturnPageLoadToastHint,
+} from "@/components/ReturnPageStatusToast";
+import {
   getReturnPageLinesAndResume,
   type ReturnPageFormContext,
   type ReturnPageBareLineSource,
@@ -130,8 +134,20 @@ export default async function OrderReturnPage({ params }: PageProps) {
     cookieStore.get(WAREHOUSE_OPERATOR_COOKIE)?.value ?? null,
   );
 
+  const loadToastHint: ReturnPageLoadToastHint =
+    !loadError && lines.length === 0
+      ? bareLineSource?.type === "shopify_not_found"
+        ? "shopify_not_found"
+        : bareLineSource?.type === "shopify_unavailable"
+          ? "shopify_unavailable"
+          : bareLineSource?.type === "sample"
+            ? "sample_catalog"
+            : null
+      : null;
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-4 sm:p-6">
+      <ReturnPageStatusToast hint={loadToastHint} />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Order return

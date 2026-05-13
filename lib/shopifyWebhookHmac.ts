@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 /**
  * Verifies `X-Shopify-Hmac-Sha256` for HTTPS webhooks (raw body, UTF-8).
- * Uses `SHOPIFY_CLIENT_SECRET` (same secret Shopify documents for custom apps).
+ * Uses `SHOPIFY_WEBHOOK_SECRET` (if set), else `SHOPIFY_CLIENT_SECRET` (same value as Shopify’s app “API secret key” for custom apps).
  */
 export function verifyShopifyWebhookHmac(
   rawBody: string,

@@ -52,10 +52,13 @@ function moneyFromSet(
   const o = asRecord(set);
   if (!o) return null;
   const shop = asRecord(o.shop_money);
-  if (!shop) return null;
-  const n = parseFloat(String(shop.amount ?? ""));
+  const pres = asRecord(o.presentment_money);
+  const pick = shop ?? pres;
+  if (!pick) return null;
+  const n = parseFloat(String(pick.amount ?? ""));
   if (!Number.isFinite(n)) return null;
-  const currency = String(shop.currency_code ?? "").trim().toUpperCase() || "GBP";
+  const currency =
+    String(pick.currency_code ?? "").trim().toUpperCase() || "GBP";
   return { amount: n, currency };
 }
 
@@ -76,6 +79,12 @@ export function refundAmountShopMoney(refund: Record<string, unknown>): {
       if (!tx) continue;
       if (String(tx.status ?? "").toLowerCase() !== "success") continue;
       if (String(tx.kind ?? "").toLowerCase() !== "refund") continue;
+      const fromSet = moneyFromSet(tx.amount_set);
+      if (fromSet) {
+        amount += fromSet.amount;
+        if (fromSet.currency) currency = fromSet.currency;
+        continue;
+      }
       const n = parseFloat(String(tx.amount ?? "0"));
       if (Number.isFinite(n)) amount += n;
       const c = String(tx.currency ?? "").trim().toUpperCase();
@@ -128,7 +137,11 @@ export async function insertShopifyRefundEventFromWebhook(
   }
 
   const shopifyRefundId = Math.trunc(Number(refund.id));
-  const shopifyOrderId = Math.trunc(Number(refund.order_id));
+  let shopifyOrderId = Math.trunc(Number(refund.order_id));
+  if (!Number.isFinite(shopifyOrderId) || shopifyOrderId < 1) {
+    const ord = asRecord(refund.order);
+    if (ord) shopifyOrderId = Math.trunc(Number(ord.id));
+  }
   if (!Number.isFinite(shopifyRefundId) || shopifyRefundId < 1) {
     return { ok: false, error: "Missing refund id" };
   }
