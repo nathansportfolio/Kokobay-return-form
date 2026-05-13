@@ -48,6 +48,7 @@ async function postKlaviyoReturnReceived(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const res = await fetch("/api/klaviyo/return-received", {
     method: "POST",
+    cache: "no-store",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
@@ -81,6 +82,7 @@ async function postKlaviyoReturnRejected(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const res = await fetch("/api/klaviyo/return-rejected", {
     method: "POST",
+    cache: "no-store",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });

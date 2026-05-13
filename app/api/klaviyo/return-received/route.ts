@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { KLAVIYO_RETURN_PRIVATE_KEY } from "@/lib/klaviyoReturnPrivateKey";
 import { postKlaviyoCreateEvent } from "@/lib/klaviyoPostEvent";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +28,20 @@ function looksLikeEmail(s: string): boolean {
  * Requires site PIN cookie when `NEXT_PUBLIC_SITE_PIN_*` is configured (middleware).
  *
  * Body: { email, firstName, orderId, refundAmount } — strings, all required.
+ *
+ * Env `KOKO_RETURN`: Klaviyo **private** API key (Account → Settings → API keys)
+ * with **events:write**. Must not be a public/site key or non-Klaviyo token — Klaviyo
+ * returns 401 "Missing or invalid private key" if the value is wrong.
  */
 export async function POST(request: Request) {
+  const apiKey = process.env.KOKO_RETURN?.trim();
+  if (!apiKey) {
+    return NextResponse.json(
+      { ok: false, error: "Klaviyo is not configured (KOKO_RETURN)" },
+      { status: 503 },
+    );
+  }
+
   let body: Body;
   try {
     body = (await request.json()) as Body;
@@ -59,7 +70,7 @@ export async function POST(request: Request) {
   }
 
   const result = await postKlaviyoCreateEvent({
-    apiKey: KLAVIYO_RETURN_PRIVATE_KEY,
+    apiKey,
     metricName: METRIC_NAME,
     properties: {
       customerName: firstName,
