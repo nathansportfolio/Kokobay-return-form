@@ -18,6 +18,9 @@ export type KlaviyoReturnItemPayload = {
 /**
  * Maps a warehouse order line title + return reason into Klaviyo `returnItems[]`
  * shape (name, size, reason).
+ *
+ * For `/api/klaviyo/return-rejected`, the UI overrides `reason` with trimmed warehouse
+ * **Notes** (rejection explanation), not `reasonValue`.
  */
 export function buildKlaviyoReturnItemFromLineTitleAndReason(
   title: string,

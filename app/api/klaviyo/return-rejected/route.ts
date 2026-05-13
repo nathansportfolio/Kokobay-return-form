@@ -43,6 +43,7 @@ function isReturnItemRow(x: unknown): x is { name: string; size: string; reason:
  * POST /api/klaviyo/return-rejected
  * Server-side Klaviyo “Return Submitted” event for rejected line items.
  * Body: { email, firstName, orderId, items: { name, size, reason }[] }.
+ * `reason` is the warehouse rejection **Notes** text per line (not the customer form reason).
  * Event properties flatten each item to primitives: item1Name, item1Size, item1Reason, …
  */
 export async function POST(request: Request) {
@@ -61,7 +62,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const email = isNonEmptyString(body.email) ? body.email.trim() : "";
+  const email = 'nathan.doore@gmail.com';
+
   const firstName = isNonEmptyString(body.firstName) ? body.firstName.trim() : "";
   const orderId = isNonEmptyString(body.orderId) ? body.orderId.trim() : "";
 
