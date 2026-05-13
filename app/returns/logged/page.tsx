@@ -35,7 +35,7 @@ import {
 } from "@/lib/shopifyOrderAdminUrl";
 import { WAREHOUSE_TZ, formatDateAsOrdinalInTimeZone } from "@/lib/warehouseLondonDay";
 import { RefundedTodaySoFar } from "@/components/RefundedTodaySoFar";
-import { ReturnLogRefundPendingAutoRefresh } from "@/components/ReturnLogRefundPendingAutoRefresh";
+import { ReturnLogRefreshButton } from "@/components/ReturnLogRefreshButton";
 
 export const dynamic = "force-dynamic";
 
@@ -167,9 +167,11 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
 
   const { items: rows, total, page, pageSize } = data;
 
+  /** Order refs to resolve in Shopify (batch). Set dedupes HTTP only, not rows. */
   const refsToFetchForShopify = new Set<string>();
   for (const r of rows) {
     const ref = r.orderRef.trim();
+    if (!ref) continue;
     if (!r.shopifyOrderId) refsToFetchForShopify.add(ref);
     if (q.refundPending) refsToFetchForShopify.add(ref);
   }
@@ -190,104 +192,26 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
   const shopifyLiveRefundsEnabled =
     q.refundPending && Boolean(process.env.SHOPIFY_STORE?.trim());
 
-  const rowIndicatesShopifyMoneyReturned = (r: ReturnLogListItem) => {
-    if (!shopifyLiveRefundsEnabled) return false;
-    const d = shopifyDisplayByOrderRef.get(r.orderRef.trim());
-    return shopifyOrderDisplayIndicatesMoneyReturned(d);
-  };
-
-  const rowOrderIndex = new Map(rows.map((r, i) => [r.returnUid, i]));
-  const displayRows = shopifyLiveRefundsEnabled
-    ? [...rows].sort((a, b) => {
-        const ar = rowIndicatesShopifyMoneyReturned(a) ? 1 : 0;
-        const br = rowIndicatesShopifyMoneyReturned(b) ? 1 : 0;
-        if (ar !== br) return ar - br;
-        return (rowOrderIndex.get(a.returnUid) ?? 0) -
-          (rowOrderIndex.get(b.returnUid) ?? 0);
-      })
-    : rows;
-
-  const shopifyRefundedRowCountOnPage = shopifyLiveRefundsEnabled
-    ? rows.filter((r) => rowIndicatesShopifyMoneyReturned(r)).length
-    : 0;
-
-  const outstandingRefundRows = shopifyLiveRefundsEnabled
-    ? displayRows.filter((r) => !rowIndicatesShopifyMoneyReturned(r))
-    : displayRows;
-  const shopifyGreyedRefundRows = shopifyLiveRefundsEnabled
-    ? displayRows.filter((r) => rowIndicatesShopifyMoneyReturned(r))
-    : [];
-  const splitShopifyGreyedTables =
-    q.refundPending &&
-    shopifyLiveRefundsEnabled &&
-    shopifyGreyedRefundRows.length > 0;
-
-  if (q.refundPending && rows.length > 0) {
-    console.log(
-      "[returns/logged] refundPending=1 · page",
-      page,
-      "· Mongo rows on page:",
-      rows.length,
-      "· display (Shopify refunded sorted to bottom):",
-      displayRows.length,
-      "· SHOPIFY_STORE:",
-      Boolean(process.env.SHOPIFY_STORE?.trim()),
-    );
-    for (const r of rows) {
-      const shop = shopifyDisplayByOrderRef.get(r.orderRef.trim());
-      const greyedAtBottom = shopifyOrderDisplayIndicatesMoneyReturned(shop);
-      console.log("[returns/logged] order", {
-        orderRef: r.orderRef,
-        returnUid: r.returnUid,
-        mongo: {
-          createdAt: r.createdAt,
-          updatedAt: r.updatedAt,
-          customerEmailSent: r.customerEmailSent,
-          customerEmailSentAt: r.customerEmailSentAt ?? null,
-          /** Sum of logged line totals (table “refund” amount context). */
-          totalRefundGbp_fromReturnLines: r.totalRefundGbp,
-          fullRefundIssued_appColumn: r.fullRefundIssued,
-          fullRefundAmountGbp_recordedWhenMarked:
-            r.fullRefundAmountGbp ?? null,
-          fullRefundIssuedAt: r.fullRefundIssuedAt ?? null,
-          lineCount: r.lineCount,
-        },
-        shopifyLive: shop
-          ? {
-              orderName: shop.orderName,
-              shopifyOrderId: shop.shopifyOrderId,
-              shopifyOrderNumber: shop.shopifyOrderNumber,
-              financialStatus: shop.financialStatus,
-              fulfillmentStatus: shop.fulfillmentStatus,
-              totalPrice: shop.totalPrice,
-              currentTotalPrice: shop.currentTotalPrice ?? null,
-              refundRecordCount: shop.refundRecordCount,
-              currency: shop.currency,
-              email: shop.email,
-              customerName: shop.customerName,
-              orderCreatedAt: shop.createdAt,
-            }
-          : {
-              _note:
-                "No Shopify row — check SHOPIFY_STORE, token, or order ref match",
-            },
-        shopifyOrderIdUsedForAdminLink:
-          r.shopifyOrderId ??
-          shopifyAdminIdByOrderRef.get(r.orderRef.trim()) ??
-          null,
-        shopifyRefunded_greyedSortedToBottom: greyedAtBottom,
-        linesPreview: r.lines.slice(0, 8).map((l) => ({
-          title: l.title,
-          sku: l.sku,
-          quantity: l.quantity,
-          lineTotalGbp: l.lineTotalGbp,
-          disposition: l.disposition,
-        })),
-        linesTotalShown: Math.min(8, r.lines.length),
-        linesTruncated: r.lines.length > 8,
-      });
+  /** Presentational only: keyed by `returnUid`, never by `orderRef` (avoids collapsing rows). */
+  const shopifyRefundedByReturnUid = new Map<string, boolean>();
+  for (const r of rows) {
+    if (!shopifyLiveRefundsEnabled) {
+      shopifyRefundedByReturnUid.set(r.returnUid, false);
+      continue;
     }
+    const d = shopifyDisplayByOrderRef.get(r.orderRef.trim()) ?? null;
+    shopifyRefundedByReturnUid.set(
+      r.returnUid,
+      shopifyOrderDisplayIndicatesMoneyReturned(d),
+    );
   }
+
+  const displayRows = shopifyLiveRefundsEnabled
+    ? [
+        ...rows.filter((r) => !shopifyRefundedByReturnUid.get(r.returnUid)),
+        ...rows.filter((r) => shopifyRefundedByReturnUid.get(r.returnUid)),
+      ]
+    : rows;
 
   const current: ReturnLogListState = {
     page,
@@ -354,7 +278,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
 
   const renderDesktopTableRows = (rowList: ReturnLogListItem[]) =>
     rowList.map((r) => {
-      const greyed = rowIndicatesShopifyMoneyReturned(r);
+      const greyed = shopifyRefundedByReturnUid.get(r.returnUid) === true;
       const actionsDisabled = greyed;
       const refundShowsYes = r.fullRefundIssued || greyed;
       const lines = r.lines ?? [];
@@ -507,7 +431,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
 
   const renderMobileReturnCard = (r: ReturnLogListItem) => {
     const lines = r.lines ?? [];
-    const greyed = rowIndicatesShopifyMoneyReturned(r);
+    const greyed = shopifyRefundedByReturnUid.get(r.returnUid) === true;
     const actionsDisabled = greyed;
     const refundShowsYes = r.fullRefundIssued || greyed;
     const cardBase = greyed
@@ -731,7 +655,6 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto min-w-0 max-w-5xl flex-1 px-3 py-4 sm:px-6 sm:py-6">
-      {q.refundPending ? <ReturnLogRefundPendingAutoRefresh /> : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-2">
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold sm:text-2xl">
@@ -746,28 +669,6 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
           New return
         </Link>
       </div>
-      {q.refundPending ? (
-        <p className="mt-2 text-pretty text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-          <strong className="font-medium">Refund</strong> shows{" "}
-          <strong className="font-medium">Yes</strong> when marked in the app{" "}
-          <em className="not-italic">or</em> when the row is greyed (Shopify shows refund
-          activity). When Shopify is configured, we load each order’s live payment data;
-          rows where Shopify shows <strong className="font-medium">refunded</strong>,{" "}
-          <strong className="font-medium">partially refunded</strong>, or{" "}
-          <strong className="font-medium">refund records</strong> (even if status still
-          says <strong className="font-medium">paid</strong>) appear{" "}
-          <strong className="font-medium">greyed</strong> in a{" "}
-          <strong className="font-medium">separate table</strong> below;{" "}
-          <strong className="font-medium">View</strong> and{" "}
-          <strong className="font-medium">Refund in Shopify</strong> are disabled for
-          those rows. For non-greyed rows,{" "}
-          <strong className="font-medium">Refund in Shopify</strong> opens Admin refund
-          with stored id or the same live lookup as the return screen.{" "}
-          <strong className="font-medium">User</strong> is who logged the return:{" "}
-          <strong className="font-medium">1</strong> = team PIN,{" "}
-          <strong className="font-medium">2</strong> = admin PIN (— if not recorded).
-        </p>
-      ) : null}
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-1.5">
         <Link
           href={returnLogListHref(current, {
@@ -780,8 +681,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
               : "inline-flex w-full items-center justify-center rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-center text-xs font-medium text-foreground transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800 sm:w-auto sm:py-1.5"
           }
         >
-          <span className="sm:hidden">Outstanding refunds</span>
-          <span className="hidden sm:inline">View returns yet to be refunded</span>
+          Outstanding refunds
         </Link>
         <Link
           href={returnLogListHref(current, {
@@ -945,22 +845,6 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
         </p>
       ) : (
         <>
-          {shopifyRefundedRowCountOnPage > 0 ? (
-            <p
-              className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-200"
-              role="status"
-            >
-              {shopifyRefundedRowCountOnPage} return
-              {shopifyRefundedRowCountOnPage === 1 ? "" : "s"} on this page already have
-              refund activity in Shopify (paid/partial/refunded) — they are{" "}
-              <strong className="font-medium">greyed</strong> in the second table;{" "}
-              <strong className="font-medium">View</strong> and{" "}
-              <strong className="font-medium">Refund in Shopify</strong> are disabled
-              there. Mark{" "}
-              <strong className="font-medium">Refund</strong> in the app when processing
-              is done so the outstanding list stays accurate.
-            </p>
-          ) : null}
           <div className="mt-3 flex flex-col gap-2 text-sm text-zinc-500 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <span>Rows per page</span>
             <div className="flex flex-wrap items-center gap-1">
@@ -983,57 +867,34 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
             </div>
           </div>
 
-          {splitShopifyGreyedTables ? (
-            <div className="mt-3 hidden flex-col gap-8 lg:flex">
-              <section aria-labelledby="returns-outstanding-table-heading">
-                <h2
-                  id="returns-outstanding-table-heading"
-                  className="mb-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200"
-                >
-                  Still need refund in app
-                </h2>
-                {outstandingRefundRows.length > 0 ? (
-                  <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-                    <table className="w-full min-w-[40rem] border-collapse text-left text-sm md:min-w-[48rem]">
-                      {refundPendingDesktopThead}
-                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                        {renderDesktopTableRows(outstandingRefundRows)}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                    No returns on this page without Shopify refund activity — every row
-                    here already shows refund activity in Shopify.
-                  </p>
-                )}
-              </section>
-              <section aria-labelledby="returns-shopify-greyed-table-heading">
-                <h2
-                  id="returns-shopify-greyed-table-heading"
-                  className="mb-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200"
-                >
-                  Shopify refund activity (greyed)
-                </h2>
+          {q.refundPending ? (
+            <>
+              <div className="mt-3 hidden flex-col gap-2 lg:flex">
+                <div className="flex justify-end">
+                  <ReturnLogRefreshButton />
+                </div>
                 <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
                   <table className="w-full min-w-[40rem] border-collapse text-left text-sm md:min-w-[48rem]">
                     {refundPendingDesktopThead}
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                      {renderDesktopTableRows(shopifyGreyedRefundRows)}
+                      {renderDesktopTableRows(displayRows)}
                     </tbody>
                   </table>
                 </div>
-              </section>
-            </div>
-          ) : q.refundPending ? (
-            <div className="mt-3 hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 lg:block">
-              <table className="w-full min-w-[40rem] border-collapse text-left text-sm md:min-w-[48rem]">
-                {refundPendingDesktopThead}
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                  {renderDesktopTableRows(displayRows)}
-                </tbody>
-              </table>
-            </div>
+              </div>
+              <div className="mt-3 flex flex-col gap-3 lg:hidden">
+                <div className="flex justify-end">
+                  <ReturnLogRefreshButton />
+                </div>
+                <div className="space-y-4">
+                  {displayRows.map((r) => (
+                    <Fragment key={r.returnUid}>
+                      {renderMobileReturnCard(r)}
+                    </Fragment>
+                  ))}
+                </div>
+              </div>
+            </>
           ) : (
             <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
               <table className="w-full min-w-[40rem] border-collapse text-left text-sm md:min-w-[48rem]">
@@ -1058,7 +919,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
                   {displayRows.map((r) => {
-                    const greyed = rowIndicatesShopifyMoneyReturned(r);
+                    const greyed = false;
                     const refundShowsYes = r.fullRefundIssued || greyed;
                     return (
                       <Fragment key={r.returnUid}>
@@ -1126,55 +987,6 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
             </div>
           )}
 
-          {q.refundPending ? (
-            splitShopifyGreyedTables ? (
-              <div className="mt-3 space-y-6 lg:hidden">
-                <section aria-labelledby="returns-outstanding-mobile-heading">
-                  <h2
-                    id="returns-outstanding-mobile-heading"
-                    className="mb-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200"
-                  >
-                    Still need refund in app
-                  </h2>
-                  <div className="space-y-4">
-                    {outstandingRefundRows.length > 0 ? (
-                      outstandingRefundRows.map((r) => (
-                        <Fragment key={r.returnUid}>
-                          {renderMobileReturnCard(r)}
-                        </Fragment>
-                      ))
-                    ) : (
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                        No returns on this page without Shopify refund activity — every row
-                        here already shows refund activity in Shopify.
-                      </p>
-                    )}
-                  </div>
-                </section>
-                <section
-                  aria-labelledby="returns-shopify-greyed-mobile-heading"
-                  className="space-y-4"
-                >
-                  <h2
-                    id="returns-shopify-greyed-mobile-heading"
-                    className="text-sm font-semibold text-zinc-800 dark:text-zinc-200"
-                  >
-                    Shopify refund activity (greyed)
-                  </h2>
-                  {shopifyGreyedRefundRows.map((r) => (
-                    <Fragment key={r.returnUid}>{renderMobileReturnCard(r)}</Fragment>
-                  ))}
-                </section>
-              </div>
-            ) : (
-              <div className="mt-3 space-y-4 lg:hidden">
-                {displayRows.map((r) => (
-                  <Fragment key={r.returnUid}>{renderMobileReturnCard(r)}</Fragment>
-                ))}
-              </div>
-            )
-          ) : null}
-
           <div className="mt-4 flex flex-col items-stretch gap-3 border-t border-zinc-200 pt-4 text-sm sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
             <p
               className="text-pretty text-zinc-600 dark:text-zinc-400"
@@ -1184,11 +996,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                 <>
                   <span className="block sm:inline">
                     Showing {displayRows.length} return
-                    {displayRows.length === 1 ? "" : "s"} on this page
-                    {shopifyRefundedRowCountOnPage > 0
-                      ? ` (${shopifyRefundedRowCountOnPage} greyed: Shopify refund activity)`
-                      : ""}
-                    .
+                    {displayRows.length === 1 ? "" : "s"} on this page.
                   </span>{" "}
                   <span className="mt-1 block text-xs sm:mt-0 sm:inline sm:text-sm">
                     DB filter: {from}–{to} of {total} with refund not marked in app.

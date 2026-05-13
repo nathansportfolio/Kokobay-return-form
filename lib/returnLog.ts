@@ -206,6 +206,10 @@ export type ListReturnLogsPagedInput = {
 /**
  * Paged, sorted return log list for the warehouse /returns/logged view.
  * Returns the effective `page` (clamped) after counting total documents.
+ *
+ * Outstanding-refund mode (`refundPendingOnly`) only adds `fullRefundIssued: false`
+ * plus the same optional `createdAt` range as the full list — never Shopify-based
+ * predicates, dedupe, or grouping.
  */
 export async function listReturnLogsPaged(
   input: ListReturnLogsPagedInput,
@@ -253,7 +257,7 @@ export async function listReturnLogsPaged(
   };
 }
 
-/** Counts logged returns where a full refund has not been recorded yet. */
+/** Counts return logs where a full refund has not been recorded in the app yet. */
 export async function countReturnLogsPendingFullRefund(): Promise<number> {
   const client = await clientPromise;
   const col = client

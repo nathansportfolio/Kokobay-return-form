@@ -124,7 +124,6 @@ export async function findShopifyOrderByQuery(
   }
 
   let order: ShopifyOrder | undefined;
-  let resolvedViaNumericOrderIdPath = false;
 
   if (LONG_NUMERIC_ID.test(q)) {
     const r = await shopifyAdminGetNoCache<{ order?: ShopifyOrder }>(
@@ -132,7 +131,6 @@ export async function findShopifyOrderByQuery(
     );
     if (r.ok && r.data.order) {
       order = r.data.order;
-      resolvedViaNumericOrderIdPath = true;
     }
   }
 
@@ -163,8 +161,8 @@ export async function findShopifyOrderByQuery(
     }
   }
 
-  // `orders.json` search hits can omit `refunds` / `current_total_price`; single-order GET is complete.
-  if (order?.id && !resolvedViaNumericOrderIdPath) {
+  // List/search hits can omit `refunds` / `current_total_price`; always hydrate with a single-order GET.
+  if (order?.id) {
     const rFull = await shopifyAdminGetNoCache<{ order?: ShopifyOrder }>(
       `orders/${order.id}.json`,
     );
@@ -404,6 +402,9 @@ export function shopifyFinancialStatusLabel(
 /**
  * Live order summary per `orderRef` for logged returns (Admin REST). Map keys are
  * `orderRef.trim()`. Values are `null` when Shopify is unavailable or the order was not found.
+ *
+ * `Set` here only dedupes **Admin API calls** (same `orderRef` twice); it does not
+ * remove or merge return-log rows — each row still resolves via its own `orderRef`.
  */
 export async function resolveShopifyOrderDisplaysForOrderRefs(
   orderRefs: string[],
