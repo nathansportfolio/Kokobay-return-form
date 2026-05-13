@@ -7,6 +7,7 @@ import {
   shopifyOrderAdminUrlByOrderId,
   shopifyOrderAdminUrlFromOrderRef,
 } from "@/lib/shopifyOrderAdminUrl";
+import { ShopifyRefundAuditButton } from "@/components/ShopifyRefundAuditButton";
 import { formatGbp } from "@/lib/kokobayOrderLines";
 import {
   warehouseReturnAuditWho,
@@ -56,10 +57,15 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
   const doc = await getReturnLogByUid(uid);
   if (!doc) notFound();
 
+  let shopifyDisplay: Awaited<
+    ReturnType<typeof fetchShopifyOrderDisplay>
+  > | null = null;
+  if (process.env.SHOPIFY_STORE?.trim()) {
+    shopifyDisplay = await fetchShopifyOrderDisplay(doc.orderRef);
+  }
   let shopifyAdminOrderId = doc.shopifyOrderId?.trim();
-  if (!shopifyAdminOrderId && process.env.SHOPIFY_STORE?.trim()) {
-    const d = await fetchShopifyOrderDisplay(doc.orderRef);
-    if (d?.shopifyOrderId) shopifyAdminOrderId = d.shopifyOrderId;
+  if (!shopifyAdminOrderId && shopifyDisplay?.shopifyOrderId) {
+    shopifyAdminOrderId = shopifyDisplay.shopifyOrderId;
   }
   const shopifyAdminHref = shopifyAdminOrderId
     ? shopifyOrderAdminUrlByOrderId(shopifyAdminOrderId)
@@ -83,15 +89,26 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
       </p>
 
       <p className="mt-4">
-        <a
+        <ShopifyRefundAuditButton
           href={shopifyAdminHref}
-          className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[#006e52] bg-[#008060] px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Refund order in Shopify admin (new tab)"
+          orderRef={doc.orderRef}
+          returnLogId={doc.returnUid}
+          refundAmountGbp={doc.totalRefundGbp}
+          currency="GBP"
+          customerName={
+            shopifyDisplay?.customerName?.trim() &&
+            shopifyDisplay.customerName.trim() !== "—"
+              ? shopifyDisplay.customerName.trim()
+              : null
+          }
+          customerEmail={shopifyDisplay?.email?.trim() || null}
+          shopifyOrderId={shopifyAdminOrderId?.trim() || null}
+          className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[#006e52] bg-[#008060] px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 enabled:cursor-pointer disabled:cursor-not-allowed dark:focus:ring-offset-zinc-950"
+          title="Log refund intent, then open Shopify Admin refund (new tab)"
+          disabled={false}
         >
           Refund in Shopify
-        </a>
+        </ShopifyRefundAuditButton>
         {showLegacyNote ? (
           <span className="ml-2 text-xs text-zinc-500">
             Could not look up this order in Shopify — link may be wrong.

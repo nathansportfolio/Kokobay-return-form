@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { OperationsCtaGrid } from "@/components/home/OperationsCtaGrid";
+import { formatGbp } from "@/lib/kokobayOrderLines";
 import { getHomepageDashboardStats } from "@/lib/homepageDashboard";
 import { formatDayKeyAsOrdinalEnglish } from "@/lib/warehouseLondonDay";
 
@@ -202,6 +203,54 @@ export default async function Home() {
                     </Link>
                   </p>
                 ) : null}
+              </div>
+            </li>
+            <li className="flex h-full min-h-0 flex-col sm:col-span-2 lg:col-span-1">
+              <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-200 border-l-4 border-l-emerald-600/90 bg-zinc-50/80 p-5 dark:border-zinc-700 dark:border-l-emerald-500/85 dark:bg-zinc-900/50">
+                <span className="text-sm font-semibold text-foreground">
+                  Refunded today (Shopify button)
+                </span>
+                <span className="mt-1" aria-live="polite">
+                  {stats.refundAuditTodayOk ? (
+                    <span className="text-3xl font-bold tabular-nums tracking-tight text-foreground">
+                      {formatGbp(stats.refundAuditTodayTotalGbp)}
+                    </span>
+                  ) : (
+                    <span className="text-2xl font-semibold text-zinc-400">—</span>
+                  )}
+                </span>
+                {stats.refundAuditTodayOk ? (
+                  <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                    <span className="font-medium tabular-nums text-foreground">
+                      {stats.refundAuditTodayCount}
+                    </span>{" "}
+                    staff refund{stats.refundAuditTodayCount === 1 ? "" : "s"} logged
+                    {stats.refundAuditTodayCustomers > 0 ? (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <span className="font-medium tabular-nums text-foreground">
+                          {stats.refundAuditTodayCustomers}
+                        </span>{" "}
+                        distinct customer
+                        {stats.refundAuditTodayCustomers === 1 ? "" : "s"}
+                      </>
+                    ) : null}
+                    <span className="mt-1 block text-xs text-zinc-500">
+                      London calendar day · internal audit only (not Shopify API).
+                    </span>
+                  </span>
+                ) : (
+                  <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                    Could not load refund audit totals.
+                  </span>
+                )}
+                <Link
+                  href="/returns/logged?refundPending=1"
+                  className="mt-auto self-start pt-3 text-sm font-medium text-emerald-900 underline decoration-emerald-800/30 underline-offset-2 dark:text-emerald-200"
+                >
+                  Returns queue →
+                </Link>
               </div>
             </li>
             <li className="flex h-full min-h-0 flex-col sm:col-span-2 lg:col-span-1">

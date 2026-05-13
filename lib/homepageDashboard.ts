@@ -3,6 +3,7 @@ import { countOrderPickPausesForDay } from "@/lib/orderPickPause";
 import { fetchTodaysOrderSummaries } from "@/lib/fetchTodaysOrderSummaries";
 import { PICKLIST_LIST_KIND_UK_PREMIUM } from "@/lib/picklistListKind";
 import { countReturnLogsPendingFullRefund } from "@/lib/returnLog";
+import { countRefundsToday } from "@/lib/refundAuditLog";
 import { withPickableLinesOnly } from "@/lib/warehousePickableLine";
 import { getTodayCalendarDateKeyInLondon } from "@/lib/warehouseLondonDay";
 import { getUkPremiumShopifyOrdersForPicks, isShopifyWarehouseDataEnabled } from "@/lib/shopifyWarehouseDayOrders";
@@ -21,6 +22,11 @@ export type HomepageDashboardStats = {
   /** UK Premium pipeline: orders on missing-stock hold for today’s London day. */
   ukPremiumOrdersPausedMissingStock: number;
   returnsPendingRefund: number;
+  /** Internal audit: staff “Refund in Shopify” clicks logged today (London). */
+  refundAuditTodayCount: number;
+  refundAuditTodayTotalGbp: number;
+  refundAuditTodayCustomers: number;
+  refundAuditTodayOk: boolean;
   orderStatsOk: boolean;
   returnsCountOk: boolean;
   ukPremiumSpecialStatsOk: boolean;
@@ -44,6 +50,10 @@ export async function getHomepageDashboardStats(): Promise<HomepageDashboardStat
   let orderStatsOk = false;
   let returnsPendingRefund = 0;
   let returnsCountOk = false;
+  let refundAuditTodayCount = 0;
+  let refundAuditTodayTotalGbp = 0;
+  let refundAuditTodayCustomers = 0;
+  let refundAuditTodayOk = false;
   let pickListOrderDayKey: string | null = null;
   let ukPremiumSpecialOrdersYetToPick = 0;
   let ukPremiumOrdersPausedMissingStock = 0;
@@ -93,6 +103,16 @@ export async function getHomepageDashboardStats(): Promise<HomepageDashboardStat
     returnsCountOk = false;
   }
 
+  try {
+    const a = await countRefundsToday();
+    refundAuditTodayCount = a.count;
+    refundAuditTodayTotalGbp = a.totalAmount;
+    refundAuditTodayCustomers = a.customers;
+    refundAuditTodayOk = true;
+  } catch {
+    refundAuditTodayOk = false;
+  }
+
   return {
     pickListDayOrdersPicked,
     pickListDayOrderTotal,
@@ -100,6 +120,10 @@ export async function getHomepageDashboardStats(): Promise<HomepageDashboardStat
     ukPremiumSpecialOrdersYetToPick,
     ukPremiumOrdersPausedMissingStock,
     returnsPendingRefund,
+    refundAuditTodayCount,
+    refundAuditTodayTotalGbp,
+    refundAuditTodayCustomers,
+    refundAuditTodayOk,
     orderStatsOk,
     returnsCountOk,
     ukPremiumSpecialStatsOk,

@@ -32,6 +32,7 @@ import {
   shopifyOrderAdminUrlByOrderId,
   shopifyOrderAdminUrlFromOrderRef,
 } from "@/lib/shopifyOrderAdminUrl";
+import { ShopifyRefundAuditButton } from "@/components/ShopifyRefundAuditButton";
 import {
   CurrencyGbp,
   EnvelopeSimple,
@@ -234,6 +235,8 @@ export function OrderReturnLines({
   resume = null,
   notifyCustomer = null,
   currentOperatorLabel = null,
+  auditCustomerName = null,
+  auditCustomerEmail = null,
 }: {
   /** From Shopify `order.name` (e.g. #1001) when known. */
   orderLabel: string;
@@ -252,6 +255,9 @@ export function OrderReturnLines({
   notifyCustomer?: { email: string; firstName: string } | null;
   /** Warehouse person from login PIN (`warehouse_operator` cookie). */
   currentOperatorLabel?: string | null;
+  /** For internal refund audit log (Shopify button) — from live order when known. */
+  auditCustomerName?: string | null;
+  auditCustomerEmail?: string | null;
 }) {
   const router = useRouter();
   const [byId, setById] = useState(() => buildInitialState(lines, resume));
@@ -358,6 +364,17 @@ export function OrderReturnLines({
         : shopifyOrderAdminUrlFromOrderRef(orderLabel),
     [orderLabel, shopifyOrderId],
   );
+
+  const auditRefundAmountGbp = useMemo(() => {
+    if (selectedCount > 0) return selectedRefund;
+    return fullOrderTotal;
+  }, [selectedCount, selectedRefund, fullOrderTotal]);
+
+  const auditCustomerNameClean =
+    auditCustomerName?.trim() && auditCustomerName.trim() !== "—"
+      ? auditCustomerName.trim()
+      : null;
+  const auditCustomerEmailClean = auditCustomerEmail?.trim() || null;
 
   useEffect(() => {
     const el = masterCheckboxRef.current;
@@ -1029,16 +1046,21 @@ export function OrderReturnLines({
       </ul>
 
       <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
-        <a
+        <ShopifyRefundAuditButton
           href={shopifyAdminHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Refund order in Shopify admin (new tab)"
-          className="inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-lg border border-[#006e52] bg-[#008060] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] active:bg-[#005a47] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-2 sm:min-h-10"
+          orderRef={orderLabel}
+          returnLogId={returnUid}
+          refundAmountGbp={auditRefundAmountGbp}
+          currency="GBP"
+          customerName={auditCustomerNameClean}
+          customerEmail={auditCustomerEmailClean}
+          shopifyOrderId={shopifyOrderId?.trim() || null}
+          className="inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-lg border border-[#006e52] bg-[#008060] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] active:bg-[#005a47] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-2 enabled:cursor-pointer disabled:cursor-not-allowed sm:min-h-10"
+          title="Log refund intent, then open Shopify Admin refund (new tab)"
         >
           <Storefront className="h-5 w-5 shrink-0 text-white" weight="fill" aria-hidden />
           Refund in Shopify
-        </a>
+        </ShopifyRefundAuditButton>
         {returnUid && !returnBusy && !regRefund ? (
           <button
             type="button"

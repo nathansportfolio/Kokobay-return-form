@@ -326,6 +326,8 @@ export default async function OrderReturnPage({ params }: PageProps) {
           resume={resume}
           notifyCustomer={notifyCustomer}
           currentOperatorLabel={currentOperatorLabel}
+          auditCustomerName={shopifyOrder?.customerName ?? null}
+          auditCustomerEmail={shopifyOrder?.email ?? notifyCustomer?.email ?? null}
         />
       )}
     </div>

@@ -19,6 +19,7 @@ import {
   type ReturnLogListState,
 } from "@/lib/returnLogListParams";
 import {
+  type ShopifyOrderDisplay,
   resolveShopifyOrderDisplaysForOrderRefs,
   shopifyOrderDisplayIndicatesMoneyReturned,
   shopifyPaymentStatusLabelForReturnsList,
@@ -36,6 +37,7 @@ import {
 import { WAREHOUSE_TZ, formatDateAsOrdinalInTimeZone } from "@/lib/warehouseLondonDay";
 import { RefundedTodaySoFar } from "@/components/RefundedTodaySoFar";
 import { ReturnLogRefreshButton } from "@/components/ReturnLogRefreshButton";
+import { ShopifyRefundAuditButton } from "@/components/ShopifyRefundAuditButton";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +73,29 @@ function shopifyReturnLogRowAdminHref(
   return id
     ? shopifyOrderAdminUrlByOrderId(id)
     : shopifyOrderAdminUrlFromOrderRef(r.orderRef);
+}
+
+function shopifyReturnLogRowAdminOrderId(
+  r: ReturnLogListItem,
+  resolvedIdByOrderRef: Map<string, string>,
+): string | null {
+  const id =
+    r.shopifyOrderId?.trim() ||
+    resolvedIdByOrderRef.get(r.orderRef.trim())?.trim();
+  return id || null;
+}
+
+function shopifyAuditCustomersForReturnRow(
+  r: ReturnLogListItem,
+  shopifyDisplayByOrderRef: Map<string, ShopifyOrderDisplay | null>,
+): { customerName: string | null; customerEmail: string | null } {
+  const s = shopifyDisplayByOrderRef.get(r.orderRef.trim());
+  if (!s) return { customerName: null, customerEmail: null };
+  const email = s.email?.trim() || null;
+  const nameRaw = s.customerName?.trim();
+  const customerName =
+    nameRaw && nameRaw !== "—" ? nameRaw : null;
+  return { customerName, customerEmail: email };
 }
 
 function fmtWhen(iso: string) {
@@ -169,11 +194,15 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
 
   /** Order refs to resolve in Shopify (batch). Set dedupes HTTP only, not rows. */
   const refsToFetchForShopify = new Set<string>();
+  const shopifyConfigured = Boolean(process.env.SHOPIFY_STORE?.trim());
   for (const r of rows) {
     const ref = r.orderRef.trim();
     if (!ref) continue;
-    if (!r.shopifyOrderId) refsToFetchForShopify.add(ref);
-    if (q.refundPending) refsToFetchForShopify.add(ref);
+    if (shopifyConfigured) {
+      refsToFetchForShopify.add(ref);
+    } else if (!r.shopifyOrderId) {
+      refsToFetchForShopify.add(ref);
+    }
   }
 
   const shopifyDisplayByOrderRef =
@@ -359,16 +388,30 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                     <span className="hidden sm:inline">Refund in Shopify</span>
                   </span>
                 ) : (
-                  <a
-                    href={shopifyReturnLogRowAdminHref(r, shopifyAdminIdByOrderRef)}
-                    className="inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-center text-xs font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950 sm:w-auto sm:min-h-8 sm:px-2.5 sm:py-1"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Refund order in Shopify admin (new tab)"
+                  <ShopifyRefundAuditButton
+                    href={shopifyReturnLogRowAdminHref(
+                      r,
+                      shopifyAdminIdByOrderRef,
+                    )}
+                    orderRef={r.orderRef}
+                    returnLogId={r.returnUid}
+                    refundAmountGbp={r.totalRefundGbp}
+                    currency="GBP"
+                    {...shopifyAuditCustomersForReturnRow(
+                      r,
+                      shopifyDisplayByOrderRef,
+                    )}
+                    shopifyOrderId={shopifyReturnLogRowAdminOrderId(
+                      r,
+                      shopifyAdminIdByOrderRef,
+                    )}
+                    className="inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-center text-xs font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 enabled:cursor-pointer disabled:cursor-not-allowed dark:focus:ring-offset-zinc-950 sm:w-auto sm:min-h-8 sm:px-2.5 sm:py-1"
+                    title="Log refund intent, then open Shopify Admin refund (new tab)"
+                    disabled={actionsDisabled}
                   >
                     <span className="sm:hidden">Shopify refund</span>
                     <span className="hidden sm:inline">Refund in Shopify</span>
-                  </a>
+                  </ShopifyRefundAuditButton>
                 )}
               </div>
             </td>
@@ -524,14 +567,23 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                 Shopify refund
               </span>
             ) : (
-              <a
+              <ShopifyRefundAuditButton
                 href={shopifyReturnLogRowAdminHref(r, shopifyAdminIdByOrderRef)}
-                className="inline-flex min-h-9 flex-1 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-xs font-semibold text-white"
-                target="_blank"
-                rel="noopener noreferrer"
+                orderRef={r.orderRef}
+                returnLogId={r.returnUid}
+                refundAmountGbp={r.totalRefundGbp}
+                currency="GBP"
+                {...shopifyAuditCustomersForReturnRow(r, shopifyDisplayByOrderRef)}
+                shopifyOrderId={shopifyReturnLogRowAdminOrderId(
+                  r,
+                  shopifyAdminIdByOrderRef,
+                )}
+                className="inline-flex min-h-9 flex-1 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-xs font-semibold text-white enabled:cursor-pointer disabled:cursor-not-allowed"
+                title="Log refund intent, then open Shopify Admin refund (new tab)"
+                disabled={actionsDisabled}
               >
                 Shopify refund
-              </a>
+              </ShopifyRefundAuditButton>
             )}
           </div>
         </div>
@@ -961,21 +1013,32 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                               >
                                 View
                               </Link>
-                              <a
+                              <ShopifyRefundAuditButton
                                 href={shopifyReturnLogRowAdminHref(
                                   r,
                                   shopifyAdminIdByOrderRef,
                                 )}
-                                className="inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-center text-xs font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 dark:focus:ring-offset-zinc-950 sm:w-auto sm:min-h-8 sm:px-2.5 sm:py-1"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Refund order in Shopify admin (new tab)"
+                                orderRef={r.orderRef}
+                                returnLogId={r.returnUid}
+                                refundAmountGbp={r.totalRefundGbp}
+                                currency="GBP"
+                                {...shopifyAuditCustomersForReturnRow(
+                                  r,
+                                  shopifyDisplayByOrderRef,
+                                )}
+                                shopifyOrderId={shopifyReturnLogRowAdminOrderId(
+                                  r,
+                                  shopifyAdminIdByOrderRef,
+                                )}
+                                className="inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-center text-xs font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 enabled:cursor-pointer disabled:cursor-not-allowed dark:focus:ring-offset-zinc-950 sm:w-auto sm:min-h-8 sm:px-2.5 sm:py-1"
+                                title="Log refund intent, then open Shopify Admin refund (new tab)"
+                                disabled={false}
                               >
                                 <span className="sm:hidden">Shopify refund</span>
                                 <span className="hidden sm:inline">
                                   Refund in Shopify
                                 </span>
-                              </a>
+                              </ShopifyRefundAuditButton>
                             </div>
                           </td>
                         </tr>
