@@ -21,8 +21,10 @@ export type ShopifyRefundAuditButtonProps = {
 };
 
 /**
- * Records an internal Mongo audit row, then opens the Shopify Admin refund URL.
- * Does not call Shopify APIs — success is our POST succeeding.
+ * Opens Shopify Admin refund in a new tab **synchronously** on click (same as a
+ * plain `<a target="_blank" href={href}>` — avoids popup blockers and blank tabs).
+ * Then POSTs the internal audit log; if that fails, the tab is already correct — we
+ * only toast so staff know the audit row was not saved.
  */
 export function ShopifyRefundAuditButton({
   href,
@@ -44,14 +46,12 @@ export function ShopifyRefundAuditButton({
   async function handleClick() {
     if (disabled || busy) return;
     setBusy(true);
-    // Open a tab synchronously (same user gesture). `window.open(href)` after `await
-    // fetch` is often blocked or opens the wrong context — same URL as before when
-    // this was a plain `<a target="_blank">`.
-    const tab = window.open("about:blank", "_blank", "noopener,noreferrer");
+    // Same navigation as before: direct open in the click stack (no `await` before this).
+    const tab = window.open(href, "_blank");
     if (!tab) {
       setBusy(false);
       toast.error(
-        "Popup blocked — allow popups for this site so Shopify Admin can open after logging.",
+        "Popup blocked — allow popups for this site to open Shopify Admin.",
       );
       return;
     }
@@ -76,14 +76,15 @@ export function ShopifyRefundAuditButton({
         error?: string;
       };
       if (!res.ok || !data.ok) {
-        tab.close();
-        toast.error(data.error ?? `Could not log refund (${res.status})`);
-        return;
+        toast.error(
+          data.error ??
+            `Could not save refund audit (${res.status}). Shopify still opened in the other tab.`,
+        );
       }
-      tab.location.replace(href);
     } catch {
-      tab.close();
-      toast.error("Could not log refund");
+      toast.error(
+        "Could not save refund audit. Shopify still opened in the other tab.",
+      );
     } finally {
       setBusy(false);
     }
