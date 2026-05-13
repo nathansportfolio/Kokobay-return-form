@@ -237,7 +237,8 @@ export default async function Home() {
                       </>
                     ) : null}
                     <span className="mt-1 block text-xs text-zinc-500">
-                      London calendar day · internal audit only (not Shopify API).
+                      London calendar day · Mongo audit when staff use Refund in Shopify
+                      (opens Admin; refund still done in Shopify).
                     </span>
                   </span>
                 ) : (

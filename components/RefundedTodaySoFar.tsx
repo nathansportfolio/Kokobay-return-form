@@ -3,7 +3,7 @@ import { countRefundsToday } from "@/lib/refundAuditLog";
 
 /**
  * Server-only: “Refunded today” from internal **`refundAuditLogs`** only (staff
- * **Refund in Shopify** actions that completed a Shopify API refund + audit insert).
+ * used **Refund in Shopify** in the app — opens Admin; audit row is intent/analytics).
  */
 export async function RefundedTodaySoFar({ className }: { className?: string }) {
   let total = 0;
