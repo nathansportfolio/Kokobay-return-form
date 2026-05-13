@@ -44,6 +44,17 @@ export function ShopifyRefundAuditButton({
   async function handleClick() {
     if (disabled || busy) return;
     setBusy(true);
+    // Open a tab synchronously (same user gesture). `window.open(href)` after `await
+    // fetch` is often blocked or opens the wrong context — same URL as before when
+    // this was a plain `<a target="_blank">`.
+    const tab = window.open("about:blank", "_blank", "noopener,noreferrer");
+    if (!tab) {
+      setBusy(false);
+      toast.error(
+        "Popup blocked — allow popups for this site so Shopify Admin can open after logging.",
+      );
+      return;
+    }
     try {
       const res = await fetch("/api/returns/refund-audit", {
         method: "POST",
@@ -65,10 +76,14 @@ export function ShopifyRefundAuditButton({
         error?: string;
       };
       if (!res.ok || !data.ok) {
+        tab.close();
         toast.error(data.error ?? `Could not log refund (${res.status})`);
         return;
       }
-      window.open(href, "_blank", "noopener,noreferrer");
+      tab.location.replace(href);
+    } catch {
+      tab.close();
+      toast.error("Could not log refund");
     } finally {
       setBusy(false);
     }
