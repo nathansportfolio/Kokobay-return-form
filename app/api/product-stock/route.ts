@@ -88,7 +88,8 @@ export async function OPTIONS() {
  * `inventory_quantity` there, which surfaces as all-null in the API.
  *
  * Each successful response inserts one audit row in Mongo collection
- * `productStockLookups`.
+ * `productStockLookups` (optionally pass `page_url`, UTM params, `fbclid`,
+ * `ttclid` on the query string for attribution — stored on the log only).
  */
 export async function GET(request: Request) {
   if (!process.env.SHOPIFY_STORE?.trim()) {
@@ -98,9 +99,8 @@ export async function GET(request: Request) {
     );
   }
 
-  const handle = new URL(request.url)
-    .searchParams
-    .get("handle");
+  const requestUrl = new URL(request.url);
+  const handle = requestUrl.searchParams.get("handle");
 
   if (!handle?.trim()) {
     return jsonWithCors(
@@ -202,6 +202,7 @@ export async function GET(request: Request) {
   });
 
   try {
+    const sp = requestUrl.searchParams;
     await insertProductStockLookupLog({
       handle: h,
       shopifyProductId: product.id,
@@ -209,6 +210,14 @@ export async function GET(request: Request) {
       variants,
       userAgent: request.headers.get("user-agent"),
       referer: request.headers.get("referer"),
+      pageUrl: sp.get("page_url"),
+      utmSource: sp.get("utm_source"),
+      utmMedium: sp.get("utm_medium"),
+      utmCampaign: sp.get("utm_campaign"),
+      utmContent: sp.get("utm_content"),
+      utmTerm: sp.get("utm_term"),
+      fbclid: sp.get("fbclid"),
+      ttclid: sp.get("ttclid"),
     });
   } catch (e) {
     console.error("[api/product-stock] lookup log insert failed", e);
