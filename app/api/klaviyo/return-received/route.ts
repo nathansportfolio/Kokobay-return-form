@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { KLAVIYO_RETURN_PRIVATE_KEY } from "@/lib/klaviyoReturnPrivateKey";
 import { postKlaviyoCreateEvent } from "@/lib/klaviyoPostEvent";
 
 export const dynamic = "force-dynamic";
@@ -30,14 +31,6 @@ function looksLikeEmail(s: string): boolean {
  * Body: { email, firstName, orderId, refundAmount } — strings, all required.
  */
 export async function POST(request: Request) {
-  const apiKey = process.env.KOKO_RETURN?.trim();
-  if (!apiKey) {
-    return NextResponse.json(
-      { ok: false, error: "Klaviyo is not configured (KOKO_RETURN)" },
-      { status: 503 },
-    );
-  }
-
   let body: Body;
   try {
     body = (await request.json()) as Body;
@@ -66,7 +59,7 @@ export async function POST(request: Request) {
   }
 
   const result = await postKlaviyoCreateEvent({
-    apiKey,
+    apiKey: KLAVIYO_RETURN_PRIVATE_KEY,
     metricName: METRIC_NAME,
     properties: {
       customerName: firstName,

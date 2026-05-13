@@ -1,12 +1,16 @@
 import { formatGbp } from "@/lib/kokobayOrderLines";
-import { sumRecordedRefundsGbpForLondonCalendarDay } from "@/lib/returnRefundLedger";
+import { sumFullRefundAmountsGbpForLondonCalendarDay } from "@/lib/returnLog";
 import { getTodayCalendarDateKeyInLondon } from "@/lib/warehouseLondonDay";
 
-/** Server-only: sums `returnRefundLedger` for the current London calendar day. */
+/**
+ * Server-only: sums `fullRefundAmountGbp` on `returnLogs` where
+ * `fullRefundIssuedAt` falls on the current London calendar day (when staff
+ * marked the refund complete — not return log date or order date).
+ */
 export async function RefundedTodaySoFar({ className }: { className?: string }) {
   let total: number;
   try {
-    total = await sumRecordedRefundsGbpForLondonCalendarDay(
+    total = await sumFullRefundAmountsGbpForLondonCalendarDay(
       getTodayCalendarDateKeyInLondon(),
     );
   } catch {

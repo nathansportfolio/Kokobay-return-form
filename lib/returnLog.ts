@@ -6,6 +6,7 @@ import {
   isCustomerFormReturnReasonValue,
 } from "@/lib/customerReturnFormReasons";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
+import { getWarehouseDayCreatedAtQueryBoundsUtc } from "@/lib/warehouseLondonDay";
 import { returnReasonLabel } from "@/lib/returnReasons";
 import { clampReturnLineNotes } from "@/lib/returnLineNotes";
 import { normalizeShopifyOrderIdForStorage } from "@/lib/shopifyOrderAdminUrl";
@@ -261,6 +262,46 @@ export async function countReturnLogsPendingFullRefund(): Promise<number> {
   return col.countDocuments(
     { fullRefundIssued: false } as Filter<ReturnLogMongo>,
   );
+}
+
+/**
+ * Sum of `fullRefundAmountGbp` for returns where **full refund was marked complete**
+ * (`fullRefundIssued` + `fullRefundIssuedAt`) on the given warehouse calendar day
+ * (`YYYY-MM-DD` in Europe/London — same UTC bounds as pick-list day helpers).
+ *
+ * This is intentionally **not** keyed on return log `createdAt` or order date: it
+ * reflects the day staff marked the refund step done in the app.
+ */
+export async function sumFullRefundAmountsGbpForLondonCalendarDay(
+  dayKey: string,
+): Promise<number> {
+  const { createdAtMin, createdAtMax } =
+    getWarehouseDayCreatedAtQueryBoundsUtc(dayKey);
+  const min = new Date(createdAtMin);
+  const max = new Date(createdAtMax);
+  const client = await clientPromise;
+  const col = client
+    .db(kokobayDbName)
+    .collection<ReturnLogMongo>(RETURN_LOGS_COLLECTION);
+
+  const rows = await col
+    .aggregate<{ total: number }>([
+      {
+        $match: {
+          fullRefundIssued: true,
+          fullRefundIssuedAt: { $gte: min, $lte: max },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ["$fullRefundAmountGbp", 0] } },
+        },
+      },
+    ])
+    .toArray();
+  const raw = rows[0]?.total ?? 0;
+  return Math.round(Number(raw) * 100) / 100;
 }
 
 export async function getReturnLogByUid(
