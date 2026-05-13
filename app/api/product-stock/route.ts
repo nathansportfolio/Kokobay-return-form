@@ -1,5 +1,6 @@
-
 import { apiJsonCacheHeaders } from "@/lib/apiCacheHeaders";
+import { loadWarehouseStockByVariantIds } from "@/lib/loadWarehouseStockByVariantIds";
+import { insertProductStockLookupLog } from "@/lib/productStockLookupLog";
 import { NextResponse } from "next/server";
 
 function productStockCorsHeaders(): HeadersInit {
@@ -81,6 +82,11 @@ export async function OPTIONS() {
   });
 }
 
+/**
+ * `GET /api/product-stock` — storefront product JSON + warehouse `stock` merge.
+ * Each successful response inserts one audit row in Mongo collection
+ * `productStockLookups` (same DB as `MONGODB_DB` / `kokobay`).
+ */
 export async function GET(request: Request) {
   const origin = storefrontProductJsOrigin();
 
@@ -170,14 +176,48 @@ export async function GET(request: Request) {
     );
   }
 
-  const variants = p.variants.map((v) => ({
-    id: v.id,
-    title: v.title ?? "",
-    inventory:
+  const variantIds = p.variants
+    .map((v) => (typeof v.id === "number" ? v.id : NaN))
+    .filter((id) => Number.isFinite(id) && id > 0);
+  const byVariant = await loadWarehouseStockByVariantIds(variantIds);
+
+  const variants = p.variants.map((v) => {
+    const id = typeof v.id === "number" ? v.id : undefined;
+    const shopifyQty =
       typeof v.inventory_quantity === "number"
         ? v.inventory_quantity
-        : null,
-  }));
+        : null;
+    const wh = id != null ? byVariant.get(id) : undefined;
+    if (wh) {
+      return {
+        id,
+        title: v.title ?? "",
+        inventory: wh.quantity,
+        inventorySource: "warehouse" as const,
+        binCode: wh.binCode,
+      };
+    }
+    return {
+      id,
+      title: v.title ?? "",
+      inventory: shopifyQty,
+      inventorySource: "shopify" as const,
+      binCode: null,
+    };
+  });
+
+  try {
+    await insertProductStockLookupLog({
+      handle: handle.trim(),
+      shopifyProductId: p.id,
+      productTitle: typeof p.title === "string" ? p.title : "",
+      variants,
+      userAgent: request.headers.get("user-agent"),
+      referer: request.headers.get("referer"),
+    });
+  } catch (e) {
+    console.error("[api/product-stock] lookup log insert failed", e);
+  }
 
   return jsonWithCors(
     {
