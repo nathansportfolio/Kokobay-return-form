@@ -57,8 +57,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const email = 'nathan.doore@gmail.com';
-
+  const email = isNonEmptyString(body.email) ? body.email.trim() : "";
   const firstName = isNonEmptyString(body.firstName) ? body.firstName.trim() : "";
   const orderId = isNonEmptyString(body.orderId) ? body.orderId.trim() : "";
 
