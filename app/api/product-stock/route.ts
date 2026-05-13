@@ -1,6 +1,12 @@
 import { apiJsonCacheHeaders } from "@/lib/apiCacheHeaders";
 import { loadWarehouseStockByVariantIds } from "@/lib/loadWarehouseStockByVariantIds";
 import { insertProductStockLookupLog } from "@/lib/productStockLookupLog";
+import { shopifyAdminGet } from "@/lib/shopifyAdminApi";
+import type {
+  ShopifyProduct,
+  ShopifyProductsResponse,
+  ShopifyVariant,
+} from "@/types/shopify";
 import { NextResponse } from "next/server";
 
 function productStockCorsHeaders(): HeadersInit {
@@ -38,30 +44,19 @@ function jsonWithCors(
   });
 }
 
-type StorefrontProductJsVariant = {
-  id?: number;
-  title?: string;
-  inventory_quantity?: number;
-};
+function positiveVariantId(v: ShopifyVariant): number | undefined {
+  const n = Number(v.id);
+  if (!Number.isFinite(n) || n < 1) return undefined;
+  return Math.trunc(n);
+}
 
-type StorefrontProductJs = {
-  id?: number;
-  title?: string;
-  variants?: StorefrontProductJsVariant[];
-};
-
-function storefrontProductJsOrigin(): string | null {
-  const store = process.env.SHOPIFY_STORE?.trim();
-
-  if (!store) return null;
-
-  const host = store
-    .replace(/^https?:\/\//i, "")
-    .replace(/\/$/, "");
-
-  if (!host) return null;
-
-  return `https://${host}`;
+/** Admin REST (and Liquid AJAX) may send qty as number or string; .js often omits it entirely. */
+function variantInventoryQuantity(v: ShopifyVariant): number | null {
+  const raw = (v as { inventory_quantity?: unknown }).inventory_quantity;
+  if (raw == null || raw === "") return null;
+  const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.trunc(n));
 }
 
 function isSafeProductHandle(handle: string): boolean {
@@ -71,6 +66,10 @@ function isSafeProductHandle(handle: string): boolean {
   if (t.includes("/") || t.includes("..")) return false;
 
   return true;
+}
+
+function isActiveShopifyProduct(p: ShopifyProduct): boolean {
+  return String(p.status ?? "").toLowerCase() === "active";
 }
 
 export async function OPTIONS() {
@@ -83,14 +82,16 @@ export async function OPTIONS() {
 }
 
 /**
- * `GET /api/product-stock` — storefront product JSON + warehouse `stock` merge.
+ * `GET /api/product-stock` — active product from **Shopify Admin REST** (reliable
+ * `inventory_quantity`) merged with warehouse Mongo `stock`. We do not use
+ * storefront `products/{handle}.js` for quantities: Shopify often omits
+ * `inventory_quantity` there, which surfaces as all-null in the API.
+ *
  * Each successful response inserts one audit row in Mongo collection
- * `productStockLookups` (same DB as `MONGODB_DB` / `kokobay`).
+ * `productStockLookups`.
  */
 export async function GET(request: Request) {
-  const origin = storefrontProductJsOrigin();
-
-  if (!origin) {
+  if (!process.env.SHOPIFY_STORE?.trim()) {
     return jsonWithCors(
       { error: "SHOPIFY_STORE is not configured" },
       { status: 500 },
@@ -115,78 +116,72 @@ export async function GET(request: Request) {
     );
   }
 
-  const url =
-    `${origin}/products/${encodeURIComponent(handle.trim())}.js`;
+  const h = handle.trim();
+  const path =
+    `products.json?handle=${encodeURIComponent(h)}&limit=1`;
 
-  let res: Response;
+  let ok: boolean;
+  let status: number;
+  let data: ShopifyProductsResponse;
 
   try {
-    res = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-      },
-      next: {
-        revalidate: 60,
-      },
-    });
+    const r = await shopifyAdminGet<ShopifyProductsResponse>(path);
+    ok = r.ok;
+    status = r.status;
+    data = r.data;
   } catch (e) {
     const message =
-      e instanceof Error
-        ? e.message
-        : "Fetch failed";
-
+      e instanceof Error ? e.message : "Shopify Admin request failed";
     return jsonWithCors(
       { error: message },
-      { status: 502 },
+      { status: 500 },
     );
   }
 
-  if (!res.ok) {
+  if (!ok) {
     return jsonWithCors(
       {
-        error: "Product request failed",
-        status: res.status,
+        error: "Shopify product request failed",
+        status,
       },
       {
-        status: res.status === 404 ? 404 : 502,
+        status: status === 404 ? 404 : 502,
       },
     );
   }
 
-  let product: unknown;
-
-  try {
-    product = await res.json();
-  } catch {
+  const products = data?.products ?? [];
+  const product = products[0];
+  if (!product) {
     return jsonWithCors(
-      { error: "Invalid product JSON" },
-      { status: 502 },
+      { error: "Product not found" },
+      { status: 404 },
     );
   }
 
-  const p = product as StorefrontProductJs;
+  if (!isActiveShopifyProduct(product)) {
+    return jsonWithCors(
+      { error: "Product not found or not active" },
+      { status: 404 },
+    );
+  }
 
-  if (
-    typeof p.id !== "number" ||
-    !Array.isArray(p.variants)
-  ) {
+  const variantsIn = product.variants ?? [];
+  if (!Array.isArray(variantsIn) || variantsIn.length === 0) {
     return jsonWithCors(
       { error: "Unexpected product shape" },
       { status: 502 },
     );
   }
 
-  const variantIds = p.variants
-    .map((v) => (typeof v.id === "number" ? v.id : NaN))
-    .filter((id) => Number.isFinite(id) && id > 0);
+  const variantIds = variantsIn
+    .map((v) => positiveVariantId(v))
+    .filter((id): id is number => id != null);
   const byVariant = await loadWarehouseStockByVariantIds(variantIds);
 
-  const variants = p.variants.map((v) => {
-    const id = typeof v.id === "number" ? v.id : undefined;
-    const shopifyQty =
-      typeof v.inventory_quantity === "number"
-        ? v.inventory_quantity
-        : null;
+  const variants = variantsIn.map((v) => {
+    const id = positiveVariantId(v);
+    const shopifyQty = variantInventoryQuantity(v);
     const wh = id != null ? byVariant.get(id) : undefined;
     if (wh) {
       return {
@@ -208,9 +203,9 @@ export async function GET(request: Request) {
 
   try {
     await insertProductStockLookupLog({
-      handle: handle.trim(),
-      shopifyProductId: p.id,
-      productTitle: typeof p.title === "string" ? p.title : "",
+      handle: h,
+      shopifyProductId: product.id,
+      productTitle: typeof product.title === "string" ? product.title : "",
       variants,
       userAgent: request.headers.get("user-agent"),
       referer: request.headers.get("referer"),
@@ -221,10 +216,10 @@ export async function GET(request: Request) {
 
   return jsonWithCors(
     {
-      id: p.id,
+      id: product.id,
       title:
-        typeof p.title === "string"
-          ? p.title
+        typeof product.title === "string"
+          ? product.title
           : "",
       variants,
     },
@@ -233,4 +228,3 @@ export async function GET(request: Request) {
     },
   );
 }
-
