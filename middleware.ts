@@ -77,6 +77,15 @@ function isPublicPath(req: NextRequest) {
   ) {
     return true;
   }
+  /**
+   * Shopify Admin webhooks (`refunds/create`) — HMAC-verified; no site cookie.
+   */
+  if (
+    pathname === "/api/webhooks/shopify/refunds-create" ||
+    pathname === "/api/webhooks/shopify/refunds-create/"
+  ) {
+    return true;
+  }
   if (isProductsApiPath(pathname) || isStorefrontApiPath(pathname)) {
     return true;
   }

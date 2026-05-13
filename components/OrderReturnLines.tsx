@@ -459,7 +459,7 @@ export function OrderReturnLines({
             description:
               "Return is saved. Fix Klaviyo or try “Email Customer Items Received”.",
           });
-          router.refresh();
+          router.push("/returns");
           return;
         }
       }
@@ -480,7 +480,6 @@ export function OrderReturnLines({
       if (!patchRes.ok || !patchData.ok) {
         setRegEmail(false);
         setRegRefund(false);
-        router.refresh();
         toast.error(
           patchData.error ?? "Return saved but could not mark email as sent",
           {
@@ -488,6 +487,7 @@ export function OrderReturnLines({
               "The return is logged; you can use “Email Customer Items Received” when it appears, or try again.",
           },
         );
+        router.push("/returns");
         return;
       }
       if (patchData.return) applyLogFlags(patchData.return);

@@ -1,16 +1,16 @@
 import { formatGbp } from "@/lib/kokobayOrderLines";
-import { sumFullRefundAmountsGbpForLondonCalendarDay } from "@/lib/returnLog";
+import { sumShopifyRefundAmountsGbpForLondonCalendarDay } from "@/lib/shopifyRefundEvents";
 import { getTodayCalendarDateKeyInLondon } from "@/lib/warehouseLondonDay";
 
 /**
- * Server-only: sums `fullRefundAmountGbp` on `returnLogs` where
- * `fullRefundIssuedAt` falls on the current London calendar day (when staff
- * marked the refund complete — not return log date or order date).
+ * Server-only: sums **Shopify Admin** refunds recorded via `refunds/create`
+ * webhook (`shopifyRefundEvents`), using each refund’s Shopify `created_at`
+ * on the current London calendar day (not Kokobay return-log dates).
  */
 export async function RefundedTodaySoFar({ className }: { className?: string }) {
   let total: number;
   try {
-    total = await sumFullRefundAmountsGbpForLondonCalendarDay(
+    total = await sumShopifyRefundAmountsGbpForLondonCalendarDay(
       getTodayCalendarDateKeyInLondon(),
     );
   } catch {
@@ -22,7 +22,10 @@ export async function RefundedTodaySoFar({ className }: { className?: string }) 
         {formatGbp(total)}
       </span>{" "}
       refunded today so far
-      <span className="text-zinc-500 dark:text-zinc-400"> (London)</span>
+      <span className="text-zinc-500 dark:text-zinc-400">
+        {" "}
+        (London · Shopify)
+      </span>
     </p>
   );
 }
