@@ -21,6 +21,7 @@ import {
 import {
   type ShopifyOrderDisplay,
   resolveShopifyOrderDisplaysForOrderRefs,
+  returnLogCoversEntireShopifyOrder,
   shopifyOrderDisplayIndicatesMoneyReturned,
   shopifyPaymentStatusLabelForReturnsList,
 } from "@/lib/shopifyReturnOrderLookup";
@@ -102,6 +103,14 @@ function fmtWhen(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return formatDateAsOrdinalInTimeZone(d, WAREHOUSE_TZ);
+}
+
+function loggedReturnIsFullShopifyOrder(
+  r: ReturnLogListItem,
+  shopifyDisplayByOrderRef: Map<string, ShopifyOrderDisplay | null>,
+): boolean {
+  const d = shopifyDisplayByOrderRef.get(r.orderRef.trim()) ?? null;
+  return returnLogCoversEntireShopifyOrder(r.lines, d?.orderLineItems);
 }
 
 /**
@@ -420,6 +429,10 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                     className="inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-center text-xs font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 enabled:cursor-pointer disabled:cursor-not-allowed dark:focus:ring-offset-zinc-950 sm:w-auto sm:min-h-8 sm:px-2.5 sm:py-1"
                     title="Log refund intent, then open Shopify Admin refund (new tab)"
                     disabled={actionsDisabled}
+                    fullOrderRefund={loggedReturnIsFullShopifyOrder(
+                      r,
+                      shopifyDisplayByOrderRef,
+                    )}
                   >
                     <span className="sm:hidden">Shopify refund</span>
                     <span className="hidden sm:inline">Refund in Shopify</span>
@@ -592,6 +605,10 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                 className="inline-flex min-h-9 flex-1 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-xs font-semibold text-white enabled:cursor-pointer disabled:cursor-not-allowed"
                 title="Log refund intent, then open Shopify Admin refund (new tab)"
                 disabled={actionsDisabled}
+                fullOrderRefund={loggedReturnIsFullShopifyOrder(
+                  r,
+                  shopifyDisplayByOrderRef,
+                )}
               >
                 Shopify refund
               </ShopifyRefundAuditButton>
@@ -1055,6 +1072,10 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                                 className="inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-md border border-[#006e52] bg-[#008060] px-2 py-1.5 text-center text-xs font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 enabled:cursor-pointer disabled:cursor-not-allowed dark:focus:ring-offset-zinc-950 sm:w-auto sm:min-h-8 sm:px-2.5 sm:py-1"
                                 title="Log refund intent, then open Shopify Admin refund (new tab)"
                                 disabled={false}
+                                fullOrderRefund={loggedReturnIsFullShopifyOrder(
+                                  r,
+                                  shopifyDisplayByOrderRef,
+                                )}
                               >
                                 <span className="sm:hidden">Shopify refund</span>
                                 <span className="hidden sm:inline">

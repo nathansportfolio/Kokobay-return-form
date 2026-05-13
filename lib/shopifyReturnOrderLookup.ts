@@ -8,7 +8,8 @@ import {
 } from "@/lib/shopifyLineItemImage";
 import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
 import { getThumbnailsBySkus } from "@/lib/returnOrderLinesFromProducts";
-import type { ShopifyLineItem, ShopifyOrder } from "@/types/shopify";
+import type { ReturnLogLineEntry } from "@/lib/returnLogTypes";
+import type { ShopifyOrder } from "@/types/shopify";
 
 const LONG_NUMERIC_ID = /^\d{10,}$/;
 const SHORT_NUMERIC = /^\d{1,9}$/;
@@ -46,6 +47,8 @@ export type ShopifyOrderDisplay = {
   refundRecordCount: number;
   /** REST `current_total_price` when present; net after refunds. */
   currentTotalPrice?: string;
+  /** Non-zero-qty REST `line_items` ids (for full-order return checks). */
+  orderLineItems?: { id: string; quantity: number }[];
 };
 
 export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
@@ -73,6 +76,14 @@ export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
     typeof o.current_total_price === "string" && o.current_total_price.trim()
       ? o.current_total_price.trim()
       : undefined;
+  const orderLineItems = Array.isArray(o.line_items)
+    ? o.line_items
+        .filter((li) => (li.quantity ?? 0) > 0)
+        .map((li) => ({
+          id: String(li.id),
+          quantity: Math.max(0, Math.trunc(Number(li.quantity) || 0)),
+        }))
+    : [];
   return {
     orderName: o.name,
     shopifyOrderId: String(o.id),
@@ -87,7 +98,40 @@ export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
     fulfillmentStatus: o.fulfillment_status ?? null,
     refundRecordCount,
     ...(currentTotalPrice ? { currentTotalPrice } : {}),
+    ...(orderLineItems.length > 0 ? { orderLineItems } : {}),
   };
+}
+
+/**
+ * True when the return includes **every** non-zero-qty Shopify line at **at least** the
+ * same quantity, and has no extra line ids. Used for a “full order” refund badge.
+ */
+export function returnLogCoversEntireShopifyOrder(
+  returnLines: Pick<ReturnLogLineEntry, "lineId" | "quantity">[],
+  orderLineItems: { id: string; quantity: number }[] | null | undefined,
+): boolean {
+  if (!orderLineItems?.length) return false;
+  const qtyByReturnLine = new Map<string, number>();
+  for (const l of returnLines) {
+    const id = String(l.lineId ?? "").trim();
+    if (!id) continue;
+    const q = Math.max(0, Math.trunc(Number(l.quantity) || 0));
+    qtyByReturnLine.set(id, (qtyByReturnLine.get(id) ?? 0) + q);
+  }
+  const orderIds = new Set<string>();
+  for (const li of orderLineItems) {
+    const id = String(li.id).trim();
+    const need = Math.max(0, Math.trunc(li.quantity));
+    if (need <= 0) continue;
+    orderIds.add(id);
+    const got = qtyByReturnLine.get(id);
+    if (got == null || got < need) return false;
+  }
+  if (orderIds.size === 0) return false;
+  for (const id of qtyByReturnLine.keys()) {
+    if (!orderIds.has(id)) return false;
+  }
+  return true;
 }
 
 /**

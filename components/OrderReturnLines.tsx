@@ -1057,6 +1057,7 @@ export function OrderReturnLines({
           shopifyOrderId={shopifyOrderId?.trim() || null}
           className="inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-lg border border-[#006e52] bg-[#008060] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] active:bg-[#005a47] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-2 enabled:cursor-pointer disabled:cursor-not-allowed sm:min-h-10"
           title="Log refund intent, then open Shopify Admin refund (new tab)"
+          fullOrderRefund={allReturned && lines.length > 0}
         >
           <Storefront className="h-5 w-5 shrink-0 text-white" weight="fill" aria-hidden />
           Refund in Shopify

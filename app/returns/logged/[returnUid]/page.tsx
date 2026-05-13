@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getReturnLogByUid } from "@/lib/returnLog";
-import { fetchShopifyOrderDisplay } from "@/lib/shopifyReturnOrderLookup";
+import { fetchShopifyOrderDisplay, returnLogCoversEntireShopifyOrder } from "@/lib/shopifyReturnOrderLookup";
 import {
   shopifyOrderAdminUrlByOrderId,
   shopifyOrderAdminUrlFromOrderRef,
@@ -73,6 +73,10 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
   const showLegacyNote =
     !doc.shopifyOrderId && !shopifyAdminOrderId && process.env.SHOPIFY_STORE?.trim();
 
+  const fullOrderRefund =
+    shopifyDisplay != null &&
+    returnLogCoversEntireShopifyOrder(doc.lines, shopifyDisplay.orderLineItems);
+
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 p-4 sm:p-6">
       <p className="text-sm">
@@ -88,7 +92,7 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
         {doc.returnUid}
       </p>
 
-      <p className="mt-4">
+      <p className="mt-4 flex flex-wrap items-center gap-2">
         <ShopifyRefundAuditButton
           href={shopifyAdminHref}
           orderRef={doc.orderRef}
@@ -106,6 +110,7 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
           className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[#006e52] bg-[#008060] px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#006e52] focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-1 enabled:cursor-pointer disabled:cursor-not-allowed dark:focus:ring-offset-zinc-950"
           title="Log refund intent, then open Shopify Admin refund (new tab)"
           disabled={false}
+          fullOrderRefund={fullOrderRefund}
         >
           Refund in Shopify
         </ShopifyRefundAuditButton>

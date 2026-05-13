@@ -14,6 +14,8 @@ export type ShopifyRefundAuditButtonProps = {
   /** REST order id as digits string when known. */
   shopifyOrderId?: string | null;
   notes?: string | null;
+  /** When true, a small badge is shown beside the link (entire Shopify order in this return). */
+  fullOrderRefund?: boolean;
   className?: string;
   title?: string;
   disabled?: boolean;
@@ -44,6 +46,7 @@ export function ShopifyRefundAuditButton({
   className,
   title,
   disabled,
+  fullOrderRefund,
   children,
 }: ShopifyRefundAuditButtonProps) {
   const router = useRouter();
@@ -104,35 +107,54 @@ export function ShopifyRefundAuditButton({
       });
   }
 
+  const wrapClass =
+    "inline-flex w-full min-w-0 flex-wrap items-center justify-center gap-2";
+
+  const fullOrderBadge =
+    fullOrderRefund === true ? (
+      <span
+        className="shrink-0 rounded-full border border-amber-300/90 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950 shadow-sm dark:border-amber-700/80 dark:bg-amber-950/60 dark:text-amber-100"
+        title="This return includes every line item on the Shopify order at full quantity"
+      >
+        Full order
+      </span>
+    ) : null;
+
   if (disabled) {
     return (
-      <span
-        className={className}
-        title={title}
-        aria-disabled="true"
-      >
-        {children}
+      <span className={wrapClass}>
+        <span
+          className={className}
+          title={title}
+          aria-disabled="true"
+        >
+          {children}
+        </span>
+        {fullOrderBadge}
       </span>
     );
   }
 
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={className}
-      title={
-        title ??
-        "Open Shopify Admin refund in a new tab (same as a normal link); saves an internal audit row"
-      }
-      onClick={() => {
-        console.log("[refund] link clicked (native open)", { orderRef, shopifyOrderId });
-        postAuditInBackground();
-        patchMarkRefundedInBackground();
-      }}
-    >
-      {children}
-    </a>
+    <span className={wrapClass}>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+        title={
+          title ??
+          "Open Shopify Admin refund in a new tab (same as a normal link); saves an internal audit row"
+        }
+        onClick={() => {
+          console.log("[refund] link clicked (native open)", { orderRef, shopifyOrderId });
+          postAuditInBackground();
+          patchMarkRefundedInBackground();
+        }}
+      >
+        {children}
+      </a>
+      {fullOrderBadge}
+    </span>
   );
 }
