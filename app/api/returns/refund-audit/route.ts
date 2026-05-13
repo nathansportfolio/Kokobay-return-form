@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { insertRefundAuditLog } from "@/lib/refundAuditLog";
+import { createShopifyRefund } from "@/lib/createShopifyRefund";
+import {
+  REFUND_AUDIT_LOGS_COLLECTION,
+  insertRefundAuditLog,
+} from "@/lib/refundAuditLog";
+import { shopifyOrderAdminUrlByOrderId } from "@/lib/shopifyOrderAdminUrl";
 import {
   isSiteAccessEnforced,
   parseSiteAccessRoleFromCookieHeader,
@@ -46,13 +51,26 @@ function parseRefundAmount(v: unknown): number | null {
 
 /**
  * POST /api/returns/refund-audit
- * Append one internal audit row when staff completes the “Refund in Shopify” flow
- * in the app (after this handler succeeds, the client opens Admin refund).
+ *
+ * Triggered by the warehouse **Refund in Shopify** control (`ShopifyRefundAuditButton`).
+ * Flow: Shopify Admin REST **refund create** (calculate → refunds.json), then append
+ * one row to Mongo **`refundAuditLogs`** only after Shopify returns success.
  */
 export async function POST(request: Request) {
+  console.log("[refund] POST /api/returns/refund-audit");
+
+  if (!process.env.SHOPIFY_STORE?.trim()) {
+    console.log("[refund] early return: SHOPIFY_STORE not set");
+    return NextResponse.json(
+      { ok: false, error: "Shopify is not configured" },
+      { status: 503 },
+    );
+  }
+
   if (isSiteAccessEnforced()) {
     const role = parseSiteAccessRoleFromCookieHeader(request.headers.get("cookie"));
     if (!role) {
+      console.log("[refund] early return: Unauthorized (no site_access cookie)");
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
   }
@@ -61,20 +79,48 @@ export async function POST(request: Request) {
   try {
     body = (await request.json()) as Body;
   } catch {
+    console.log("[refund] early return: invalid JSON body");
     return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
   const orderRef = parseOptionalTrimmedString(body.orderRef);
   if (!orderRef) {
+    console.log("[refund] early return: orderRef required");
     return NextResponse.json(
       { ok: false, error: "orderRef is required" },
       { status: 400 },
     );
   }
 
+  const shopifyOrderIdHint = parseOptionalTrimmedString(body.shopifyOrderId);
   const refundedBy = parseWarehouseOperatorLabelFromCookieHeader(
     request.headers.get("cookie"),
   );
+
+  console.log("[refund] starting Shopify refund", { orderRef, shopifyOrderIdHint });
+
+  const refundResult = await createShopifyRefund(orderRef, shopifyOrderIdHint);
+
+  if (!refundResult.ok) {
+    console.error("[refund] Shopify refund failed", refundResult);
+    return NextResponse.json(
+      { ok: false, error: refundResult.error },
+      { status: refundResult.status && refundResult.status >= 400 ? refundResult.status : 502 },
+    );
+  }
+
+  console.log("[refund] Shopify refund success", {
+    shopifyRefundId: refundResult.shopifyRefundId,
+    orderId: refundResult.orderId,
+  });
+
+  const adminOrderUrl = shopifyOrderAdminUrlByOrderId(refundResult.orderId);
+
+  console.log("[refund] inserting refund audit log", {
+    collection: REFUND_AUDIT_LOGS_COLLECTION,
+    orderRef,
+    returnLogId: parseOptionalTrimmedString(body.returnLogId),
+  });
 
   try {
     await insertRefundAuditLog({
@@ -84,17 +130,32 @@ export async function POST(request: Request) {
       currency: parseOptionalTrimmedString(body.currency) ?? "GBP",
       customerName: parseOptionalTrimmedString(body.customerName),
       customerEmail: parseOptionalTrimmedString(body.customerEmail),
-      shopifyOrderId: parseShopifyOrderIdNumber(body.shopifyOrderId),
+      shopifyOrderId: parseShopifyOrderIdNumber(
+        shopifyOrderIdHint ?? refundResult.orderId,
+      ),
       refundedBy,
       source: "shopify_refund_button",
       notes: parseOptionalTrimmedString(body.notes),
     });
-    return NextResponse.json({ ok: true });
+    console.log("[refund] refund audit log inserted");
   } catch (e) {
-    console.error("[returns/refund-audit]", e);
+    console.error("[refund] refund audit insert failed", e);
     return NextResponse.json(
-      { ok: false, error: "Could not record refund audit" },
+      {
+        ok: false,
+        error:
+          "Shopify refund succeeded but saving the internal audit log failed. Check server logs.",
+        shopifyRefundId: refundResult.shopifyRefundId,
+        adminOrderUrl,
+      },
       { status: 500 },
     );
   }
+
+  console.log("[refund] complete");
+  return NextResponse.json({
+    ok: true,
+    shopifyRefundId: refundResult.shopifyRefundId,
+    adminOrderUrl,
+  });
 }

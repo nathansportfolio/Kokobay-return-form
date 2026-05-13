@@ -36,6 +36,38 @@ async function shopifyAdminRequest<T>(path: string): Promise<{
   };
 }
 
+/**
+ * POST JSON to Admin REST (uncached). Use for refunds, calculate, etc.
+ */
+export async function shopifyAdminPostNoCache<T>(
+  path: string,
+  body: unknown,
+): Promise<{
+  ok: boolean;
+  status: number;
+  data: T;
+}> {
+  const store = process.env.SHOPIFY_STORE?.trim();
+  if (!store) {
+    throw new Error("SHOPIFY_STORE is not set");
+  }
+  const p = path.replace(/^\//, "");
+  const token = await getShopifyToken();
+  const res = await fetch(
+    `https://${store}/admin/api/${SHOPIFY_ADMIN_API_VERSION}/${p}`,
+    {
+      method: "POST",
+      headers: {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  const data = (await res.json().catch(() => ({}))) as T;
+  return { ok: res.ok, status: res.status, data };
+}
+
 async function shopifyAdminGetImpl<T>(path: string): Promise<{
   ok: boolean;
   status: number;
