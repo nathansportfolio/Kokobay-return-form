@@ -2,8 +2,10 @@ import { getCompletedOrderNumbersSetForPicklistContext } from "@/lib/completedPi
 import { countOrderPickPausesForDay } from "@/lib/orderPickPause";
 import { fetchTodaysOrderSummaries } from "@/lib/fetchTodaysOrderSummaries";
 import { PICKLIST_LIST_KIND_UK_PREMIUM } from "@/lib/picklistListKind";
-import { countReturnLogsPendingFullRefund } from "@/lib/returnLog";
-import { countRefundsToday } from "@/lib/refundAuditLog";
+import {
+  aggregateReturnLogRefundTotalsLoggedTodayLondon,
+  countReturnLogsPendingFullRefund,
+} from "@/lib/returnLog";
 import { withPickableLinesOnly } from "@/lib/warehousePickableLine";
 import { getTodayCalendarDateKeyInLondon } from "@/lib/warehouseLondonDay";
 import { getUkPremiumShopifyOrdersForPicks, isShopifyWarehouseDataEnabled } from "@/lib/shopifyWarehouseDayOrders";
@@ -22,10 +24,10 @@ export type HomepageDashboardStats = {
   /** UK Premium pipeline: orders on missing-stock hold for today’s London day. */
   ukPremiumOrdersPausedMissingStock: number;
   returnsPendingRefund: number;
-  /** Internal audit: staff “Refund in Shopify” clicks logged today (London). */
+  /** `returnLogs` created today (London): count, sum of `totalRefundGbp`, distinct `orderRef`. */
   refundAuditTodayCount: number;
   refundAuditTodayTotalGbp: number;
-  refundAuditTodayCustomers: number;
+  refundAuditTodayDistinctOrders: number;
   refundAuditTodayOk: boolean;
   orderStatsOk: boolean;
   returnsCountOk: boolean;
@@ -52,7 +54,7 @@ export async function getHomepageDashboardStats(): Promise<HomepageDashboardStat
   let returnsCountOk = false;
   let refundAuditTodayCount = 0;
   let refundAuditTodayTotalGbp = 0;
-  let refundAuditTodayCustomers = 0;
+  let refundAuditTodayDistinctOrders = 0;
   let refundAuditTodayOk = false;
   let pickListOrderDayKey: string | null = null;
   let ukPremiumSpecialOrdersYetToPick = 0;
@@ -104,11 +106,16 @@ export async function getHomepageDashboardStats(): Promise<HomepageDashboardStat
   }
 
   try {
-    const a = await countRefundsToday();
+    const a = await aggregateReturnLogRefundTotalsLoggedTodayLondon();
     refundAuditTodayCount = a.count;
-    refundAuditTodayTotalGbp = a.totalAmount;
-    refundAuditTodayCustomers = a.customers;
+    refundAuditTodayTotalGbp = a.totalRefundGbp;
+    refundAuditTodayDistinctOrders = a.distinctOrders;
     refundAuditTodayOk = true;
+    console.log("[homepageDashboard] returns logged today (returnLogs)", {
+      refundAuditTodayTotalGbp: a.totalRefundGbp,
+      refundAuditTodayCount: a.count,
+      refundAuditTodayDistinctOrders: a.distinctOrders,
+    });
   } catch {
     refundAuditTodayOk = false;
   }
@@ -122,7 +129,7 @@ export async function getHomepageDashboardStats(): Promise<HomepageDashboardStat
     returnsPendingRefund,
     refundAuditTodayCount,
     refundAuditTodayTotalGbp,
-    refundAuditTodayCustomers,
+    refundAuditTodayDistinctOrders,
     refundAuditTodayOk,
     orderStatsOk,
     returnsCountOk,

@@ -152,6 +152,16 @@ export async function countRefundsToday(): Promise<RefundsTodayStats> {
   const { createdAtMin, createdAtMax } = getWarehouseDayCreatedAtQueryBoundsUtc(dayKey);
   const min = new Date(createdAtMin);
   const max = new Date(createdAtMax);
+  console.log("[refundAuditToday] source: Mongo collection", REFUND_AUDIT_LOGS_COLLECTION, {
+    timezone: "Europe/London",
+    dayKey,
+    createdAtMinUtc: min.toISOString(),
+    createdAtMaxUtc: max.toISOString(),
+    match: { source: "shopify_refund_button", createdAtBetween: [min, max] },
+    aggregation:
+      "$match → $facet: meta($group count + $sum refundAmount), distinctEmails($group by customerEmail), refunds(sample)",
+  });
+
   const client = await clientPromise;
   const col = client.db(kokobayDbName).collection(REFUND_AUDIT_LOGS_COLLECTION);
 
@@ -208,6 +218,15 @@ export async function countRefundsToday(): Promise<RefundsTodayStats> {
   );
   const refundDocs = Array.isArray(bucket?.refunds) ? bucket.refunds : [];
   const refunds = refundDocs.map((d) => mapDocToRefundAuditLog(d));
+
+  console.log("[refundAuditToday] computed totals (sum of refundAmount on matched rows)", {
+    count,
+    totalAmountGbp: totalAmount,
+    distinctCustomersWithEmail: customers,
+    sampleOrderRefs: refunds.slice(0, 5).map((r) => r.orderRef),
+    uiLine:
+      "RefundedTodaySoFar + homepage card use this via countRefundsToday() → formatGbp(totalAmount) + count",
+  });
 
   return { count, totalAmount, customers, refunds };
 }

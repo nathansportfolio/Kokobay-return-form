@@ -6,7 +6,10 @@ import {
   isCustomerFormReturnReasonValue,
 } from "@/lib/customerReturnFormReasons";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
-import { getWarehouseDayCreatedAtQueryBoundsUtc } from "@/lib/warehouseLondonDay";
+import {
+  getTodayCalendarDateKeyInLondon,
+  getWarehouseDayCreatedAtQueryBoundsUtc,
+} from "@/lib/warehouseLondonDay";
 import { returnReasonLabel } from "@/lib/returnReasons";
 import { clampReturnLineNotes } from "@/lib/returnLineNotes";
 import { normalizeShopifyOrderIdForStorage } from "@/lib/shopifyOrderAdminUrl";
@@ -306,6 +309,81 @@ export async function sumFullRefundAmountsGbpForLondonCalendarDay(
     .toArray();
   const raw = rows[0]?.total ?? 0;
   return Math.round(Number(raw) * 100) / 100;
+}
+
+/**
+ * London “today” on **return log `createdAt`**: warehouse returns **registered** that day.
+ * Sums `totalRefundGbp` (line-derived amounts for refund-eligible dispositions). This is
+ * not Shopify settlement time and not `fullRefundIssuedAt` — see {@link sumFullRefundAmountsGbpForLondonCalendarDay}.
+ */
+export async function aggregateReturnLogRefundTotalsLoggedTodayLondon(): Promise<{
+  count: number;
+  totalRefundGbp: number;
+  distinctOrders: number;
+}> {
+  const dayKey = getTodayCalendarDateKeyInLondon();
+  const { createdAtMin, createdAtMax } =
+    getWarehouseDayCreatedAtQueryBoundsUtc(dayKey);
+  const min = new Date(createdAtMin);
+  const max = new Date(createdAtMax);
+
+  const client = await clientPromise;
+  const col = client
+    .db(kokobayDbName)
+    .collection<ReturnLogMongo>(RETURN_LOGS_COLLECTION);
+
+  const rows = await col
+    .aggregate<{
+      meta: { count: number; totalRefundGbp: number }[];
+      distinctOrders: { n: number }[];
+    }>([
+      {
+        $match: {
+          createdAt: { $gte: min, $lte: max },
+        },
+      },
+      {
+        $facet: {
+          meta: [
+            {
+              $group: {
+                _id: null,
+                count: { $sum: 1 },
+                totalRefundGbp: {
+                  $sum: { $ifNull: ["$totalRefundGbp", 0] },
+                },
+              },
+            },
+          ],
+          distinctOrders: [
+            {
+              $group: {
+                _id: {
+                  $trim: { input: { $ifNull: ["$orderRef", ""] } },
+                },
+              },
+            },
+            { $match: { _id: { $ne: "" } } },
+            { $count: "n" },
+          ],
+        },
+      },
+    ])
+    .toArray();
+
+  const bucket = rows[0];
+  const meta = bucket?.meta?.[0];
+  const count = Math.max(0, Math.trunc(Number(meta?.count ?? 0)));
+  const rawTotal = Number(meta?.totalRefundGbp ?? 0);
+  const totalRefundGbp = Number.isFinite(rawTotal)
+    ? Math.round(rawTotal * 100) / 100
+    : 0;
+  const distinctOrders = Math.max(
+    0,
+    Math.trunc(Number(bucket?.distinctOrders?.[0]?.n ?? 0)),
+  );
+
+  return { count, totalRefundGbp, distinctOrders };
 }
 
 export async function getReturnLogByUid(

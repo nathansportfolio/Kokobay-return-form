@@ -208,7 +208,7 @@ export default async function Home() {
             <li className="flex h-full min-h-0 flex-col sm:col-span-2 lg:col-span-1">
               <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-200 border-l-4 border-l-emerald-600/90 bg-zinc-50/80 p-5 dark:border-zinc-700 dark:border-l-emerald-500/85 dark:bg-zinc-900/50">
                 <span className="text-sm font-semibold text-foreground">
-                  Refunded today (Shopify button)
+                  Returns logged today (refund totals)
                 </span>
                 <span className="mt-1" aria-live="polite">
                   {stats.refundAuditTodayOk ? (
@@ -224,26 +224,33 @@ export default async function Home() {
                     <span className="font-medium tabular-nums text-foreground">
                       {stats.refundAuditTodayCount}
                     </span>{" "}
-                    staff refund{stats.refundAuditTodayCount === 1 ? "" : "s"} logged
-                    {stats.refundAuditTodayCustomers > 0 ? (
+                    return{stats.refundAuditTodayCount === 1 ? "" : "s"} logged
+                    {stats.refundAuditTodayDistinctOrders > 0 ? (
                       <>
                         {" "}
                         ·{" "}
                         <span className="font-medium tabular-nums text-foreground">
-                          {stats.refundAuditTodayCustomers}
+                          {stats.refundAuditTodayDistinctOrders}
                         </span>{" "}
-                        distinct customer
-                        {stats.refundAuditTodayCustomers === 1 ? "" : "s"}
+                        distinct order
+                        {stats.refundAuditTodayDistinctOrders === 1 ? "" : "s"}
                       </>
                     ) : null}
                     <span className="mt-1 block text-xs text-zinc-500">
-                      London calendar day · Mongo audit when staff use Refund in Shopify
-                      (opens Admin; refund still done in Shopify).
+                      London calendar day · Sum of{" "}
+                      <code className="rounded bg-zinc-200/80 px-1 py-0.5 text-[0.7rem] dark:bg-zinc-800/80">
+                        totalRefundGbp
+                      </code>{" "}
+                      on new{" "}
+                      <code className="rounded bg-zinc-200/80 px-1 py-0.5 text-[0.7rem] dark:bg-zinc-800/80">
+                        returnLogs
+                      </code>{" "}
+                      (line-derived expected refunds, not Shopify settlement).
                     </span>
                   </span>
                 ) : (
                   <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Could not load refund audit totals.
+                    Could not load today’s return log totals.
                   </span>
                 )}
                 <Link
