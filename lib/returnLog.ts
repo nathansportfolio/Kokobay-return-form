@@ -6,6 +6,7 @@ import {
   isCustomerFormReturnReasonValue,
 } from "@/lib/customerReturnFormReasons";
 import clientPromise, { kokobayDbName } from "@/lib/mongodb";
+import { formatGbp } from "@/lib/kokobayOrderLines";
 import {
   getTodayCalendarDateKeyInLondon,
   getWarehouseDayCreatedAtQueryBoundsUtc,
@@ -35,6 +36,9 @@ type ReturnLogMongo = {
   lines: ReturnLogLineEntry[];
   lineCount: number;
   totalRefundGbp: number;
+  /** Staff marked refunded for reporting (default false on insert; absent on legacy rows). */
+  refunded?: boolean;
+  refundedAt?: Date;
   customerEmailSent: boolean;
   customerEmailSentAt?: Date;
   fullRefundIssued: boolean;
@@ -110,6 +114,7 @@ export async function insertReturnLog(
     lines,
     lineCount: lines.length,
     totalRefundGbp,
+    refunded: false,
     customerEmailSent: false,
     fullRefundIssued: false,
     updatedAt: now,
@@ -125,6 +130,7 @@ export async function insertReturnLog(
   await col.createIndex({ returnUid: 1 }, { unique: true });
   await col.createIndex({ orderRef: 1, createdAt: -1 });
   await col.createIndex({ createdAt: -1 });
+  await col.createIndex({ refunded: 1, refundedAt: -1 });
   await col.insertOne(doc as unknown as Document);
 
   return returnUid;
@@ -147,6 +153,12 @@ const mapDocToListItem = (d: ReturnLogMongo): ReturnLogListItem => ({
     : [],
   lineCount: d.lineCount,
   totalRefundGbp: d.totalRefundGbp,
+  refunded: d.refunded === true,
+  ...(d.refundedAt instanceof Date
+    ? { refundedAt: d.refundedAt.toISOString() }
+    : typeof d.refundedAt === "string" && d.refundedAt
+      ? { refundedAt: d.refundedAt }
+      : {}),
   customerEmailSent: d.customerEmailSent,
   ...(d.customerEmailSentAt
     ? { customerEmailSentAt: d.customerEmailSentAt.toISOString() }
@@ -192,7 +204,7 @@ function returnLogsSort(
   if (sort === "email") {
     return { customerEmailSent: d, createdAt: -1, returnUid: -1 };
   }
-  return { fullRefundIssued: d, createdAt: -1, returnUid: -1 };
+  return { refunded: d, createdAt: -1, returnUid: -1 };
 }
 
 export type ListReturnLogsPagedInput = {
@@ -312,9 +324,9 @@ export async function sumFullRefundAmountsGbpForLondonCalendarDay(
 }
 
 /**
- * London “today” on **return log `createdAt`**: warehouse returns **registered** that day.
- * Sums `totalRefundGbp` (line-derived amounts for refund-eligible dispositions). This is
- * not Shopify settlement time and not `fullRefundIssuedAt` — see {@link sumFullRefundAmountsGbpForLondonCalendarDay}.
+ * London “today” on **`refundedAt`**: returns staff marked **refunded** that calendar day.
+ * Sums `totalRefundGbp` (line-derived). Requires {@link ReturnLogMongo.refunded} true and
+ * `refundedAt` set (see {@link markReturnRefundedTrue}).
  */
 export async function aggregateReturnLogRefundTotalsLoggedTodayLondon(): Promise<{
   count: number;
@@ -336,10 +348,17 @@ export async function aggregateReturnLogRefundTotalsLoggedTodayLondon(): Promise
     .aggregate<{
       meta: { count: number; totalRefundGbp: number }[];
       distinctOrders: { n: number }[];
+      perReturn: {
+        returnUid: string;
+        orderRef: string;
+        totalRefundGbp?: number | null;
+        refundedAt: Date;
+      }[];
     }>([
       {
         $match: {
-          createdAt: { $gte: min, $lte: max },
+          refunded: true,
+          refundedAt: { $gte: min, $lte: max },
         },
       },
       {
@@ -366,6 +385,18 @@ export async function aggregateReturnLogRefundTotalsLoggedTodayLondon(): Promise
             { $match: { _id: { $ne: "" } } },
             { $count: "n" },
           ],
+          perReturn: [
+            { $sort: { refundedAt: 1 } },
+            {
+              $project: {
+                _id: 0,
+                returnUid: 1,
+                orderRef: 1,
+                totalRefundGbp: 1,
+                refundedAt: 1,
+              },
+            },
+          ],
         },
       },
     ])
@@ -382,6 +413,35 @@ export async function aggregateReturnLogRefundTotalsLoggedTodayLondon(): Promise
     0,
     Math.trunc(Number(bucket?.distinctOrders?.[0]?.n ?? 0)),
   );
+
+  const perReturn = Array.isArray(bucket?.perReturn) ? bucket.perReturn : [];
+  let sumCheck = 0;
+  console.log("[returnLogsToday] per-return totalRefundGbp (refunded=true, refundedAt in London day)", {
+    dayKey,
+    refundedAtMinUtc: min.toISOString(),
+    refundedAtMaxUtc: max.toISOString(),
+    rowCount: perReturn.length,
+    metaCount: count,
+    metaTotalGbp: totalRefundGbp,
+  });
+  for (let i = 0; i < perReturn.length; i += 1) {
+    const r = perReturn[i];
+    const gbp = Number(r?.totalRefundGbp ?? 0);
+    const safe = Number.isFinite(gbp) ? Math.round(gbp * 100) / 100 : 0;
+    sumCheck = Math.round((sumCheck + safe) * 100) / 100;
+    const refundedAtIso =
+      r?.refundedAt instanceof Date
+        ? r.refundedAt.toISOString()
+        : String(r?.refundedAt ?? "");
+    console.log(
+      `[returnLogsToday] ${i + 1}/${perReturn.length} totalRefundGbp=${safe} (${formatGbp(safe)}) returnUid=${String(r?.returnUid ?? "")} orderRef=${String(r?.orderRef ?? "")} refundedAt=${refundedAtIso}`,
+    );
+  }
+  console.log("[returnLogsToday] sum check", {
+    sumOfPerReturnRowsGbp: sumCheck,
+    metaGroupTotalGbp: totalRefundGbp,
+    match: sumCheck === totalRefundGbp,
+  });
 
   return { count, totalRefundGbp, distinctOrders };
 }
@@ -459,6 +519,30 @@ export async function markReturnCustomerEmailSent(
     set.customerEmailMarkedByOperator = opts.markedByOperator.trim();
   }
   const res = await col.updateOne({ returnUid: String(returnUid) }, { $set: set });
+  return res.matchedCount === 1;
+}
+
+/**
+ * Set `refunded` to true and `refundedAt` to now. Idempotent when already refunded
+ * (keeps original `refundedAt`).
+ */
+export async function markReturnRefundedTrue(returnUid: string): Promise<boolean> {
+  const client = await clientPromise;
+  const col = client
+    .db(kokobayDbName)
+    .collection<ReturnLogMongo>(RETURN_LOGS_COLLECTION);
+  const uid = String(returnUid).trim();
+  if (!uid) return false;
+  const prev = await col.findOne({ returnUid: uid });
+  if (!prev) return false;
+  if (prev.refunded === true) {
+    return true;
+  }
+  const now = new Date();
+  const res = await col.updateOne(
+    { returnUid: uid },
+    { $set: { refunded: true, refundedAt: now, updatedAt: now } },
+  );
   return res.matchedCount === 1;
 }
 

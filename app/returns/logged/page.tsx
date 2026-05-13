@@ -293,7 +293,20 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
         <th className="px-3 py-2.5 font-semibold text-foreground sm:px-4">Lines</th>
         <th className="px-3 py-2.5 font-semibold text-foreground sm:px-4">Value</th>
         {colHeader("email", "Email")}
-        {colHeader("refund", "Refund")}
+        <th
+          className="px-3 py-2.5 font-semibold text-foreground sm:px-4"
+          title="Staff marked refunded on this return (returnLogs.refunded)"
+        >
+          <Link
+            href={returnLogListSortHeaderHref(current, "refund")}
+            className="inline-flex items-center font-semibold text-foreground underline decoration-zinc-300 underline-offset-2 transition-colors hover:decoration-foreground"
+          >
+            Refund
+            <span className="text-zinc-400" aria-hidden>
+              {sortHeaderArrow(q.sort, q.order, "refund")}
+            </span>
+          </Link>
+        </th>
         <th
           className="px-3 py-2.5 font-semibold text-foreground sm:px-4"
           title="Shopify financial_status plus refund records when status is still “paid”"
@@ -309,7 +322,6 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
     rowList.map((r) => {
       const greyed = shopifyRefundedByReturnUid.get(r.returnUid) === true;
       const actionsDisabled = greyed;
-      const refundShowsYes = r.fullRefundIssued || greyed;
       const lines = r.lines ?? [];
       return (
         <Fragment key={r.returnUid}>
@@ -347,12 +359,12 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
             </td>
             <td
               className={`px-3 py-3 font-medium sm:px-4 ${
-                refundShowsYes
+                r.refunded
                   ? "text-emerald-700 dark:text-emerald-400"
                   : "text-red-600 dark:text-red-400"
               }`}
             >
-              {refundShowsYes ? "Yes" : "No"}
+              {r.refunded ? "Yes" : "No"}
             </td>
             <td className="px-3 py-3 text-sm normal-case sm:px-4">
               {shopifyPaymentStatusLabelForReturnsList(
@@ -476,7 +488,6 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
     const lines = r.lines ?? [];
     const greyed = shopifyRefundedByReturnUid.get(r.returnUid) === true;
     const actionsDisabled = greyed;
-    const refundShowsYes = r.fullRefundIssued || greyed;
     const cardBase = greyed
       ? "rounded-xl border border-zinc-300 bg-zinc-100/90 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900/55 dark:text-zinc-400"
       : "rounded-xl border border-zinc-200 bg-white text-foreground dark:border-zinc-800 dark:bg-zinc-950/40";
@@ -491,7 +502,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
         ? "text-zinc-500 dark:text-zinc-400"
         : "text-emerald-700 dark:text-emerald-400"
       : mutedText;
-    const yesNoRefund = refundShowsYes
+    const yesNoRefund = r.refunded
       ? "text-emerald-700 dark:text-emerald-400"
       : "text-red-600 dark:text-red-400";
     return (
@@ -532,7 +543,7 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
             </dd>
             <dt className={mutedText}>Refund</dt>
             <dd className={`font-medium ${yesNoRefund}`}>
-              {refundShowsYes ? "Yes" : "No"}
+              {r.refunded ? "Yes" : "No"}
             </dd>
             <dt className={mutedText}>Shopify payment</dt>
             <dd className={`text-sm normal-case ${strongText}`}>
@@ -963,7 +974,20 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                       Value
                     </th>
                     {colHeader("email", "Email")}
-                    {colHeader("refund", "Refund")}
+                    <th
+                      className="px-3 py-2.5 font-semibold text-foreground sm:px-4"
+                      title="Staff marked refunded on this return (returnLogs.refunded)"
+                    >
+                      <Link
+                        href={returnLogListSortHeaderHref(current, "refund")}
+                        className="inline-flex items-center font-semibold text-foreground underline decoration-zinc-300 underline-offset-2 transition-colors hover:decoration-foreground"
+                      >
+                        Refund
+                        <span className="text-zinc-400" aria-hidden>
+                          {sortHeaderArrow(q.sort, q.order, "refund")}
+                        </span>
+                      </Link>
+                    </th>
                     <th className="px-3 py-2.5 font-semibold text-foreground sm:px-4">
                       Action
                     </th>
@@ -971,8 +995,6 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
                   {displayRows.map((r) => {
-                    const greyed = false;
-                    const refundShowsYes = r.fullRefundIssued || greyed;
                     return (
                       <Fragment key={r.returnUid}>
                         <tr className="text-zinc-800 dark:text-zinc-200">
@@ -997,12 +1019,12 @@ export default async function LoggedReturnsPage({ searchParams }: PageProps) {
                           </td>
                           <td
                             className={`px-3 py-3 font-medium sm:px-4 ${
-                              refundShowsYes
+                              r.refunded
                                 ? "text-emerald-700 dark:text-emerald-400"
                                 : "text-red-600 dark:text-red-400"
                             }`}
                           >
-                            {refundShowsYes ? "Yes" : "No"}
+                            {r.refunded ? "Yes" : "No"}
                           </td>
                           <td className="px-2 py-3 sm:px-4">
                             <div className="flex max-w-[10.5rem] flex-col gap-2 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:gap-1.5 lg:max-w-none">

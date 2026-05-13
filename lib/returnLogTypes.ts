@@ -51,6 +51,12 @@ export type ReturnLogDoc = {
   lines: ReturnLogLineEntry[];
   lineCount: number;
   totalRefundGbp: number;
+  /**
+   * Warehouse flag: staff marked this return as refunded for reporting (default false).
+   * Distinct from {@link fullRefundIssued}.
+   */
+  refunded: boolean;
+  refundedAt?: string | Date;
   customerEmailSent: boolean;
   customerEmailSentAt?: string | Date;
   fullRefundIssued: boolean;
@@ -81,6 +87,9 @@ export type ReturnLogListItem = {
   lineCount: number;
   /** Sum of return line totals (expected refund from logged lines). */
   totalRefundGbp: number;
+  /** Staff marked refunded (drives “refunded today” totals). */
+  refunded: boolean;
+  refundedAt?: string;
   customerEmailSent: boolean;
   customerEmailSentAt?: string;
   fullRefundIssued: boolean;

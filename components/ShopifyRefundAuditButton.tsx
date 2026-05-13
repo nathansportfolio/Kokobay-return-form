@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 export type ShopifyRefundAuditButtonProps = {
@@ -45,6 +46,25 @@ export function ShopifyRefundAuditButton({
   disabled,
   children,
 }: ShopifyRefundAuditButtonProps) {
+  const router = useRouter();
+
+  function patchMarkRefundedInBackground() {
+    const uid = returnLogId?.trim();
+    if (!uid) return;
+    void fetch(`/api/returns/log/${encodeURIComponent(uid)}`, {
+      method: "PATCH",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markRefunded: true }),
+    })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+        if (res.ok && data.ok) router.refresh();
+      })
+      .catch(() => {});
+  }
+
   function postAuditInBackground() {
     void fetch("/api/returns/refund-audit", {
       method: "POST",
@@ -109,6 +129,7 @@ export function ShopifyRefundAuditButton({
       onClick={() => {
         console.log("[refund] link clicked (native open)", { orderRef, shopifyOrderId });
         postAuditInBackground();
+        patchMarkRefundedInBackground();
       }}
     >
       {children}

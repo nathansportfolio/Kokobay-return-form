@@ -3,6 +3,7 @@ import {
   getReturnLogByUid,
   markReturnCustomerEmailSent,
   markReturnFullRefund,
+  markReturnRefundedTrue,
 } from "@/lib/returnLog";
 import {
   parseSiteAccessRoleFromCookieHeader,
@@ -13,11 +14,12 @@ type PatchBody = {
   markEmailSent?: boolean;
   markFullRefund?: boolean;
   fullRefundAmountGbp?: number;
+  markRefunded?: boolean;
 };
 
 /**
  * PATCH /api/returns/log/[returnUid]
- * Set customer email sent and/or full-refund flags for a registered return.
+ * Set customer email sent, full-refund flags, and/or **refunded** (warehouse reporting flag).
  */
 export async function PATCH(
   request: Request,
@@ -41,9 +43,10 @@ export async function PATCH(
 
   const hasEmail = body.markEmailSent === true;
   const hasRefund = body.markFullRefund === true;
-  if (!hasEmail && !hasRefund) {
+  const hasRefunded = body.markRefunded === true;
+  if (!hasEmail && !hasRefund && !hasRefunded) {
     return NextResponse.json(
-      { ok: false, error: "Set markEmailSent and/or markFullRefund" },
+      { ok: false, error: "Set markEmailSent, markFullRefund, and/or markRefunded" },
       { status: 400 },
     );
   }
@@ -83,6 +86,15 @@ export async function PATCH(
         );
       }
       await markReturnFullRefund(returnUid, amt, auditOpts);
+    }
+    if (hasRefunded) {
+      const okRef = await markReturnRefundedTrue(returnUid);
+      if (!okRef) {
+        return NextResponse.json(
+          { ok: false, error: "Could not mark refunded" },
+          { status: 500 },
+        );
+      }
     }
     const fresh = await getReturnLogByUid(returnUid);
     return NextResponse.json({ ok: true, return: fresh });

@@ -208,7 +208,7 @@ export default async function Home() {
             <li className="flex h-full min-h-0 flex-col sm:col-span-2 lg:col-span-1">
               <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-200 border-l-4 border-l-emerald-600/90 bg-zinc-50/80 p-5 dark:border-zinc-700 dark:border-l-emerald-500/85 dark:bg-zinc-900/50">
                 <span className="text-sm font-semibold text-foreground">
-                  Returns logged today (refund totals)
+                  Marked refunded today
                 </span>
                 <span className="mt-1" aria-live="polite">
                   {stats.refundAuditTodayOk ? (
@@ -224,7 +224,7 @@ export default async function Home() {
                     <span className="font-medium tabular-nums text-foreground">
                       {stats.refundAuditTodayCount}
                     </span>{" "}
-                    return{stats.refundAuditTodayCount === 1 ? "" : "s"} logged
+                    return{stats.refundAuditTodayCount === 1 ? "" : "s"} (Refund in Shopify)
                     {stats.refundAuditTodayDistinctOrders > 0 ? (
                       <>
                         {" "}
@@ -237,15 +237,19 @@ export default async function Home() {
                       </>
                     ) : null}
                     <span className="mt-1 block text-xs text-zinc-500">
-                      London calendar day · Sum of{" "}
+                      London day on{" "}
+                      <code className="rounded bg-zinc-200/80 px-1 py-0.5 text-[0.7rem] dark:bg-zinc-800/80">
+                        refundedAt
+                      </code>
+                      . Sum of{" "}
                       <code className="rounded bg-zinc-200/80 px-1 py-0.5 text-[0.7rem] dark:bg-zinc-800/80">
                         totalRefundGbp
                       </code>{" "}
-                      on new{" "}
+                      where{" "}
                       <code className="rounded bg-zinc-200/80 px-1 py-0.5 text-[0.7rem] dark:bg-zinc-800/80">
-                        returnLogs
+                        refunded
                       </code>{" "}
-                      (line-derived expected refunds, not Shopify settlement).
+                      is true (Logged → Refund in Shopify).
                     </span>
                   </span>
                 ) : (

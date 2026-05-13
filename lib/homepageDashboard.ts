@@ -24,7 +24,7 @@ export type HomepageDashboardStats = {
   /** UK Premium pipeline: orders on missing-stock hold for today’s London day. */
   ukPremiumOrdersPausedMissingStock: number;
   returnsPendingRefund: number;
-  /** `returnLogs` created today (London): count, sum of `totalRefundGbp`, distinct `orderRef`. */
+  /** `returnLogs` with `refunded` true and `refundedAt` today (London): count, sum of `totalRefundGbp`, distinct orders. */
   refundAuditTodayCount: number;
   refundAuditTodayTotalGbp: number;
   refundAuditTodayDistinctOrders: number;

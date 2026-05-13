@@ -2,9 +2,8 @@ import { formatGbp } from "@/lib/kokobayOrderLines";
 import { aggregateReturnLogRefundTotalsLoggedTodayLondon } from "@/lib/returnLog";
 
 /**
- * Server-only: expected refund totals from **`returnLogs`** whose **`createdAt`** is
- * today (London) — sum of **`totalRefundGbp`** (line-derived). Not the same as
- * Shopify money movement or `fullRefundIssuedAt`.
+ * Server-only: sum of **`totalRefundGbp`** on **`returnLogs`** where staff set
+ * **`refunded`** true today (London calendar day on **`refundedAt`**).
  */
 export async function RefundedTodaySoFar({ className }: { className?: string }) {
   let total = 0;
@@ -12,7 +11,7 @@ export async function RefundedTodaySoFar({ className }: { className?: string }) 
   let distinctOrders = 0;
   try {
     console.log(
-      "[RefundedTodaySoFar] loading: lib/returnLog.aggregateReturnLogRefundTotalsLoggedTodayLondon() (returnLogs, London today on createdAt)",
+      "[RefundedTodaySoFar] loading: aggregateReturnLogRefundTotalsLoggedTodayLondon (refunded=true, refundedAt in London today)",
     );
     const s = await aggregateReturnLogRefundTotalsLoggedTodayLondon();
     total = s.totalRefundGbp;
@@ -31,11 +30,11 @@ export async function RefundedTodaySoFar({ className }: { className?: string }) 
       <span className="font-semibold text-foreground tabular-nums">
         {formatGbp(total)}
       </span>{" "}
-      expected refunds from returns logged today
+      marked refunded today (line totals)
       <span className="text-zinc-500 dark:text-zinc-400">
         {" "}
         (London · {count} return{count === 1 ? "" : "s"} · {distinctOrders} order
-        {distinctOrders === 1 ? "" : "s"} · line totals)
+        {distinctOrders === 1 ? "" : "s"} · Refund in Shopify on Logged)
       </span>
     </p>
   );

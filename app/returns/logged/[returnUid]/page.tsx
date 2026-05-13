@@ -151,6 +151,21 @@ export default async function ReturnLogDetailPage({ params }: PageProps) {
           </dd>
         </div>
         <div>
+          <dt className="text-zinc-500">Marked refunded (totals)</dt>
+          <dd
+            className={
+              doc.refunded === true
+                ? "font-medium text-emerald-800 dark:text-emerald-300"
+                : "text-zinc-600"
+            }
+          >
+            {doc.refunded === true ? "Yes" : "No"}
+            {doc.refundedAt
+              ? ` · ${formatIso(doc.refundedAt)}`
+              : null}
+          </dd>
+        </div>
+        <div>
           <dt className="text-zinc-500">Full refund marked</dt>
           <dd
             className={
