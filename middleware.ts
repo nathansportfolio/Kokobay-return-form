@@ -8,10 +8,14 @@ import {
 
 /**
  * Product + collection JSON proxies — skip PIN cookie so mobile / curl can hit them.
+ * Includes `product-stock` (storefront `.js` proxy) for cross-origin theme use.
  * Routes are unauthenticated; Shopify Admin credentials stay server-only.
  */
 function isProductsApiPath(pathname: string): boolean {
   if (pathname === "/api/products" || pathname === "/api/products/") {
+    return true;
+  }
+  if (pathname === "/api/product-stock" || pathname === "/api/product-stock/") {
     return true;
   }
   if (pathname === "/api/collections" || pathname === "/api/collections/") {
