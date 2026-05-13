@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { toast } from "sonner";
 
 export type ShopifyRefundAuditButtonProps = {
@@ -26,10 +25,10 @@ type RefundAuditResponse = {
 };
 
 /**
- * Opens Shopify Admin **refund** in a new tab (same as a plain link), then POSTs
- * `/api/returns/refund-audit` to append **`refundAuditLogs`** only. Refund status in
- * the list still comes from live Shopify reads elsewhere — this is staff intent /
- * analytics, not money movement via our API.
+ * Native **link** to Shopify Admin refund (`href`) — same as `<a target="_blank">`,
+ * so the browser opens the app reliably (no `window.open` / popup timing issues).
+ * Fires `/api/returns/refund-audit` in the background for **`refundAuditLogs`** (does
+ * not block navigation).
  */
 export function ShopifyRefundAuditButton({
   href,
@@ -46,61 +45,43 @@ export function ShopifyRefundAuditButton({
   disabled,
   children,
 }: ShopifyRefundAuditButtonProps) {
-  const [busy, setBusy] = useState(false);
-
-  async function handleClick() {
-    if (disabled || busy) return;
-    console.log("[refund] button clicked", { orderRef, shopifyOrderId });
-
-    const tab = window.open(href, "_blank");
-    if (!tab) {
-      toast.error(
-        "Popup blocked — allow popups for this site to open Shopify Admin.",
-      );
-      return;
-    }
-
-    setBusy(true);
-    try {
-      console.log("[refund] POST /api/returns/refund-audit (after opening Shopify)");
-      const res = await fetch("/api/returns/refund-audit", {
-        method: "POST",
-        cache: "no-store",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderRef,
-          returnLogId,
-          refundAmount: refundAmountGbp,
-          currency: currency ?? "GBP",
-          customerName,
-          customerEmail,
-          shopifyOrderId: shopifyOrderId?.trim() || null,
-          notes,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as RefundAuditResponse;
-      console.log("[refund] audit response", { status: res.status, ok: data.ok });
-
-      if (!res.ok || !data.ok) {
-        console.error("[refund] audit failed", data.error, res.status);
+  function postAuditInBackground() {
+    void fetch("/api/returns/refund-audit", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderRef,
+        returnLogId,
+        refundAmount: refundAmountGbp,
+        currency: currency ?? "GBP",
+        customerName,
+        customerEmail,
+        shopifyOrderId: shopifyOrderId?.trim() || null,
+        notes,
+      }),
+    })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as RefundAuditResponse;
+        console.log("[refund] audit response", { status: res.status, ok: data.ok });
+        if (!res.ok || !data.ok) {
+          console.error("[refund] audit failed", data.error, res.status);
+          toast.error(
+            data.error ??
+              `Could not save audit log (${res.status}). Shopify still opened in the other tab.`,
+          );
+        } else {
+          console.log("[refund] complete");
+          toast.success("Refund audit saved");
+        }
+      })
+      .catch((e) => {
+        console.error("[refund] fetch threw", e);
         toast.error(
-          data.error ??
-            `Could not save audit log (${res.status}). Shopify still opened in the other tab.`,
+          "Could not save audit log. If Shopify opened, the refund screen is still available in that tab.",
         );
-        return;
-      }
-
-      console.log("[refund] complete");
-      toast.success("Shopify opened · refund audit saved");
-    } catch (e) {
-      console.error("[refund] fetch threw", e);
-      toast.error(
-        "Could not save audit log. Shopify still opened in the other tab.",
-      );
-    } finally {
-      setBusy(false);
-    }
+      });
   }
 
   if (disabled) {
@@ -116,17 +97,21 @@ export function ShopifyRefundAuditButton({
   }
 
   return (
-    <button
-      type="button"
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
       className={className}
       title={
         title ??
-        "Open Shopify Admin refund (new tab), then save an internal audit row in Mongo"
+        "Open Shopify Admin refund in a new tab (same as a normal link); saves an internal audit row"
       }
-      disabled={busy}
-      onClick={() => void handleClick()}
+      onClick={() => {
+        console.log("[refund] link clicked (native open)", { orderRef, shopifyOrderId });
+        postAuditInBackground();
+      }}
     >
-      {busy ? "…" : children}
-    </button>
+      {children}
+    </a>
   );
 }
