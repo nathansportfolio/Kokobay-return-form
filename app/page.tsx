@@ -358,6 +358,20 @@ export default async function Home() {
                 </span>
               </Link>
             </li>
+            <li>
+              <Link
+                href="/admin/stock-exposure"
+                className="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/80 p-5 transition-colors hover:border-zinc-300 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950/50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900/80"
+              >
+                <span className="text-sm font-semibold text-foreground">
+                  Stock exposure
+                </span>
+                <span className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  OOS and low-stock product views from storefront lookups, with
+                  UTM source attribution (London dates)
+                </span>
+              </Link>
+            </li>
           </ul>
         </section>
 
