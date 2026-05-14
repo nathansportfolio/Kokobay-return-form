@@ -23,6 +23,12 @@ export type StockExposurePercentages = {
   healthyRate: number;
 };
 
+export type StockExposureSourceTopProduct = {
+  handle: string;
+  title: string;
+  views: number;
+};
+
 export type StockExposureBySourceRow = {
   source: string;
   totalViews: number;
@@ -32,6 +38,8 @@ export type StockExposureBySourceRow = {
   outOfStockRate: number;
   lowStockRate: number;
   healthyRate: number;
+  /** Up to five PDPs with the most lookup views for this UTM bucket in the selected range. */
+  topProducts: StockExposureSourceTopProduct[];
 };
 
 export type StockExposureTopOosProduct = {
@@ -215,7 +223,7 @@ export async function getStockExposureAnalytics(
 
   const prefix: Document[] = matchStage ? [matchStage, ...withComputedFields] : [...withComputedFields];
 
-  const [facetRow] = await col
+  const facetRows = await col
     .aggregate<{
       summary: {
         totalViews: number;
@@ -248,6 +256,10 @@ export async function getStockExposureAnalytics(
         title: string;
         views: number;
         totalStock: number;
+      }[];
+      topProductsBySource: {
+        _id: string;
+        topProducts: { handle: string; title: string; views: number }[];
       }[];
     }>([
       ...prefix,
@@ -429,11 +441,40 @@ export async function getStockExposureAnalytics(
             { $sort: { views: -1 } },
             { $limit: 20 },
           ],
+          topProductsBySource: [
+            {
+              $group: {
+                _id: { source: "$source", handle: "$handle" },
+                views: { $sum: 1 },
+                title: { $first: "$productTitle" },
+              },
+            },
+            { $sort: { "_id.source": 1, views: -1 } },
+            {
+              $group: {
+                _id: "$_id.source",
+                items: {
+                  $push: {
+                    handle: "$_id.handle",
+                    title: "$title",
+                    views: "$views",
+                  },
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                topProducts: { $slice: ["$items", 5] },
+              },
+            },
+          ],
         },
       },
     ])
-    .toArray();
+      .toArray();
 
+  const facetRow = facetRows[0];
   const bucket = facetRow ?? {};
   const s = bucket.summary?.[0];
   const totalViews = Math.max(0, Math.trunc(Number(s?.totalViews ?? 0)));
@@ -445,7 +486,21 @@ export async function getStockExposureAnalytics(
   const healthyViews = Math.max(0, Math.trunc(Number(s?.healthyViews ?? 0)));
 
   if (totalViews === 0) {
-    return { ...emptyAnalytics(range), range };
+    return emptyAnalytics(range);
+  }
+
+  const topProductsBySourceMap = new Map<string, StockExposureSourceTopProduct[]>();
+  for (const row of bucket.topProductsBySource ?? []) {
+    const sourceKey = String(row._id ?? "");
+    const raw = Array.isArray(row.topProducts) ? row.topProducts : [];
+    topProductsBySourceMap.set(
+      sourceKey,
+      raw.map((p) => ({
+        handle: String(p.handle ?? ""),
+        title: String(p.title ?? "").trim() || String(p.handle ?? ""),
+        views: Math.max(0, Math.trunc(Number(p.views ?? 0))),
+      })),
+    );
   }
 
   const bySource: StockExposureBySourceRow[] = (bucket.bySource ?? []).map(
@@ -454,8 +509,9 @@ export async function getStockExposureAnalytics(
       const o = Math.max(0, Math.trunc(Number(r.outOfStockViews ?? 0)));
       const l = Math.max(0, Math.trunc(Number(r.lowStockViews ?? 0)));
       const h = Math.max(0, Math.trunc(Number(r.healthyViews ?? 0)));
+      const source = String(r._id ?? "non_landing_page");
       return {
-        source: String(r._id ?? "non_landing_page"),
+        source,
         totalViews: tv,
         outOfStockViews: o,
         lowStockViews: l,
@@ -463,6 +519,7 @@ export async function getStockExposureAnalytics(
         outOfStockRate: pct(o, tv),
         lowStockRate: pct(l, tv),
         healthyRate: pct(h, tv),
+        topProducts: topProductsBySourceMap.get(source) ?? [],
       };
     },
   );

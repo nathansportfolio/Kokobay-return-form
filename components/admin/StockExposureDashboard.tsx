@@ -5,6 +5,7 @@ import type {
   StockExposureDailyTrendRow,
   StockExposureRange,
 } from "@/lib/stockExposureAnalytics";
+import { shopifyOnlineStoreProductUrl } from "@/lib/shopifyOrderAdminUrl";
 import { WAREHOUSE_TZ } from "@/lib/warehouseLondonDay";
 
 const RANGE_OPTIONS: { value: StockExposureRange; label: string }[] = [
@@ -168,7 +169,10 @@ function DailyStackedChart({ rows }: { rows: StockExposureDailyTrendRow[] }) {
   );
 }
 
-function SourceTable({ rows }: { rows: StockExposureBySourceRow[] }) {
+const SOURCE_ROW_GRID =
+  "grid grid-cols-[minmax(0,1.35fr)_5.25rem_4.25rem_4.25rem_4.25rem_1.75rem] items-center gap-x-2 px-3 py-2.5 text-sm";
+
+function SourceAccordionTable({ rows }: { rows: StockExposureBySourceRow[] }) {
   if (rows.length === 0) {
     return (
       <p className="text-sm text-zinc-500 dark:text-zinc-400">No attributed traffic.</p>
@@ -176,36 +180,100 @@ function SourceTable({ rows }: { rows: StockExposureBySourceRow[] }) {
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-zinc-200 bg-zinc-50/90 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <th className="px-3 py-2.5 font-semibold text-foreground">Source</th>
-            <th className="px-3 py-2.5 font-semibold text-foreground">Views</th>
-            <th className="px-3 py-2.5 font-semibold text-foreground">OOS %</th>
-            <th className="px-3 py-2.5 font-semibold text-foreground">Low %</th>
-            <th className="px-3 py-2.5 font-semibold text-foreground">Healthy %</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-          {rows.map((r) => (
-            <tr key={r.source} className="text-zinc-800 dark:text-zinc-200">
-              <td className="max-w-[14rem] truncate px-3 py-2 font-medium" title={r.source}>
+      <div className="min-w-[36rem] overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950/40">
+        <div
+          className={`${SOURCE_ROW_GRID} border-b border-zinc-200 bg-zinc-50/90 text-xs font-semibold uppercase tracking-wide text-foreground dark:border-zinc-800 dark:bg-zinc-900/50`}
+        >
+          <span>Source</span>
+          <span className="text-right">Views</span>
+          <span className="text-right">OOS %</span>
+          <span className="text-right">Low %</span>
+          <span className="text-right">Healthy %</span>
+          <span className="sr-only">Expand</span>
+        </div>
+        {rows.map((r) => (
+          <details
+            key={r.source}
+            className="group border-b border-zinc-100 last:border-b-0 dark:border-zinc-800/80"
+          >
+            <summary
+              className={`${SOURCE_ROW_GRID} cursor-pointer list-none text-zinc-800 marker:content-none [&::-webkit-details-marker]:hidden dark:text-zinc-200`}
+            >
+              <span className="min-w-0 truncate font-medium text-foreground" title={r.source}>
                 {r.source}
-              </td>
-              <td className="px-3 py-2 tabular-nums">{fmtInt(r.totalViews)}</td>
-              <td className="px-3 py-2 tabular-nums text-rose-700 dark:text-rose-300">
+              </span>
+              <span className="text-right tabular-nums">{fmtInt(r.totalViews)}</span>
+              <span className="text-right tabular-nums text-rose-700 dark:text-rose-300">
                 {fmtPct(r.outOfStockRate)}
-              </td>
-              <td className="px-3 py-2 tabular-nums text-amber-800 dark:text-amber-200/90">
+              </span>
+              <span className="text-right tabular-nums text-amber-800 dark:text-amber-200/90">
                 {fmtPct(r.lowStockRate)}
-              </td>
-              <td className="px-3 py-2 tabular-nums text-emerald-800 dark:text-emerald-300/90">
+              </span>
+              <span className="text-right tabular-nums text-emerald-800 dark:text-emerald-300/90">
                 {fmtPct(r.healthyRate)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </span>
+              <span
+                className="flex justify-end text-zinc-400 transition-transform duration-200 group-open:rotate-180 dark:text-zinc-500"
+                aria-hidden
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </span>
+            </summary>
+            <div className="border-t border-zinc-100 bg-zinc-50/60 px-3 py-3 dark:border-zinc-800/80 dark:bg-zinc-900/30">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Top product pages by views for this source (same date range).
+              </p>
+              {r.topProducts.length === 0 ? (
+                <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">No breakdown.</p>
+              ) : (
+                <ol className="mt-2 space-y-2">
+                  {r.topProducts.map((p, i) => {
+                    const href = shopifyOnlineStoreProductUrl(p.handle);
+                    return (
+                      <li
+                        key={`${r.source}-${p.handle}-${i}`}
+                        className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm"
+                      >
+                        <span className="w-5 shrink-0 tabular-nums text-zinc-400 dark:text-zinc-500">
+                          {i + 1}.
+                        </span>
+                        {p.handle && href !== "#" ? (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-w-0 flex-1 font-medium text-zinc-800 underline-offset-2 hover:underline dark:text-zinc-100"
+                          >
+                            {p.title}
+                          </a>
+                        ) : (
+                          <span className="min-w-0 flex-1 font-medium text-zinc-800 dark:text-zinc-100">
+                            {p.title}
+                          </span>
+                        )}
+                        <span className="shrink-0 tabular-nums text-zinc-500 dark:text-zinc-400">
+                          {fmtInt(p.views)} views
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
     </div>
   );
 }
@@ -350,10 +418,15 @@ export function StockExposureDashboard({ data }: { data: StockExposureAnalytics 
         </h2>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
           Sorted by highest OOS exposure first. Empty or missing UTM →{" "}
-          <span className="font-medium text-foreground">non_landing_page</span>.
+          <span className="font-medium text-foreground">non_landing_page</span>. Expand a
+          row for the five storefront product pages with the most views for that source (
+          <code className="rounded bg-zinc-200/70 px-1 text-[0.7rem] dark:bg-zinc-800">
+            {`{handle}.myshopify.com`}
+          </code>
+          ).
         </p>
         <div className="mt-4">
-          <SourceTable rows={data.bySource} />
+          <SourceAccordionTable rows={data.bySource} />
         </div>
       </section>
 

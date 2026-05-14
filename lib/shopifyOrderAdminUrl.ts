@@ -5,6 +5,16 @@ function storeHandle(): string {
 }
 
 /**
+ * Primary Online Store product URL (`{handle}.myshopify.com`). Uses the same public
+ * store handle as admin links; custom domains are not applied here.
+ */
+export function shopifyOnlineStoreProductUrl(productHandle: string): string {
+  const h = String(productHandle ?? "").trim();
+  if (!h) return "#";
+  return `https://${storeHandle()}.myshopify.com/products/${encodeURIComponent(h)}`;
+}
+
+/**
  * Path shape (example):
  * `https://admin.shopify.com/store/koko-bay/orders/12985108038018/refund`
  * Opens Admin **Refund** for that order. The id segment is REST `order.id`, not the
