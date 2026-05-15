@@ -34,6 +34,44 @@ ATLANTIC STREET
 ALTRINCHAM
 WA14 5NQ`;
 
+function ParcelSealChecklist({ variant }: { variant: "instructions" | "success" }) {
+  const shell =
+    variant === "success"
+      ? "border-emerald-700/45 bg-white/55 dark:border-emerald-500/40 dark:bg-emerald-950/35"
+      : "border-zinc-400 bg-white/70 dark:border-zinc-600 dark:bg-zinc-950/35";
+  const title =
+    variant === "success"
+      ? "text-emerald-900/95 dark:text-emerald-200/90"
+      : "text-zinc-600 dark:text-zinc-400";
+  const list =
+    variant === "success"
+      ? "text-emerald-950 dark:text-emerald-100/95"
+      : "text-zinc-800 dark:text-zinc-200";
+
+  return (
+    <div
+      className={`rounded-lg border border-dashed px-3 py-2.5 sm:px-4 ${shell}`}
+      role="note"
+      aria-label="What to include in your parcel"
+    >
+      <p
+        className={`text-xs font-semibold uppercase tracking-[0.14em] ${title}`}
+      >
+        Check before you seal the box
+      </p>
+      <ol
+        className={`mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-snug marker:font-medium ${list}`}
+      >
+        <li>The item(s) you are returning</li>
+        <li>
+          The original A4 order sheet, or a clear written reference to your order
+          number
+        </li>
+      </ol>
+    </div>
+  );
+}
+
 /** Public returns form: show Shopify/catalog SKU as-is (no warehouse `KOKO-` display prefix). */
 function customerReturnLineSkuDisplay(line: KokobayOrderLine): string {
   const raw = String(line.sku ?? "").trim();
@@ -90,6 +128,7 @@ export function CustomerReturnForm() {
   const [datePosted, setDatePosted] = useState("");
   const [submitBusy, setSubmitBusy] = useState(false);
   const [successUid, setSuccessUid] = useState<string | null>(null);
+  const [orderLookupError, setOrderLookupError] = useState<string | null>(null);
   const orderLoadedAnchorRef = useRef<HTMLDivElement>(null);
   const entireOrderCheckboxRef = useRef<HTMLInputElement>(null);
 
@@ -123,32 +162,46 @@ export function CustomerReturnForm() {
   }, [lines]);
 
   const onLoadOrder = useCallback(async () => {
+    setOrderLookupError(null);
     const o = orderInput.trim();
+    const em = email.trim();
     if (o.length < 2) {
       logReturnsOrderLookupClient("lookup_blocked_short_input", {
         orderInput: o,
         orderInputLength: o.length,
         queryDiagnostics: queryDiagnosticsForOrderString(o),
       });
-      toast.error("Enter your order number");
+      setOrderLookupError("Enter your order number.");
+      return;
+    }
+    if (em.length < 3 || !em.includes("@")) {
+      setOrderLookupError(
+        "Enter the email address from your order confirmation so we can verify it’s you.",
+      );
       return;
     }
     logReturnsOrderLookupClient("lookup_attempt", {
       orderInput: o,
       orderInputLength: o.length,
       queryDiagnostics: queryDiagnosticsForOrderString(o),
+      emailLength: em.length,
     });
     setLoadBusy(true);
     setSuccessUid(null);
     try {
-      const res = await fetch(
-        `/api/returns/preview-order?order=${encodeURIComponent(o)}`,
-      );
+      const q = new URLSearchParams({
+        order: o,
+        email: em,
+      });
+      const res = await fetch(`/api/returns/preview-order?${q.toString()}`, {
+        cache: "no-store",
+      });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         lines?: KokobayOrderLine[];
         orderRef?: string;
         error?: string;
+        shopify?: { customerName?: string };
       };
       logReturnsOrderLookupClient("lookup_response", {
         orderInput: o,
@@ -161,14 +214,22 @@ export function CustomerReturnForm() {
         error: data.error,
       });
       if (!res.ok || !data.ok || !data.lines?.length) {
-        toast.error(data.error ?? "No lines found for that order. Check the number and try again.");
+        setOrderLookupError(
+          data.error ??
+            "No lines found for that order. Check the number and try again.",
+        );
         setLines(null);
         setOrderRef(null);
         return;
       }
+      setOrderLookupError(null);
       setOrderRef(data.orderRef ?? o);
       setOrderInput(data.orderRef ?? o);
       setLines(data.lines);
+      const fromShopify = data.shopify?.customerName?.trim() ?? "";
+      if (fromShopify && fromShopify !== "—") {
+        setName(fromShopify);
+      }
       const next: Record<string, PerLine> = {};
       for (const l of data.lines) {
         next[l.id] = {
@@ -181,7 +242,7 @@ export function CustomerReturnForm() {
     } finally {
       setLoadBusy(false);
     }
-  }, [orderInput]);
+  }, [orderInput, email]);
 
   const toggleEntireOrder = useCallback(
     (selectAll: boolean) => {
@@ -308,6 +369,9 @@ export function CustomerReturnForm() {
             <strong className="font-semibold">5–10 working days</strong> after we receive
             the items.
           </p>
+          <div className="mt-4">
+            <ParcelSealChecklist variant="success" />
+          </div>
           <div
             className="mt-4 whitespace-pre-line border-2 border-emerald-800/30 bg-white/60 p-3 text-[0.7rem] font-semibold leading-snug text-emerald-950 sm:text-xs dark:border-emerald-700/40 dark:bg-emerald-950/20 dark:text-emerald-100"
             role="group"
@@ -317,21 +381,12 @@ export function CustomerReturnForm() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setSuccessUid(null);
-              setLines(null);
-              setOrderRef(null);
-              setByLine({});
-              setName("");
-              setEmail("");
-              setDatePosted("");
-            }}
-            className="min-h-11 w-full touch-manipulation rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background sm:w-auto"
+          <a
+            href="https://www.kokobay.co.uk"
+            className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background no-underline hover:opacity-90 sm:w-auto"
           >
-            Start another
-          </button>
+            Continue Shopping
+          </a>
         </div>
       </div>
     );
@@ -363,7 +418,7 @@ export function CustomerReturnForm() {
               weight="duotone"
               aria-hidden
             />
-            <span>Enter your order number and load your items.</span>
+            <span>Enter your order number, the email on the order, and load your items.</span>
           </li>
           <li className="flex gap-3">
             <ListChecks
@@ -414,22 +469,7 @@ export function CustomerReturnForm() {
             </span>
           </li>
         </ul>
-        <div
-          className="rounded-lg border border-dashed border-zinc-400 bg-white/70 px-3 py-2.5 sm:px-4 dark:border-zinc-600 dark:bg-zinc-950/35"
-          role="note"
-          aria-label="What to include in your parcel"
-        >
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 dark:text-zinc-400">
-            Check before you seal the box
-          </p>
-          <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-snug text-zinc-800 marker:font-medium dark:text-zinc-200">
-            <li>The item(s) you are returning</li>
-            <li>
-              The original A4 order sheet, or a clear written reference to your order
-              number
-            </li>
-          </ol>
-        </div>
+        <ParcelSealChecklist variant="instructions" />
         <p>
           Re-pack the item(s) in the original packaging where possible, with tags still
           attached. You are responsible for the parcel until it reaches us, so pack
@@ -441,7 +481,7 @@ export function CustomerReturnForm() {
         <p className="mt-3">
           Before you post anything, scroll down this page to the{" "}
           <strong className="font-semibold">Find your order</strong> section, enter the
-          order number from your confirmation email, and tap{" "}
+          order number and email from your confirmation, and tap{" "}
           <strong className="font-semibold">Load order</strong>. Then complete the returns
           form further down (tick items, choose a reason for each, fill in your details,
           and submit). We need that form on file so we can match your parcel when it
@@ -461,16 +501,52 @@ export function CustomerReturnForm() {
           Find your order
         </h2>
         <p className="text-sm text-zinc-500">
-          Enter the order number from your confirmation; we will show items to return.
+          Enter the order number and email from your confirmation; we will show items to
+          return.
         </p>
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="min-w-0 flex-1 sm:max-w-xs">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <label className="min-w-0 flex-1 sm:max-w-xs" htmlFor="customer-return-order-input">
             <span className="text-sm font-medium">Order number</span>
             <input
+              id="customer-return-order-input"
               value={orderInput}
-              onChange={(e) => setOrderInput(e.target.value)}
-              className="mt-1.5 w-full min-h-12 rounded-lg border border-zinc-300 bg-background px-3 py-2.5 text-base text-foreground sm:min-h-10 sm:py-2 sm:text-sm"
+              onChange={(e) => {
+                setOrderInput(e.target.value);
+                setOrderLookupError(null);
+              }}
+              aria-invalid={orderLookupError ? true : undefined}
+              aria-describedby={
+                orderLookupError ? "customer-return-order-error" : undefined
+              }
+              className={`mt-1.5 w-full min-h-12 rounded-lg bg-background px-3 py-2.5 text-base text-foreground sm:min-h-10 sm:py-2 sm:text-sm ${
+                orderLookupError
+                  ? "border-2 border-red-600 outline-none ring-2 ring-red-600/25 focus-visible:ring-red-500/45 dark:border-red-500 dark:ring-red-500/20"
+                  : "border border-zinc-300 focus-visible:border-zinc-400 focus-visible:ring-2 focus-visible:ring-zinc-400/35 dark:border-zinc-600"
+              }`}
               autoComplete="off"
+            />
+          </label>
+          <label className="min-w-0 flex-1 sm:max-w-xs" htmlFor="customer-return-lookup-email">
+            <span className="text-sm font-medium">Email on the order</span>
+            <input
+              id="customer-return-lookup-email"
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setOrderLookupError(null);
+              }}
+              aria-invalid={orderLookupError ? true : undefined}
+              aria-describedby={
+                orderLookupError ? "customer-return-order-error" : undefined
+              }
+              autoComplete="email"
+              enterKeyHint="search"
+              className={`mt-1.5 w-full min-h-12 rounded-lg bg-background px-3 py-2.5 text-base text-foreground sm:min-h-10 sm:py-2 sm:text-sm ${
+                orderLookupError
+                  ? "border-2 border-red-600 outline-none ring-2 ring-red-600/25 focus-visible:ring-red-500/45 dark:border-red-500 dark:ring-red-500/20"
+                  : "border border-zinc-300 focus-visible:border-zinc-400 focus-visible:ring-2 focus-visible:ring-zinc-400/35 dark:border-zinc-600"
+              }`}
             />
           </label>
           <button
@@ -481,6 +557,15 @@ export function CustomerReturnForm() {
           >
             {loadBusy ? "Loading…" : "Load order"}
           </button>
+          {orderLookupError ? (
+            <p
+              id="customer-return-order-error"
+              role="alert"
+              className="w-full text-sm leading-snug text-red-600 sm:basis-full dark:text-red-400"
+            >
+              {orderLookupError}
+            </p>
+          ) : null}
         </div>
       </section>
 

@@ -187,20 +187,29 @@ export async function findShopifyOrderByQuery(
       );
       if (r.ok && r.data.orders?.length) {
         const key = name.toLowerCase();
-        order =
-          r.data.orders.find((o) => o.name.toLowerCase() === key) ??
-          r.data.orders[0];
-        if (order) break;
+        const exact = r.data.orders.find(
+          (o) => o.name.toLowerCase() === key,
+        );
+        // Never use `orders[0]` here: Shopify's `name` filter can return unrelated
+        // orders when there is no exact name match (e.g. customer types "233").
+        if (exact) {
+          order = exact;
+          break;
+        }
       }
     }
   }
 
   if (!order && SHORT_NUMERIC.test(q)) {
+    const n = parseInt(q, 10);
     const r2 = await shopifyAdminGetNoCache<{ orders?: ShopifyOrder[] }>(
       `orders.json?status=any&order_number=${encodeURIComponent(q)}&limit=5`,
     );
-    if (r2.ok && r2.data.orders?.[0]) {
-      order = r2.data.orders[0];
+    if (r2.ok && r2.data.orders?.length) {
+      const exactNum = r2.data.orders.find((o) => o.order_number === n);
+      if (exactNum) {
+        order = exactNum;
+      }
     }
   }
 

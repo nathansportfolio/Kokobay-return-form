@@ -20,6 +20,10 @@ export function ReturnsOrderForm() {
       (e.currentTarget.elements.namedItem("orderNumber") as HTMLInputElement)
         ?.value ?? "",
     );
+    const rawEmail = String(
+      (e.currentTarget.elements.namedItem("orderEmail") as HTMLInputElement)
+        ?.value ?? "",
+    ).trim();
     const trimmed = raw.trim();
     if (trimmed.length < 2) {
       logReturnsOrderLookupClient("lookup_blocked_short_input", {
@@ -29,7 +33,13 @@ export function ReturnsOrderForm() {
       });
       toast.warning("Enter an order to look up", {
         description:
-          "Use # and digits from the confirmation email, the order number, or the long id from order admin.",
+          "Use # and digits from the confirmation email, the order number, or the long id from Shopify admin.",
+      });
+      return;
+    }
+    if (rawEmail.length < 3 || !rawEmail.includes("@")) {
+      toast.warning("Enter the email on the order", {
+        description: "We verify it matches Shopify before opening the return.",
       });
       return;
     }
@@ -37,12 +47,14 @@ export function ReturnsOrderForm() {
       orderInput: trimmed,
       orderInputLength: trimmed.length,
       queryDiagnostics: queryDiagnosticsForOrderString(trimmed),
+      emailLength: rawEmail.length,
     });
     setPending(true);
     try {
-      const res = await fetch(
-        `/api/returns/preview-order?order=${encodeURIComponent(trimmed)}`,
-      );
+      const q = new URLSearchParams({ order: trimmed, email: rawEmail });
+      const res = await fetch(`/api/returns/preview-order?${q.toString()}`, {
+        cache: "no-store",
+      });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         orderRef?: string;
@@ -89,7 +101,8 @@ export function ReturnsOrderForm() {
         </label>
         <p className="mt-1 text-xs text-zinc-500">
           We look it up in Shopify. Use the confirmation order name (e.g. #1001),
-          the order number, or the long id from Shopify admin.
+          the order number, or the long id from Shopify admin — plus the email on the
+          order (must match).
         </p>
         <input
           id="order-number"
@@ -104,6 +117,25 @@ export function ReturnsOrderForm() {
           autoCorrect="off"
           spellCheck={false}
           placeholder="e.g. #1001 or 12985108038018"
+          defaultValue=""
+          className="mt-2 w-full rounded-lg border border-zinc-300 bg-background px-3 py-2 text-base text-foreground outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 sm:text-sm dark:border-zinc-600 dark:ring-zinc-500"
+        />
+      </div>
+      <div>
+        <label
+          htmlFor="order-email"
+          className="block text-sm font-medium text-foreground"
+        >
+          Email on the order
+        </label>
+        <input
+          id="order-email"
+          name="orderEmail"
+          type="email"
+          required
+          autoComplete="email"
+          enterKeyHint="go"
+          placeholder="same as confirmation"
           defaultValue=""
           className="mt-2 w-full rounded-lg border border-zinc-300 bg-background px-3 py-2 text-base text-foreground outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 sm:text-sm dark:border-zinc-600 dark:ring-zinc-500"
         />
