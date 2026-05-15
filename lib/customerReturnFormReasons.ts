@@ -3,10 +3,10 @@
  * return screen — keep them in sync.
  */
 export const CUSTOMER_FORM_REASONS = [
+  { value: "damaged", label: "Damaged" },
   { value: "too_big", label: "Too big" },
   { value: "too_small", label: "Too small" },
   { value: "incorrect_item", label: "Incorrect item received" },
-  { value: "damaged", label: "Damaged" },
   { value: "other", label: "Other" },
 ] as const;
 
