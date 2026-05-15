@@ -27,6 +27,8 @@ export type StockExposureSourceTopProduct = {
   handle: string;
   title: string;
   views: number;
+  /** Sum of variant inventory from the latest lookup in the range (per handle × source). */
+  totalStock: number;
 };
 
 export type StockExposureBySourceRow = {
@@ -38,7 +40,10 @@ export type StockExposureBySourceRow = {
   outOfStockRate: number;
   lowStockRate: number;
   healthyRate: number;
-  /** Up to five PDPs with the most lookup views for this UTM bucket in the selected range. */
+  /**
+   * Up to ten PDPs per source with the most lookup views, counting only views where
+   * total variant inventory was under 10 (same rule as low / OOS exposure buckets).
+   */
   topProducts: StockExposureSourceTopProduct[];
 };
 
@@ -259,7 +264,12 @@ export async function getStockExposureAnalytics(
       }[];
       topProductsBySource: {
         _id: string;
-        topProducts: { handle: string; title: string; views: number }[];
+        topProducts: {
+          handle: string;
+          title: string;
+          views: number;
+          totalStock: number;
+        }[];
       }[];
     }>([
       ...prefix,
@@ -442,11 +452,14 @@ export async function getStockExposureAnalytics(
             { $limit: 20 },
           ],
           topProductsBySource: [
+            { $match: { stockBucket: { $ne: "healthy" } } },
+            { $sort: { createdAt: 1 } },
             {
               $group: {
                 _id: { source: "$source", handle: "$handle" },
                 views: { $sum: 1 },
-                title: { $first: "$productTitle" },
+                title: { $last: "$productTitle" },
+                totalStock: { $last: "$totalStock" },
               },
             },
             { $sort: { "_id.source": 1, views: -1 } },
@@ -458,6 +471,7 @@ export async function getStockExposureAnalytics(
                     handle: "$_id.handle",
                     title: "$title",
                     views: "$views",
+                    totalStock: "$totalStock",
                   },
                 },
               },
@@ -465,7 +479,7 @@ export async function getStockExposureAnalytics(
             {
               $project: {
                 _id: 1,
-                topProducts: { $slice: ["$items", 5] },
+                topProducts: { $slice: ["$items", 10] },
               },
             },
           ],
@@ -499,6 +513,7 @@ export async function getStockExposureAnalytics(
         handle: String(p.handle ?? ""),
         title: String(p.title ?? "").trim() || String(p.handle ?? ""),
         views: Math.max(0, Math.trunc(Number(p.views ?? 0))),
+        totalStock: Math.trunc(Number(p.totalStock ?? 0)),
       })),
     );
   }

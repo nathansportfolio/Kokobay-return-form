@@ -1,5 +1,6 @@
 export type KokobayOrderLine = {
   id: string;
+  /** Catalog / warehouse key: merchant variant SKU or `KOKO-VAR-{id}` (see `displaySkuForShopifyLineItem`). */
   sku: string;
   title: string;
   quantity: number;

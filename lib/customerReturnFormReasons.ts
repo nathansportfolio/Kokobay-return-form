@@ -5,12 +5,9 @@
 export const CUSTOMER_FORM_REASONS = [
   { value: "too_big", label: "Too big" },
   { value: "too_small", label: "Too small" },
-  { value: "too_long", label: "Too long" },
-  { value: "too_short", label: "Too short" },
-  { value: "doesnt_suit", label: "Doesn’t suit me" },
   { value: "incorrect_item", label: "Incorrect item received" },
   { value: "damaged", label: "Damaged" },
-  { value: "looks_different", label: "Looks different to website" },
+  { value: "other", label: "Other" },
 ] as const;
 
 /** Unset / placeholder (same as online form — must not be a real reason `value`). */

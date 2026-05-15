@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
 import { formatGbp } from "@/lib/kokobayOrderLines";
 import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
+import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
 import {
-  CUSTOMER_FORM_REASON_SELECT_OPTIONS,
+  CUSTOMER_FORM_REASONS,
   CUSTOMER_FORM_REASON_UNSET,
+  isCustomerFormReturnReasonValue,
 } from "@/lib/customerReturnFormReasons";
-import { womensFashionPlaceholderForReturnLine } from "@/lib/picklistPlaceholderImages";
 import {
   EnvelopeSimple,
   ListChecks,
@@ -28,34 +29,37 @@ ATLANTIC STREET
 ALTRINCHAM
 WA14 5NQ`;
 
+/** Public returns form: show Shopify/catalog SKU as-is (no warehouse `KOKO-` display prefix). */
+function customerReturnLineSkuDisplay(line: KokobayOrderLine): string {
+  const raw = String(line.sku ?? "").trim();
+  if (!raw) return "—";
+  if (isVariantIdPlaceholderSku(raw)) {
+    return lineSkuForWarehouseUi(line);
+  }
+  return raw;
+}
+
 function FormLineThumb({
   line,
 }: {
   line: Pick<KokobayOrderLine, "id" | "sku" | "imageUrl">;
 }) {
-  const ph = useMemo(
-    () =>
-      womensFashionPlaceholderForReturnLine({
-        lineId: line.id,
-        sku: line.sku,
-      }),
-    [line.id, line.sku],
-  );
   const primary = line.imageUrl?.trim();
-  const [src, setSrc] = useState(() => primary || ph);
+  const [broken, setBroken] = useState(false);
   useEffect(() => {
-    setSrc(primary || ph);
-  }, [line.id, line.imageUrl, primary, ph]);
+    setBroken(false);
+  }, [line.id, primary]);
+  if (!primary || broken) return null;
   return (
     <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100">
       <img
-        src={src}
+        src={primary}
         alt=""
         width={64}
         height={64}
         className="h-full w-full object-cover"
         loading="lazy"
-        onError={() => setSrc((s) => (s === ph ? s : ph))}
+        onError={() => setBroken(true)}
       />
     </div>
   );
@@ -82,6 +86,25 @@ export function CustomerReturnForm() {
   const [submitBusy, setSubmitBusy] = useState(false);
   const [successUid, setSuccessUid] = useState<string | null>(null);
   const orderLoadedAnchorRef = useRef<HTMLDivElement>(null);
+  const entireOrderCheckboxRef = useRef<HTMLInputElement>(null);
+
+  const allLinesIncluded = useMemo(
+    () =>
+      lines != null &&
+      lines.length > 0 &&
+      lines.every((l) => byLine[l.id]?.include),
+    [lines, byLine],
+  );
+  const someLinesIncluded = useMemo(
+    () => lines?.some((l) => byLine[l.id]?.include) ?? false,
+    [lines, byLine],
+  );
+
+  useEffect(() => {
+    const el = entireOrderCheckboxRef.current;
+    if (!el) return;
+    el.indeterminate = someLinesIncluded && !allLinesIncluded;
+  }, [someLinesIncluded, allLinesIncluded]);
 
   useEffect(() => {
     if (!lines?.length) return;
@@ -135,6 +158,40 @@ export function CustomerReturnForm() {
     }
   }, [orderInput]);
 
+  const toggleEntireOrder = useCallback(
+    (selectAll: boolean) => {
+      if (!lines?.length) return;
+      if (!selectAll) {
+        setNotesOpenByLine({});
+      }
+      setByLine((prev) => {
+        const next = { ...prev };
+        for (const l of lines) {
+          if (!selectAll) {
+            next[l.id] = {
+              include: false,
+              reasonValue: CUSTOMER_FORM_REASON_UNSET,
+              notes: "",
+            };
+          } else {
+            const prevRow = prev[l.id];
+            const keepReason =
+              prevRow && isCustomerFormReturnReasonValue(prevRow.reasonValue)
+                ? prevRow.reasonValue
+                : CUSTOMER_FORM_REASON_UNSET;
+            next[l.id] = {
+              include: true,
+              reasonValue: keepReason,
+              notes: prevRow?.notes ?? "",
+            };
+          }
+        }
+        return next;
+      });
+    },
+    [lines],
+  );
+
   const onSubmit = useCallback(async () => {
     if (!orderRef || !lines?.length) {
       toast.error("Load your order first");
@@ -167,6 +224,14 @@ export function CustomerReturnForm() {
     if (items.length === 0) {
       toast.error("Select at least one item you are sending back");
       return;
+    }
+    for (const line of lines) {
+      const s = byLine[line.id];
+      if (!s?.include) continue;
+      if (!isCustomerFormReturnReasonValue(s.reasonValue)) {
+        toast.error("Choose a return reason for every item you are sending back");
+        return;
+      }
     }
     setSubmitBusy(true);
     try {
@@ -254,8 +319,9 @@ export function CustomerReturnForm() {
           HOW TO RETURN: RETURNS FORM
         </h1>
         <p className="mt-8 text-sm leading-relaxed text-zinc-500 sm:mt-10 mb-12 sm:mb-16">
-          Enter your order number, choose what you are sending back (reason optional), then
-          post to our address. We email you when we have your parcel, and we aim to
+          Enter your order number, choose what you are sending back (a reason is required
+          for each item), then post to our address. We email you when we have your parcel,
+          and we aim to
           refund within{" "}
           <strong className="font-semibold text-zinc-700 dark:text-zinc-300">5–10 working days</strong>.
         </p>
@@ -280,7 +346,10 @@ export function CustomerReturnForm() {
               weight="duotone"
               aria-hidden
             />
-            <span>Tick the items you are returning. You can add a reason for each if you want.</span>
+            <span>
+              Tick the items you are returning. You must choose a return reason for each
+              selected item.
+            </span>
           </li>
           <li className="flex gap-3">
             <Truck
@@ -311,6 +380,15 @@ export function CustomerReturnForm() {
           items securely. If we cannot match a return to a{" "}
           <strong className="font-semibold">submitted form</strong>, processing may
           be delayed.
+        </p>
+        <p className="mt-3">
+          Before you post anything, scroll down this page to the{" "}
+          <strong className="font-semibold">Find your order</strong> section, enter the
+          order number from your confirmation email, and tap{" "}
+          <strong className="font-semibold">Load order</strong>. Then complete the returns
+          form further down (tick items, choose a reason for each, fill in your details,
+          and submit). We need that form on file so we can match your parcel when it
+          arrives.
         </p>
         <div
           className="whitespace-pre-line border-2 border-zinc-900 p-2.5 text-[0.7rem] font-semibold leading-snug text-foreground sm:p-3 sm:text-xs sm:leading-relaxed dark:border-zinc-200"
@@ -356,9 +434,30 @@ export function CustomerReturnForm() {
           >
             <h2 className="text-base font-semibold">Items you are returning</h2>
             <p className="text-sm text-zinc-500">
-              Tick each item you are sending back. Reasons are optional.
+              Tick each item you are sending back. Choose a return reason for every item you
+              select.
             </p>
-            <ul className="space-y-3 sm:space-y-4">
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 bg-zinc-50/80 px-3 py-3 sm:items-center sm:px-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+              <input
+                ref={entireOrderCheckboxRef}
+                type="checkbox"
+                className="mt-0.5 h-5 w-5 min-h-5 min-w-5 shrink-0 cursor-pointer touch-manipulation rounded border-zinc-400 text-amber-600 focus:ring-2 focus:ring-amber-500/40 sm:mt-0"
+                checked={allLinesIncluded}
+                onChange={(e) => toggleEntireOrder(e.target.checked)}
+                aria-controls="customer-return-line-list"
+              />
+              <span className="min-w-0">
+                <span className="font-medium text-foreground">Entire order</span>
+                <span className="mt-0.5 block text-sm text-zinc-600 dark:text-zinc-400">
+                  Select or clear every line at once. You still need a return reason on each
+                  selected item before you submit.
+                </span>
+              </span>
+            </label>
+            <ul
+              id="customer-return-line-list"
+              className="space-y-3 sm:space-y-4"
+            >
               {lines.map((line) => {
                 const s = byLine[line.id] ?? {
                   include: false,
@@ -405,7 +504,7 @@ export function CustomerReturnForm() {
                         <div className="min-w-0">
                           <p className="font-medium leading-snug text-foreground">{line.title}</p>
                           <p className="mt-0.5 font-mono text-xs leading-relaxed text-zinc-500">
-                            {lineSkuForWarehouseUi(line)} · Qty {line.quantity} · {formatGbp(
+                            {customerReturnLineSkuDisplay(line)} · Qty {line.quantity} · {formatGbp(
                               line.unitPrice * line.quantity,
                             )}{" "}
                             line
@@ -418,10 +517,11 @@ export function CustomerReturnForm() {
                             id={`reason-lbl-${line.id}`}
                             className="text-xs font-medium uppercase tracking-wide text-zinc-500"
                           >
-                            Reason (optional)
+                            Reason (required)
                           </span>
                           <select
                             id={`reason-sel-${line.id}`}
+                            required
                             className="w-full min-h-12 max-w-md rounded-lg border border-zinc-300 bg-background px-3 py-2.5 text-base text-foreground sm:min-h-11 sm:text-sm"
                             aria-labelledby={`reason-lbl-${line.id}`}
                             value={s.reasonValue}
@@ -436,11 +536,11 @@ export function CustomerReturnForm() {
                               }))
                             }
                           >
-                            {CUSTOMER_FORM_REASON_SELECT_OPTIONS.map((r) => (
-                              <option
-                                key={r.value || "reason-unset"}
-                                value={r.value}
-                              >
+                            <option value="" disabled>
+                              Select a reason…
+                            </option>
+                            {CUSTOMER_FORM_REASONS.map((r) => (
+                              <option key={r.value} value={r.value}>
                                 {r.label}
                               </option>
                             ))}
@@ -545,7 +645,7 @@ export function CustomerReturnForm() {
                 />
               </label>
               <label className="min-w-0">
-                <span className="text-sm font-medium">Date posted back</span>
+                <span className="text-sm font-medium">Date you plan to send back</span>
                 <input
                   type="date"
                   value={datePosted}

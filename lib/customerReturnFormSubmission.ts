@@ -111,8 +111,11 @@ export function validateCustomerReturnForm(
     if (!lineId || !sku) {
       return { ok: false, error: "Something was wrong with an item row. Reload the form and try again." };
     }
-    if (reasonValue !== "" && !isReasonAllowed(reasonValue)) {
-      return { ok: false, error: "Use a listed reason or leave as no reason given" };
+    if (!isReasonAllowed(reasonValue)) {
+      return {
+        ok: false,
+        error: "Choose a return reason for each item you are returning",
+      };
     }
     if (r.notes !== undefined && r.notes !== null && typeof r.notes !== "string") {
       return { ok: false, error: "Notes must be text" };

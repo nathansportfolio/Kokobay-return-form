@@ -6,7 +6,8 @@ import { isVariantIdPlaceholderSku } from "@/lib/variantIdPlaceholderSku";
 /**
  * Replaces legacy `V{variant_id}` display values with the Kokobay-style code
  * derived from the line title, or leaves real merchant SKUs unchanged.
- * Use on the warehouse return page and anywhere form submissions still hold an old V code.
+ * Use for **display only**; keep {@link KokobayOrderLine} `sku` as the catalog
+ * key (`displaySkuForShopifyLineItem`) everywhere else (forms, APIs, Mongo).
  */
 export function lineSkuForWarehouseUi(
   line: Pick<KokobayOrderLine, "sku" | "title">,

@@ -6,7 +6,6 @@ import {
   fetchShopifyProductsForLineItemImages,
   lineItemImageUrlsFromProductMap,
 } from "@/lib/shopifyLineItemImage";
-import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
 import { getThumbnailsBySkus } from "@/lib/returnOrderLinesFromProducts";
 import type { ReturnLogLineEntry } from "@/lib/returnLogTypes";
 import type { ShopifyOrder } from "@/types/shopify";
@@ -232,7 +231,11 @@ export async function buildKokobayOrderLinesFromShopifyOrder(
     withQty.map((li) => li.product_id),
   );
   const skus = [
-    ...new Set(withQty.map((li) => displaySkuForShopifyLineItem(li))),
+    ...new Set(
+      withQty.map((li) =>
+        displaySkuForShopifyLineItem(li, productMap.get(li.product_id)),
+      ),
+    ),
   ];
   const shopifyByLine = lineItemImageUrlsFromProductMap(
     withQty,
@@ -240,7 +243,10 @@ export async function buildKokobayOrderLinesFromShopifyOrder(
   );
   const thumbs = await getThumbnailsBySkus(skus);
   return withQty.map((li) => {
-    const displaySku = displaySkuForShopifyLineItem(li);
+    const displaySku = displaySkuForShopifyLineItem(
+      li,
+      productMap.get(li.product_id),
+    );
     const lineId = String(li.id);
     const fromShop = shopifyByLine.get(lineId) ?? "";
     const fromMongo = thumbs.get(displaySku) ?? "";
@@ -333,7 +339,11 @@ export async function enrichKokobayOrderLinesWithShopify(
     withQty.map((li) => li.product_id),
   );
   const skus = [
-    ...new Set(withQty.map((li) => displaySkuForShopifyLineItem(li))),
+    ...new Set(
+      withQty.map((li) =>
+        displaySkuForShopifyLineItem(li, productMap.get(li.product_id)),
+      ),
+    ),
   ];
   const shopifyByLine = lineItemImageUrlsFromProductMap(withQty, productMap);
   const mongoThumbs = await getThumbnailsBySkus(skus);
@@ -343,7 +353,10 @@ export async function enrichKokobayOrderLinesWithShopify(
   >();
   for (const li of withQty) {
     const id = String(li.id);
-    const displaySku = displaySkuForShopifyLineItem(li);
+    const displaySku = displaySkuForShopifyLineItem(
+      li,
+      productMap.get(li.product_id),
+    );
     const fromShop = shopifyByLine.get(id) ?? "";
     const fromMongo = mongoThumbs.get(displaySku) ?? "";
     const imageUrl = (fromShop || fromMongo).trim();
@@ -356,7 +369,7 @@ export async function enrichKokobayOrderLinesWithShopify(
   return lines.map((l) => {
     const s = byLineItemId.get(l.id);
     if (!s) {
-      return { ...l, sku: lineSkuForWarehouseUi(l) };
+      return { ...l };
     }
     return {
       ...l,

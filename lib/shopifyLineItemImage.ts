@@ -45,7 +45,12 @@ function findImageById(images: ShopifyImage[] | undefined, id: number) {
 const ID_CHUNK = 100;
 
 /**
- * Fetches only the `ShopifyProduct` data needed to resolve per-variant images.
+ * Fetches `ShopifyProduct` data for per-variant images and **SKU** (order lines
+ * often omit merchant SKU but carry `KOKO-VAR-{id}`; live product variants carry
+ * the real value).
+ *
+ * We avoid `fields=…` so Admin returns full `variants` objects (including `sku`);
+ * narrow responses previously dropped variant SKU in some cases.
  */
 export async function fetchShopifyProductsForLineItemImages(
   productIds: number[],
@@ -58,7 +63,7 @@ export async function fetchShopifyProductsForLineItemImages(
     const part = ids.slice(i, i + ID_CHUNK);
     const q = part.map(String).join(",");
     const r = await shopifyAdminGetNoCache<ShopifyProductsResponse>(
-      `products.json?ids=${q}&fields=id,image,images,variants&limit=250`,
+      `products.json?ids=${q}&limit=250`,
     );
     if (r.ok && r.data.products) {
       for (const p of r.data.products) {
