@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import {
+  logReturnsOrderLookupClient,
+  queryDiagnosticsForOrderString,
+} from "@/lib/customerReturnOrderPreviewLog";
 import { toast } from "sonner";
 
 /**
@@ -18,12 +22,22 @@ export function ReturnsOrderForm() {
     );
     const trimmed = raw.trim();
     if (trimmed.length < 2) {
+      logReturnsOrderLookupClient("lookup_blocked_short_input", {
+        orderInput: trimmed,
+        orderInputLength: trimmed.length,
+        queryDiagnostics: queryDiagnosticsForOrderString(trimmed),
+      });
       toast.warning("Enter an order to look up", {
         description:
           "Use # and digits from the confirmation email, the order number, or the long id from order admin.",
       });
       return;
     }
+    logReturnsOrderLookupClient("lookup_attempt", {
+      orderInput: trimmed,
+      orderInputLength: trimmed.length,
+      queryDiagnostics: queryDiagnosticsForOrderString(trimmed),
+    });
     setPending(true);
     try {
       const res = await fetch(
@@ -34,6 +48,15 @@ export function ReturnsOrderForm() {
         orderRef?: string;
         error?: string;
       };
+      logReturnsOrderLookupClient("lookup_response", {
+        orderInput: trimmed,
+        queryDiagnostics: queryDiagnosticsForOrderString(trimmed),
+        httpStatus: res.status,
+        responseOk: res.ok,
+        payloadOk: data.ok,
+        orderRef: data.orderRef,
+        error: data.error,
+      });
       if (!res.ok || !data.ok || !data.orderRef) {
         toast.error(
           data.error ?? "We could not find that order. Check the value and try again.",

@@ -11,6 +11,10 @@ import {
   isCustomerFormReturnReasonValue,
 } from "@/lib/customerReturnFormReasons";
 import {
+  logReturnsOrderLookupClient,
+  queryDiagnosticsForOrderString,
+} from "@/lib/customerReturnOrderPreviewLog";
+import {
   EnvelopeSimple,
   FileText,
   ListChecks,
@@ -121,9 +125,19 @@ export function CustomerReturnForm() {
   const onLoadOrder = useCallback(async () => {
     const o = orderInput.trim();
     if (o.length < 2) {
+      logReturnsOrderLookupClient("lookup_blocked_short_input", {
+        orderInput: o,
+        orderInputLength: o.length,
+        queryDiagnostics: queryDiagnosticsForOrderString(o),
+      });
       toast.error("Enter your order number");
       return;
     }
+    logReturnsOrderLookupClient("lookup_attempt", {
+      orderInput: o,
+      orderInputLength: o.length,
+      queryDiagnostics: queryDiagnosticsForOrderString(o),
+    });
     setLoadBusy(true);
     setSuccessUid(null);
     try {
@@ -136,6 +150,16 @@ export function CustomerReturnForm() {
         orderRef?: string;
         error?: string;
       };
+      logReturnsOrderLookupClient("lookup_response", {
+        orderInput: o,
+        queryDiagnostics: queryDiagnosticsForOrderString(o),
+        httpStatus: res.status,
+        responseOk: res.ok,
+        payloadOk: data.ok,
+        orderRef: data.orderRef,
+        lineCount: data.lines?.length ?? 0,
+        error: data.error,
+      });
       if (!res.ok || !data.ok || !data.lines?.length) {
         toast.error(data.error ?? "No lines found for that order. Check the number and try again.");
         setLines(null);
