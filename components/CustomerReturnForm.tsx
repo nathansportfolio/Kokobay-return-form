@@ -12,6 +12,7 @@ import {
 } from "@/lib/customerReturnFormReasons";
 import {
   EnvelopeSimple,
+  FileText,
   ListChecks,
   MagnifyingGlass,
   Plus,
@@ -352,6 +353,21 @@ export function CustomerReturnForm() {
             </span>
           </li>
           <li className="flex gap-3">
+            <FileText
+              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
+              weight="duotone"
+              aria-hidden
+            />
+            <span>
+              Put the <strong className="font-semibold">original A4 paper</strong> from
+              your delivery (the sheet that shows your order details) inside the parcel
+              with your items. If you no longer have it,{" "}
+              <strong className="font-semibold">write your order number clearly on a slip
+              of paper</strong> and place that inside the parcel instead—this helps us
+              match your return to your form and avoids delays.
+            </span>
+          </li>
+          <li className="flex gap-3">
             <Truck
               className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
               weight="duotone"
@@ -374,10 +390,27 @@ export function CustomerReturnForm() {
             </span>
           </li>
         </ul>
+        <div
+          className="rounded-lg border border-dashed border-zinc-400 bg-white/70 px-3 py-2.5 sm:px-4 dark:border-zinc-600 dark:bg-zinc-950/35"
+          role="note"
+          aria-label="What to include in your parcel"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 dark:text-zinc-400">
+            Check before you seal the box
+          </p>
+          <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-snug text-zinc-800 marker:font-medium dark:text-zinc-200">
+            <li>The item(s) you are returning</li>
+            <li>
+              The original A4 order sheet, or a clear written reference to your order
+              number
+            </li>
+          </ol>
+        </div>
         <p>
           Re-pack the item(s) in the original packaging where possible, with tags still
           attached. You are responsible for the parcel until it reaches us, so pack
-          items securely. If we cannot match a return to a{" "}
+          items securely. Follow the paperwork step above so we can identify your parcel.
+          If we cannot match a return to a{" "}
           <strong className="font-semibold">submitted form</strong>, processing may
           be delayed.
         </p>
@@ -400,11 +433,13 @@ export function CustomerReturnForm() {
       </section>
 
       <section className="space-y-3" aria-label="Order lookup">
-        <h2 className="text-base font-semibold text-foreground">Find your order</h2>
+        <h2 className="text-xl font-semibold text-foreground sm:text-2xl">
+          Find your order
+        </h2>
         <p className="text-sm text-zinc-500">
           Enter the order number from your confirmation; we will show items to return.
         </p>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="min-w-0 flex-1 sm:max-w-xs">
             <span className="text-sm font-medium">Order number</span>
             <input
