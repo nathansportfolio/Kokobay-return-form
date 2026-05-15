@@ -20,6 +20,9 @@ importers:
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@tailwindcss/postcss':
+        specifier: ^4
+        version: 4.2.4
       csv-parser:
         specifier: ^3.2.0
         version: 3.2.0
@@ -56,10 +59,10 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-    devDependencies:
-      '@tailwindcss/postcss':
+      tailwindcss:
         specifier: ^4
         version: 4.2.4
+    devDependencies:
       '@types/jsbarcode':
         specifier: ^3.11.4
         version: 3.11.4
@@ -84,9 +87,6 @@ importers:
       eslint-config-next:
         specifier: 16.2.4
         version: 16.2.4(@typescript-eslint/parser@8.59.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)
-      tailwindcss:
-        specifier: ^4
-        version: 4.2.4
       tsx:
         specifier: ^4.21.0
         version: 4.21.0

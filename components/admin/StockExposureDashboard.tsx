@@ -182,10 +182,10 @@ export function StockExposureDashboard({ data }: { data: StockExposureAnalytics 
     <div className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
       <p className="text-sm">
         <Link
-          href="/"
+          href="/operations"
           className="font-medium text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-400"
         >
-          ← Home
+          ← Warehouse
         </Link>
       </p>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

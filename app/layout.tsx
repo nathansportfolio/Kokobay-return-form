@@ -3,7 +3,6 @@ import { Instrument_Sans } from "next/font/google";
 import NextTopLoader from "nextjs-toploader";
 import { AppToaster } from "@/components/AppToaster";
 import { MuiProvider } from "@/components/mui/MuiProvider";
-import { WarehouseShell } from "@/components/WarehouseShell";
 import "./globals.css";
 
 const instrumentSans = Instrument_Sans({
@@ -13,11 +12,18 @@ const instrumentSans = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: {
-    default: "Kokobay Unit",
-    template: "%s | Kokobay Unit",
+  title: { absolute: "KOKO BAY RETURNS" },
+  description:
+    "Enter your order number, choose what you are sending back, then post to our address. We email you when the parcel arrives; refund within 5–10 working days.",
+  icons: {
+    icon: [
+      { url: "/favicon/favicon.ico" },
+      { url: "/favicon/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+    ],
+    apple: "/favicon/apple-touch-icon.png",
   },
-  description: "Internal warehouse tools for Kokobay Unit",
+  manifest: "/favicon/site.webmanifest",
 };
 
 export default function RootLayout({
@@ -42,7 +48,14 @@ export default function RootLayout({
             speed={300}
             easing="cubic-bezier(0.3, 0, 0, 1)"
           />
-          <WarehouseShell>{children}</WarehouseShell>
+          <div className="flex min-h-full flex-1 flex-col">
+            <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center border-b border-zinc-200 bg-white/95 px-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
+              <span className="min-w-0 text-sm font-normal tracking-[0.18em] text-zinc-900 sm:text-base dark:text-zinc-100">
+                KOKO BAY RETURNS
+              </span>
+            </header>
+            <main className="flex min-h-0 flex-1 flex-col">{children}</main>
+          </div>
           <AppToaster />
         </MuiProvider>
       </body>

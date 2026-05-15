@@ -5,7 +5,7 @@ import Link from "next/link";
 
 /**
  * Phosphor icons use React context — this block must be a client component
- * (see `app/page.tsx` server home).
+ * (see `app/operations/page.tsx` server hub).
  */
 export function OperationsCtaGrid() {
   return (
