@@ -12,22 +12,11 @@ export function isValidSiteAccessRole(
   return v === "user" || v === "admin";
 }
 
-/** Whether PIN gate is on (at least one public PIN env is non-empty). */
+/**
+ * Site-wide PIN / login redirect is disabled for this deployment (middleware
+ * always allows traffic). `NEXT_PUBLIC_SITE_PIN_*` env vars are ignored.
+ */
 export function isSiteAccessEnforced(): boolean {
-  if (
-    String(process.env.NEXT_PUBLIC_SITE_PIN_USER ?? "").trim() ||
-    String(process.env.NEXT_PUBLIC_SITE_PIN_ADMIN ?? "").trim()
-  ) {
-    return true;
-  }
-  for (const k of [
-    "NEXT_PUBLIC_SITE_PIN_USER_1",
-    "NEXT_PUBLIC_SITE_PIN_USER_2",
-    "NEXT_PUBLIC_SITE_PIN_USER_3",
-    "NEXT_PUBLIC_SITE_PIN_USER_4",
-  ] as const) {
-    if (String(process.env[k] ?? "").trim()) return true;
-  }
   return false;
 }
 
