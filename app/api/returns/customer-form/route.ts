@@ -4,6 +4,10 @@ import {
   validateCustomerReturnForm,
 } from "@/lib/customerReturnFormSubmission";
 import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
+import {
+  isCustomerReturnWindowClosed,
+  RETURN_WINDOW_EXPIRED_MESSAGE,
+} from "@/lib/returnEligibilityWindow";
 import { fetchReturnOrderFromShopify } from "@/lib/shopifyReturnOrderLookup";
 
 /**
@@ -44,6 +48,12 @@ export async function POST(request: Request) {
         );
       }
     } else {
+      if (isCustomerReturnWindowClosed(shopify.createdAt)) {
+        return NextResponse.json(
+          { ok: false, error: RETURN_WINDOW_EXPIRED_MESSAGE, code: "return_window_expired" },
+          { status: 400 },
+        );
+      }
       const allowed = new Set(shopify.lines.map((l) => l.id));
       for (const item of v.data.items) {
         if (!allowed.has(item.lineId)) {

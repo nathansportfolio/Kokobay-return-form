@@ -14,6 +14,7 @@ import {
   logReturnsOrderLookupClient,
   queryDiagnosticsForOrderString,
 } from "@/lib/customerReturnOrderPreviewLog";
+import { RETURN_WINDOW_EXPIRED_MESSAGE } from "@/lib/returnEligibilityWindow";
 import {
   EnvelopeSimple,
   FileText,
@@ -129,6 +130,7 @@ export function CustomerReturnForm() {
   const [submitBusy, setSubmitBusy] = useState(false);
   const [successUid, setSuccessUid] = useState<string | null>(null);
   const [orderLookupError, setOrderLookupError] = useState<string | null>(null);
+  const [returnWindowExpired, setReturnWindowExpired] = useState(false);
   const orderLoadedAnchorRef = useRef<HTMLDivElement>(null);
   const entireOrderCheckboxRef = useRef<HTMLInputElement>(null);
 
@@ -163,6 +165,7 @@ export function CustomerReturnForm() {
 
   const onLoadOrder = useCallback(async () => {
     setOrderLookupError(null);
+    setReturnWindowExpired(false);
     const o = orderInput.trim();
     const em = email.trim();
     if (o.length < 2) {
@@ -201,6 +204,7 @@ export function CustomerReturnForm() {
         lines?: KokobayOrderLine[];
         orderRef?: string;
         error?: string;
+        code?: string;
         shopify?: { customerName?: string };
       };
       logReturnsOrderLookupClient("lookup_response", {
@@ -214,9 +218,13 @@ export function CustomerReturnForm() {
         error: data.error,
       });
       if (!res.ok || !data.ok || !data.lines?.length) {
+        const expired = data.code === "return_window_expired";
+        setReturnWindowExpired(expired);
         setOrderLookupError(
-          data.error ??
-            "No lines found for that order. Check the number and try again.",
+          expired
+            ? null
+            : (data.error ??
+                "No lines found for that order. Check the number and try again."),
         );
         setLines(null);
         setOrderRef(null);
@@ -513,6 +521,7 @@ export function CustomerReturnForm() {
               onChange={(e) => {
                 setOrderInput(e.target.value);
                 setOrderLookupError(null);
+                setReturnWindowExpired(false);
               }}
               aria-invalid={orderLookupError ? true : undefined}
               aria-describedby={
@@ -535,6 +544,7 @@ export function CustomerReturnForm() {
               onChange={(e) => {
                 setEmail(e.target.value);
                 setOrderLookupError(null);
+                setReturnWindowExpired(false);
               }}
               aria-invalid={orderLookupError ? true : undefined}
               aria-describedby={
@@ -557,7 +567,15 @@ export function CustomerReturnForm() {
           >
             {loadBusy ? "Loading…" : "Load order"}
           </button>
-          {orderLookupError ? (
+          {returnWindowExpired ? (
+            <div
+              role="alert"
+              className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-sm leading-snug text-amber-950 sm:basis-full dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-100"
+            >
+              <p className="font-semibold">Return window closed</p>
+              <p className="mt-1.5">{RETURN_WINDOW_EXPIRED_MESSAGE}</p>
+            </div>
+          ) : orderLookupError ? (
             <p
               id="customer-return-order-error"
               role="alert"

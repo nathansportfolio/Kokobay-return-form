@@ -7,6 +7,10 @@ import {
 import { runProductCatalogSyncInBackgroundIfStale } from "@/lib/productCatalogBackgroundSync";
 import { previewOrderEmailMatches } from "@/lib/previewOrderEmailMatch";
 import {
+  isCustomerReturnWindowClosed,
+  RETURN_WINDOW_EXPIRED_MESSAGE,
+} from "@/lib/returnEligibilityWindow";
+import {
   fetchReturnOrderFromShopify,
   shopifyOrderDisplayFromLookup,
 } from "@/lib/shopifyReturnOrderLookup";
@@ -92,6 +96,22 @@ export async function GET(request: Request) {
               "We couldn’t find that order. Check the number on your confirmation email and try again.",
           },
           { status: 404, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      if (isCustomerReturnWindowClosed(result.createdAt)) {
+        logReturnOrderPreview("warn", "return_window_expired", {
+          ...requestContext(),
+          httpStatus: 400,
+          shopifyOrderId: result.shopifyOrderId,
+          orderCreatedAt: result.createdAt,
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: RETURN_WINDOW_EXPIRED_MESSAGE,
+            code: "return_window_expired",
+          },
+          { status: 400, headers: { "Cache-Control": "no-store" } },
         );
       }
       logReturnOrderPreview("info", "lookup_success", {
