@@ -483,7 +483,7 @@ export function CustomerReturnForm() {
               aria-hidden
             />
             <span>
-              We email you once your return is being processed.
+              We will email you once your return is being processed.
             </span>
           </li>
         </ul>
