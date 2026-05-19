@@ -476,6 +476,16 @@ export function CustomerReturnForm() {
               days.
             </span>
           </li> */}
+          <li className="flex gap-3">
+            <EnvelopeSimple
+              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
+              weight="duotone"
+              aria-hidden
+            />
+            <span>
+              We email you once your return is being processed.
+            </span>
+          </li>
         </ul>
         <ParcelSealChecklist variant="instructions" />
         <p>
