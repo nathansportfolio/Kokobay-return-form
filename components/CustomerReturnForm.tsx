@@ -465,7 +465,7 @@ export function CustomerReturnForm() {
               or signed-for service and keep your proof of postage).
             </span>
           </li>
-          <li className="flex gap-3">
+          {/* <li className="flex gap-3">
             <EnvelopeSimple
               className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
               weight="duotone"
@@ -475,7 +475,7 @@ export function CustomerReturnForm() {
               We email you when we have received the parcel. Refund within 5–10 working
               days.
             </span>
-          </li>
+          </li> */}
         </ul>
         <ParcelSealChecklist variant="instructions" />
         <p>
