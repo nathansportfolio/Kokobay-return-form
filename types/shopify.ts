@@ -142,6 +142,8 @@ export interface ShopifyAddress {
   city: string;
   province: string;
   country: string;
+  /** ISO 3166-1 alpha-2 (e.g. `GB`, `US`) when present on REST payloads. */
+  country_code?: string | null;
   zip: string;
   phone: string | null;
 }

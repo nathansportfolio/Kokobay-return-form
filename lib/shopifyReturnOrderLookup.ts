@@ -48,6 +48,10 @@ export type ShopifyOrderDisplay = {
   currentTotalPrice?: string;
   /** Non-zero-qty REST `line_items` ids (for full-order return checks). */
   orderLineItems?: { id: string; quantity: number }[];
+  /** REST `shipping_address.country` when present. */
+  shippingCountry: string | null;
+  /** REST `shipping_address.country_code` when present (e.g. `GB`). */
+  shippingCountryCode: string | null;
 };
 
 export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
@@ -83,6 +87,16 @@ export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
           quantity: Math.max(0, Math.trunc(Number(li.quantity) || 0)),
         }))
     : [];
+  const ship = o.shipping_address;
+  const shippingCountry =
+    typeof ship?.country === "string" && ship.country.trim()
+      ? ship.country.trim()
+      : null;
+  const shippingCountryCode =
+    typeof ship?.country_code === "string" && ship.country_code.trim()
+      ? ship.country_code.trim()
+      : null;
+
   return {
     orderName: o.name,
     shopifyOrderId: String(o.id),
@@ -96,6 +110,8 @@ export function toShopifyOrderDisplay(o: ShopifyOrder): ShopifyOrderDisplay {
     financialStatus: o.financial_status,
     fulfillmentStatus: o.fulfillment_status ?? null,
     refundRecordCount,
+    shippingCountry,
+    shippingCountryCode,
     ...(currentTotalPrice ? { currentTotalPrice } : {}),
     ...(orderLineItems.length > 0 ? { orderLineItems } : {}),
   };

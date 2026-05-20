@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  CUSTOMER_RETURN_SUCCESS_PREVIEW_PARAM,
+  parseCustomerReturnSuccessPreview,
+} from "@/lib/customerReturnSuccessPreview";
 import type { KokobayOrderLine } from "@/lib/kokobayOrderLines";
 import { formatGbp } from "@/lib/kokobayOrderLines";
 import { lineSkuForWarehouseUi } from "@/lib/returnLineSkuDisplay";
@@ -21,6 +26,8 @@ import {
   ListChecks,
   MagnifyingGlass,
   Plus,
+  QrCode,
+  Storefront,
   Truck,
 } from "@phosphor-icons/react";
 import {
@@ -35,33 +42,46 @@ ATLANTIC STREET
 ALTRINCHAM
 WA14 5NQ`;
 
+const INPOST_RETURNS_URL = "https://returns.inpost.co.uk/kokobayreturns";
+
+const SUCCESS_CARD_CLASS =
+  "rounded-2xl border border-zinc-200/90 bg-white p-6 text-zinc-900 shadow-[0_4px_28px_-6px_rgba(0,0,0,0.08)] sm:p-8 dark:border-zinc-700/60 dark:bg-zinc-950 dark:text-zinc-50 dark:shadow-[0_4px_28px_-6px_rgba(0,0,0,0.35)]";
+
+const SUCCESS_BODY_CLASS =
+  "text-[0.9375rem] leading-relaxed text-zinc-600 dark:text-zinc-300";
+
+const SUCCESS_CTA_CLASS =
+  "inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-foreground px-6 py-3.5 text-sm font-medium tracking-normal text-background no-underline shadow-[0_2px_14px_-3px_rgba(0,0,0,0.22)] transition-[transform,box-shadow,opacity] duration-200 hover:shadow-[0_6px_20px_-4px_rgba(0,0,0,0.28)] active:scale-[0.99] active:shadow-[0_2px_10px_-3px_rgba(0,0,0,0.2)]";
+
 function ParcelSealChecklist({ variant }: { variant: "instructions" | "success" }) {
   const shell =
     variant === "success"
-      ? "border-emerald-700/45 bg-white/55 dark:border-emerald-500/40 dark:bg-emerald-950/35"
+      ? "border-zinc-200/80 bg-zinc-50/80 shadow-sm dark:border-zinc-700/50 dark:bg-zinc-900/40"
       : "border-zinc-400 bg-white/70 dark:border-zinc-600 dark:bg-zinc-950/35";
   const title =
     variant === "success"
-      ? "text-emerald-900/95 dark:text-emerald-200/90"
+      ? "text-zinc-600 dark:text-zinc-400"
       : "text-zinc-600 dark:text-zinc-400";
   const list =
     variant === "success"
-      ? "text-emerald-950 dark:text-emerald-100/95"
+      ? "text-zinc-800 dark:text-zinc-200"
       : "text-zinc-800 dark:text-zinc-200";
 
   return (
     <div
-      className={`rounded-lg border border-dashed px-3 py-2.5 sm:px-4 ${shell}`}
+      className={`rounded-xl border border-dashed px-4 py-3.5 sm:px-5 sm:py-4 ${shell}`}
       role="note"
       aria-label="What to include in your parcel"
     >
       <p
-        className={`text-xs font-semibold uppercase tracking-[0.14em] ${title}`}
+        className={`text-xs font-medium tracking-normal ${title} ${
+          variant === "instructions" ? "uppercase tracking-[0.14em]" : ""
+        }`}
       >
         Check before you seal the box
       </p>
       <ol
-        className={`mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-snug marker:font-medium ${list}`}
+        className={`mt-2.5 list-decimal space-y-2 pl-5 text-sm leading-relaxed marker:font-medium ${list}`}
       >
         <li>The item(s) you are returning</li>
         <li>
@@ -115,7 +135,158 @@ type PerLine = {
   notes: string;
 };
 
+type ReturnInstructionsRegion = "uk" | "outsideUk";
+
+function ReturnInstructionsStep({
+  icon: Icon,
+  children,
+}: {
+  icon: React.ComponentType<{
+    className?: string;
+    weight?: "duotone";
+    "aria-hidden"?: boolean;
+  }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex gap-3">
+      <Icon
+        className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
+        weight="duotone"
+        aria-hidden
+      />
+      <span>{children}</span>
+    </li>
+  );
+}
+
+function UkReturnInstructions() {
+  return (
+    <section
+      className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3 text-base leading-relaxed text-zinc-800 sm:p-4 sm:text-sm dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-200"
+      aria-label="Instructions for UK returns"
+    >
+      <ul className="space-y-3" role="list" aria-label="How to return, step by step">
+        <ReturnInstructionsStep icon={MagnifyingGlass}>
+          Enter your order number and the email address used on the order, then select
+          the item(s) you wish to return.
+        </ReturnInstructionsStep>
+        <ReturnInstructionsStep icon={Storefront}>
+          After submitting the form, press the{" "}
+          <strong className="font-semibold">InPost Returns</strong> button to find your
+          nearest InPost Locker or Shop.
+        </ReturnInstructionsStep>
+        <ReturnInstructionsStep icon={QrCode}>
+          InPost will then email you a QR code to use at the locker — no printing
+          required.
+        </ReturnInstructionsStep>
+        <ReturnInstructionsStep icon={EnvelopeSimple}>
+          Once your parcel has been received and is being processed, we&apos;ll send you
+          an email update.
+        </ReturnInstructionsStep>
+      </ul>
+    </section>
+  );
+}
+
+function OutsideUkReturnInstructions() {
+  return (
+    <section
+      className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3 text-base leading-relaxed text-zinc-800 sm:p-4 sm:text-sm dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-200"
+      aria-label="Instructions for returns from outside the UK"
+    >
+      <ul className="space-y-3" role="list" aria-label="How to return, step by step">
+        <ReturnInstructionsStep icon={MagnifyingGlass}>
+          Enter your order number, the email on the order, and load your items.
+        </ReturnInstructionsStep>
+        <ReturnInstructionsStep icon={ListChecks}>
+          Tick the items you are returning. You must choose a return reason for each
+          selected item.
+        </ReturnInstructionsStep>
+        <ReturnInstructionsStep icon={FileText}>
+          Put the <strong className="font-semibold">original A4 paper</strong> from your
+          delivery (the sheet that shows your order details) inside the parcel with your
+          items. If you no longer have it,{" "}
+          <strong className="font-semibold">
+            write your order number clearly on a slip of paper
+          </strong>{" "}
+          and place that inside the parcel instead—this helps us match your return to
+          your form and avoids delays.
+        </ReturnInstructionsStep>
+        <ReturnInstructionsStep icon={Truck}>
+          Submit the form, then post your return to the address below (use a tracked or
+          signed-for service and keep your proof of postage).
+        </ReturnInstructionsStep>
+        <ReturnInstructionsStep icon={EnvelopeSimple}>
+          We will email you once your return is being processed.
+        </ReturnInstructionsStep>
+      </ul>
+      <ParcelSealChecklist variant="instructions" />
+      <p>
+        Re-pack the item(s) in the original packaging where possible, with tags still
+        attached. You are responsible for the parcel until it reaches us, so pack items
+        securely. Follow the paperwork step above so we can identify your parcel. If we
+        cannot match a return to a{" "}
+        <strong className="font-semibold">submitted form</strong>, processing may be
+        delayed.
+      </p>
+      <p className="mt-3">
+        Before you post anything, scroll down this page to the{" "}
+        <strong className="font-semibold">Find your order</strong> section, enter the
+        order number and email from your confirmation, and tap{" "}
+        <strong className="font-semibold">Load order</strong>. Then complete the returns
+        form further down (tick items, choose a reason for each, fill in your details,
+        and submit). We need that form on file so we can match your parcel when it
+        arrives.
+      </p>
+      <div
+        className="whitespace-pre-line border-2 border-zinc-900 p-2.5 text-[0.7rem] font-semibold leading-snug text-foreground sm:p-3 sm:text-xs sm:leading-relaxed dark:border-zinc-200"
+        role="group"
+        aria-label="Returns address"
+      >
+        {RETURNS_ADDRESS}
+      </div>
+    </section>
+  );
+}
+
+function CustomerReturnSuccessPreviewBanner({
+  flow,
+}: {
+  flow: "inpost" | "post";
+}) {
+  const other =
+    flow === "inpost"
+      ? { href: `?${CUSTOMER_RETURN_SUCCESS_PREVIEW_PARAM}=post`, label: "Postal address" }
+      : { href: `?${CUSTOMER_RETURN_SUCCESS_PREVIEW_PARAM}=inpost`, label: "InPost (UK)" };
+
+  return (
+    <div
+      className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-100"
+      role="note"
+    >
+      <p className="font-medium">Preview mode — not a real submission</p>
+      <p className="mt-1 text-amber-900/90 dark:text-amber-200/90">
+        Switch:{" "}
+        <a href={other.href} className="font-semibold underline underline-offset-2">
+          {other.label}
+        </a>
+        {" · "}
+        <a href="/" className="font-semibold underline underline-offset-2">
+          Exit preview
+        </a>
+      </p>
+    </div>
+  );
+}
+
 export function CustomerReturnForm() {
+  const searchParams = useSearchParams();
+  const urlSuccessPreview = useMemo(
+    () => parseCustomerReturnSuccessPreview(searchParams),
+    [searchParams],
+  );
+
   const [orderInput, setOrderInput] = useState("");
   const [orderRef, setOrderRef] = useState<string | null>(null);
   const [lines, setLines] = useState<KokobayOrderLine[] | null>(null);
@@ -129,8 +300,13 @@ export function CustomerReturnForm() {
   const [datePosted, setDatePosted] = useState("");
   const [submitBusy, setSubmitBusy] = useState(false);
   const [successUid, setSuccessUid] = useState<string | null>(null);
+  const [successDeliveryFlow, setSuccessDeliveryFlow] = useState<"inpost" | "post">(
+    "post",
+  );
   const [orderLookupError, setOrderLookupError] = useState<string | null>(null);
   const [returnWindowExpired, setReturnWindowExpired] = useState(false);
+  const [instructionsRegion, setInstructionsRegion] =
+    useState<ReturnInstructionsRegion>("uk");
   const orderLoadedAnchorRef = useRef<HTMLDivElement>(null);
   const entireOrderCheckboxRef = useRef<HTMLInputElement>(null);
 
@@ -343,176 +519,171 @@ export function CustomerReturnForm() {
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         submissionUid?: string;
+        returnDeliveryFlow?: "inpost" | "post";
         error?: string;
       };
       if (!res.ok || !data.ok || !data.submissionUid) {
         toast.error(data.error ?? "Could not submit");
         return;
       }
+      setSuccessDeliveryFlow(
+        data.returnDeliveryFlow === "inpost" ? "inpost" : "post",
+      );
       setSuccessUid(data.submissionUid);
       window.scrollTo({ top: 0, behavior: "smooth" });
       toast.success("Return form submitted", {
-        description: "We’ll email you when we’ve received your parcel.",
+        description:
+          data.returnDeliveryFlow === "inpost"
+            ? "Use InPost to drop off your return."
+            : "We’ll email you when we’ve received your parcel.",
       });
     } finally {
       setSubmitBusy(false);
     }
   }, [byLine, datePosted, email, lines, name, orderRef]);
 
-  if (successUid) {
+  const displaySuccessUid =
+    successUid ?? urlSuccessPreview?.previewUid ?? null;
+  const displayDeliveryFlow = successUid
+    ? successDeliveryFlow
+    : (urlSuccessPreview?.flow ?? "post");
+  const isSuccessPreview = urlSuccessPreview != null && successUid == null;
+
+  if (displaySuccessUid) {
+    const inPostFlow = displayDeliveryFlow === "inpost";
     return (
-      <div className="mx-auto max-w-2xl space-y-4 text-zinc-800 dark:text-zinc-200">
-        <div
-          className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-5 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
-          role="status"
-        >
-          <h2 className="text-lg font-semibold">Thank you — we’ve received your form</h2>
-          <p className="mt-1 text-sm">
-            Reference:{" "}
-            <span className="break-all font-mono font-medium">{successUid}</span>
-          </p>
-          <p className="mt-3 text-sm text-emerald-800/95 dark:text-emerald-200/90">
-            If you have not posted your return yet, use the address below. We will email
-            you when the parcel has arrived. Refunds are usually processed within{" "}
-            <strong className="font-semibold">5–10 working days</strong> after we receive
-            the items.
-          </p>
-          <div className="mt-4">
-            <ParcelSealChecklist variant="success" />
-          </div>
-          <div
-            className="mt-4 whitespace-pre-line border-2 border-emerald-800/30 bg-white/60 p-3 text-[0.7rem] font-semibold leading-snug text-emerald-950 sm:text-xs dark:border-emerald-700/40 dark:bg-emerald-950/20 dark:text-emerald-100"
-            role="group"
-            aria-label="Returns address"
-          >
-            {RETURNS_ADDRESS}
-          </div>
+      <div className="mx-auto w-full max-w-2xl space-y-5 text-zinc-800 sm:space-y-6 dark:text-zinc-200">
+        {isSuccessPreview ? (
+          <CustomerReturnSuccessPreviewBanner flow={displayDeliveryFlow} />
+        ) : null}
+        <div className={SUCCESS_CARD_CLASS} role="status">
+          <header className="space-y-3">
+            <h2 className="text-[1.375rem] font-medium leading-snug tracking-normal text-zinc-900 sm:text-2xl dark:text-zinc-50">
+              Thank you — we’ve received your form
+            </h2>
+            <p className={`${SUCCESS_BODY_CLASS} text-[0.8125rem] sm:text-sm`}>
+              <span className="text-zinc-500 dark:text-zinc-400">Reference </span>
+              <span className="break-all font-mono text-[0.75rem] font-medium text-zinc-900 dark:text-zinc-100">
+                {displaySuccessUid}
+              </span>
+            </p>
+          </header>
+          {inPostFlow ? (
+            <div className="mt-8 space-y-6 border-t border-zinc-200/80 pt-8 dark:border-zinc-700/50">
+              <div className="space-y-3">
+                <h3 className="text-xl font-medium leading-snug tracking-normal text-zinc-900 sm:text-[1.375rem] dark:text-zinc-50">
+                  Returns are completed through InPost
+                </h3>
+                <p className={SUCCESS_BODY_CLASS}>
+                  Please click the button below to find your nearest locker and generate
+                  a QR code for a quick, easy return.
+                </p>
+              </div>
+              <a
+                href={INPOST_RETURNS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={SUCCESS_CTA_CLASS}
+              >
+                Get started with your InPost return
+              </a>
+              <p className={`${SUCCESS_BODY_CLASS} pt-1`}>
+                We will email you when we have your parcel. Refunds are usually processed
+                within{" "}
+                <strong className="font-medium text-zinc-900 dark:text-zinc-50">
+                  5–10 working days
+                </strong>{" "}
+                after we receive the items.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-8 space-y-6 border-t border-zinc-200/80 pt-8 dark:border-zinc-700/50">
+              <p className={SUCCESS_BODY_CLASS}>
+                If you have not posted your return yet, use the address below. We will
+                email you when the parcel has arrived. Refunds are usually processed
+                within{" "}
+                <strong className="font-medium text-zinc-900 dark:text-zinc-50">
+                  5–10 working days
+                </strong>{" "}
+                after we receive the items.
+              </p>
+              <ParcelSealChecklist variant="success" />
+              <div
+                className="whitespace-pre-line rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-4 text-[0.8125rem] font-medium leading-relaxed text-zinc-900 shadow-sm sm:px-5 sm:py-5 sm:text-sm dark:border-zinc-700/50 dark:bg-zinc-900/40 dark:text-zinc-100"
+                role="group"
+                aria-label="Returns address"
+              >
+                {RETURNS_ADDRESS}
+              </div>
+            </div>
+          )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <a
-            href="https://www.kokobay.co.uk"
-            className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background no-underline hover:opacity-90 sm:w-auto"
-          >
+        {!inPostFlow ? (
+          <a href="https://www.kokobay.co.uk" className={SUCCESS_CTA_CLASS}>
             Continue Shopping
           </a>
-        </div>
+        ) : null}
       </div>
     );
   }
 
+  const outsideUkInstructions = instructionsRegion === "outsideUk";
+
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 text-zinc-800 sm:space-y-8 dark:text-zinc-200">
       <header>
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+        <p className="text-sm">
+          {outsideUkInstructions ? (
+            <button
+              type="button"
+              onClick={() => setInstructionsRegion("uk")}
+              className="font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
+            >
+              Returning from the UK?
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setInstructionsRegion("outsideUk")}
+              className="font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
+            >
+              Returning from outside UK?
+            </button>
+          )}
+        </p>
+        <h1 className="mt-4 text-xl font-semibold tracking-tight sm:mt-5 sm:text-2xl">
           HOW TO RETURN: RETURNS FORM
         </h1>
         <p className="mt-8 text-sm leading-relaxed text-zinc-500 sm:mt-10 mb-12 sm:mb-16">
-          Enter your order number, choose what you are sending back (a reason is required
-          for each item), then post to our address. We email you when we have your parcel,
-          and we aim to
-          refund within{" "}
-          <strong className="font-semibold text-zinc-700 dark:text-zinc-300">5–10 working days</strong>.
+          {outsideUkInstructions ? (
+            <>
+              Enter your order number, choose what you are sending back (a reason is
+              required for each item), then post to our address. We email you when we have
+              your parcel, and we aim to refund within{" "}
+              <strong className="font-semibold text-zinc-700 dark:text-zinc-300">
+                5–10 working days
+              </strong>
+              .
+            </>
+          ) : (
+            <>
+              Enter your order number, choose what you are sending back (a reason is
+              required for each item), then drop off at InPost. We email you when we have
+              your parcel, and we aim to refund within{" "}
+              <strong className="font-semibold text-zinc-700 dark:text-zinc-300">
+                5–10 working days
+              </strong>
+              .
+            </>
+          )}
         </p>
       </header>
 
-      <section
-        className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3 text-base leading-relaxed text-zinc-800 sm:p-4 sm:text-sm dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-200"
-        aria-label="Instructions"
-      >
-        <ul className="space-y-3" role="list" aria-label="How to return, step by step">
-          <li className="flex gap-3">
-            <MagnifyingGlass
-              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
-              weight="duotone"
-              aria-hidden
-            />
-            <span>Enter your order number, the email on the order, and load your items.</span>
-          </li>
-          <li className="flex gap-3">
-            <ListChecks
-              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
-              weight="duotone"
-              aria-hidden
-            />
-            <span>
-              Tick the items you are returning. You must choose a return reason for each
-              selected item.
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <FileText
-              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
-              weight="duotone"
-              aria-hidden
-            />
-            <span>
-              Put the <strong className="font-semibold">original A4 paper</strong> from
-              your delivery (the sheet that shows your order details) inside the parcel
-              with your items. If you no longer have it,{" "}
-              <strong className="font-semibold">write your order number clearly on a slip
-              of paper</strong> and place that inside the parcel instead—this helps us
-              match your return to your form and avoids delays.
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <Truck
-              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
-              weight="duotone"
-              aria-hidden
-            />
-            <span>
-              Submit the form, then post your return to the address below (use a tracked
-              or signed-for service and keep your proof of postage).
-            </span>
-          </li>
-          {/* <li className="flex gap-3">
-            <EnvelopeSimple
-              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
-              weight="duotone"
-              aria-hidden
-            />
-            <span>
-              We email you when we have received the parcel. Refund within 5–10 working
-              days.
-            </span>
-          </li> */}
-          <li className="flex gap-3">
-            <EnvelopeSimple
-              className="mt-0.5 h-6 w-6 shrink-0 text-black dark:text-zinc-100"
-              weight="duotone"
-              aria-hidden
-            />
-            <span>
-              We will email you once your return is being processed.
-            </span>
-          </li>
-        </ul>
-        <ParcelSealChecklist variant="instructions" />
-        <p>
-          Re-pack the item(s) in the original packaging where possible, with tags still
-          attached. You are responsible for the parcel until it reaches us, so pack
-          items securely. Follow the paperwork step above so we can identify your parcel.
-          If we cannot match a return to a{" "}
-          <strong className="font-semibold">submitted form</strong>, processing may
-          be delayed.
-        </p>
-        <p className="mt-3">
-          Before you post anything, scroll down this page to the{" "}
-          <strong className="font-semibold">Find your order</strong> section, enter the
-          order number and email from your confirmation, and tap{" "}
-          <strong className="font-semibold">Load order</strong>. Then complete the returns
-          form further down (tick items, choose a reason for each, fill in your details,
-          and submit). We need that form on file so we can match your parcel when it
-          arrives.
-        </p>
-        <div
-          className="whitespace-pre-line border-2 border-zinc-900 p-2.5 text-[0.7rem] font-semibold leading-snug text-foreground sm:p-3 sm:text-xs sm:leading-relaxed dark:border-zinc-200"
-          role="group"
-          aria-label="Returns address"
-        >
-          {RETURNS_ADDRESS}
-        </div>
-      </section>
+      {outsideUkInstructions ? (
+        <OutsideUkReturnInstructions />
+      ) : (
+        <UkReturnInstructions />
+      )}
 
       <section className="space-y-3" aria-label="Order lookup">
         <h2 className="text-xl font-semibold text-foreground sm:text-2xl">

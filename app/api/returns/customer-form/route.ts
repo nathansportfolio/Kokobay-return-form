@@ -9,6 +9,7 @@ import {
   RETURN_WINDOW_EXPIRED_MESSAGE,
 } from "@/lib/returnEligibilityWindow";
 import { fetchReturnOrderFromShopify } from "@/lib/shopifyReturnOrderLookup";
+import { isUnitedKingdomShippingCountry } from "@/lib/ukShippingCountry";
 
 /**
  * POST /api/returns/customer-form
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
   if (!v.ok) {
     return NextResponse.json({ ok: false, error: v.error }, { status: 400 });
   }
+  let returnDeliveryFlow: "inpost" | "post" = "post";
   if (process.env.SHOPIFY_STORE?.trim()) {
     runProductCatalogSyncInBackgroundIfStale();
     const shopify = await fetchReturnOrderFromShopify(v.data.orderRef);
@@ -63,11 +65,19 @@ export async function POST(request: Request) {
           );
         }
       }
+      if (
+        isUnitedKingdomShippingCountry(
+          shopify.shippingCountry,
+          shopify.shippingCountryCode,
+        )
+      ) {
+        returnDeliveryFlow = "inpost";
+      }
     }
   }
   try {
     const submissionUid = await insertCustomerReturnForm(v.data);
-    return NextResponse.json({ ok: true, submissionUid });
+    return NextResponse.json({ ok: true, submissionUid, returnDeliveryFlow });
   } catch (e) {
     console.error("[customer-form]", e);
     return NextResponse.json(
