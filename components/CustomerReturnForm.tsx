@@ -171,6 +171,10 @@ function UkReturnInstructions() {
           Enter your order number and the email address used on the order, then select
           the item(s) you wish to return.
         </ReturnInstructionsStep>
+        <ReturnInstructionsStep icon={Truck}>
+          Pack your return securely in suitable packaging (use original packaging and
+          keep tags attached where possible) before you drop off.
+        </ReturnInstructionsStep>
         <ReturnInstructionsStep icon={Storefront}>
           After submitting the form, press the{" "}
           <strong className="font-semibold">InPost Returns</strong> button to find your
