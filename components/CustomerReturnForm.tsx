@@ -662,22 +662,12 @@ export function CustomerReturnForm() {
           {outsideUkInstructions ? (
             <>
               Enter your order number, choose what you are sending back (a reason is
-              required for each item), then post to our address. We email you when we have
-              your parcel, and we aim to refund within{" "}
-              <strong className="font-semibold text-zinc-700 dark:text-zinc-300">
-                5–10 working days
-              </strong>
-              .
+              required for each item), then post to our address.
             </>
           ) : (
             <>
               Enter your order number, choose what you are sending back (a reason is
-              required for each item), then drop off at InPost. We email you when we have
-              your parcel, and we aim to refund within{" "}
-              <strong className="font-semibold text-zinc-700 dark:text-zinc-300">
-                5–10 working days
-              </strong>
-              .
+              required for each item), then drop off at InPost. 
             </>
           )}
         </p>
