@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HowToReturnFaq } from "@/components/HowToReturnFaq";
 import {
   CaretDown,
@@ -329,6 +329,25 @@ function StartReturnPanel() {
 
 export function HowToReturnPage() {
   const [activeTab, setActiveTab] = useState<TabId>("policy");
+
+  useEffect(() => {
+    const sendHeight = () => {
+      window.parent.postMessage(
+        {
+          type: "returns-height",
+          height: document.body.scrollHeight,
+        },
+        "*",
+      );
+    };
+
+    sendHeight();
+
+    const observer = new ResizeObserver(sendHeight);
+    observer.observe(document.body);
+
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <article className="mx-auto w-full max-w-2xl text-zinc-800 dark:text-zinc-200">
