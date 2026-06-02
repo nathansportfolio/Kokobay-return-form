@@ -214,7 +214,7 @@ function StartReturnPanel() {
   return (
     <div className="space-y-12 sm:space-y-16">
       <section aria-labelledby="start-return-heading" className="pt-2 sm:pt-4">
-        <div className={`${PREMIUM_CARD_CLASS} mx-auto max-w-xl text-center`}>
+        <div className={`${PREMIUM_CARD_CLASS} text-center`}>
           <p className={SECTION_HEADING_CLASS}>Start A Return</p>
           <h2
             id="start-return-heading"
@@ -222,7 +222,7 @@ function StartReturnPanel() {
           >
             Complete your return online
           </h2>
-          <p className={`mx-auto mt-5 max-w-md ${BODY_CLASS}`}>
+          <p className={`mt-5 ${BODY_CLASS}`}>
             Enter your order number, choose what you are sending back, then drop off at
             InPost or post to our address. We email you when the parcel arrives; refunds are
             usually processed within{" "}
@@ -331,13 +331,13 @@ export function HowToReturnPage() {
   const [activeTab, setActiveTab] = useState<TabId>("policy");
 
   return (
-    <article className="mx-auto w-full max-w-2xl text-zinc-800 dark:text-zinc-200">
+    <article className="w-full text-zinc-800 dark:text-zinc-200">
       <header className="pb-10 sm:pb-14">
         <p className={SECTION_HEADING_CLASS}>Returns information</p>
         <h1 className="mt-4 text-3xl font-normal tracking-[0.22em] text-zinc-900 sm:text-4xl md:text-5xl dark:text-zinc-50">
           RETURNS
         </h1>
-        <p className={`mt-6 max-w-xl text-sm leading-relaxed sm:mt-8 sm:text-[0.9375rem] ${BODY_CLASS}`}>
+        <p className={`mt-6 text-sm leading-relaxed sm:mt-8 sm:text-[0.9375rem] ${BODY_CLASS}`}>
           Enter your order number, choose what you are sending back, then post to our address
           or drop off at InPost. We email you when the parcel arrives; refund within 5–10
           working days.
@@ -347,7 +347,7 @@ export function HowToReturnPage() {
       <div
         role="tablist"
         aria-label="Returns sections"
-        className="flex border-b border-zinc-200 dark:border-zinc-800"
+        className="grid grid-cols-2 border-b border-zinc-200 dark:border-zinc-800"
       >
         {TABS.map((tab) => {
           const selected = activeTab === tab.id;
@@ -361,7 +361,7 @@ export function HowToReturnPage() {
               aria-controls={`returns-panel-${tab.id}`}
               tabIndex={selected ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
-              className={`-mb-px min-h-12 flex-1 touch-manipulation border-b-2 px-3 py-3 text-xs font-medium tracking-[0.12em] transition-colors sm:px-4 sm:text-sm ${
+              className={`-mb-px min-h-12 w-full touch-manipulation border-b-2 px-3 py-3 text-xs font-medium tracking-[0.12em] transition-colors sm:px-4 sm:text-sm ${
                 selected
                   ? "border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-50"
                   : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
