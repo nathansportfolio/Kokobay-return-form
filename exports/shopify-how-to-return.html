@@ -1,0 +1,618 @@
+<div class="kb-returns-page">
+<style>@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap");
+
+.kb-returns-page {
+  --kb-text: #18181b;
+  --kb-muted: #52525b;
+  --kb-border: #e4e4e7;
+  --kb-surface: #fafafa;
+  --kb-card-shadow: 0 4px 28px -6px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+  font-family: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.625;
+  color: #27272a;
+  -webkit-font-smoothing: antialiased;
+}
+
+.kb-returns-page *,
+.kb-returns-page *::before,
+.kb-returns-page *::after {
+  box-sizing: border-box;
+}
+
+.kb-returns-page h1,
+.kb-returns-page h2,
+.kb-returns-page h3 {
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  margin: 0;
+}
+
+.kb-section-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--kb-muted);
+}
+
+.kb-hero {
+  padding-bottom: 2.5rem;
+}
+
+.kb-hero h1 {
+  margin-top: 1rem;
+  font-size: clamp(1.875rem, 5vw, 3rem);
+  letter-spacing: 0.22em;
+  color: var(--kb-text);
+}
+
+.kb-body {
+  color: var(--kb-muted);
+  font-size: 0.9375rem;
+  line-height: 1.625;
+}
+
+.kb-body p {
+  margin: 0 0 1.25rem;
+}
+
+.kb-body p:last-child {
+  margin-bottom: 0;
+}
+
+.kb-body ul,
+.kb-body ol {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+}
+
+.kb-body li {
+  margin-bottom: 0.5rem;
+}
+
+.kb-strong {
+  font-weight: 500;
+  color: #27272a;
+}
+
+.kb-link {
+  font-weight: 500;
+  color: var(--kb-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kb-note {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px dashed #d4d4d8;
+  border-radius: 0.75rem;
+  background: rgba(250, 250, 250, 0.8);
+}
+
+.kb-note-title {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--kb-muted);
+  margin: 0 0 0.5rem;
+}
+
+.kb-stack-lg > * + * {
+  margin-top: 4rem;
+}
+
+.kb-stack-md > * + * {
+  margin-top: 3rem;
+}
+
+.kb-policy-copy > p + p {
+  margin-top: 1.5rem;
+}
+
+.kb-card {
+  padding: 1.5rem;
+  border: 1px solid rgba(228, 228, 231, 0.9);
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: var(--kb-card-shadow);
+}
+
+@media (min-width: 640px) {
+  .kb-returns-page {
+    padding: 3rem 1.5rem 5rem;
+  }
+
+  .kb-card {
+    padding: 2.5rem;
+  }
+
+  .kb-stack-lg > * + * {
+    margin-top: 5rem;
+  }
+}
+
+.kb-card-center {
+  max-width: 36rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.kb-card-center h2 {
+  margin-top: 1rem;
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+  letter-spacing: normal;
+  color: var(--kb-text);
+}
+
+.kb-card-center .kb-body {
+  max-width: 28rem;
+  margin: 1.25rem auto 0;
+}
+
+.kb-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  min-width: 16rem;
+  margin-top: 2rem;
+  padding: 0.875rem 1.5rem;
+  border-radius: 0.75rem;
+  background: var(--kb-text);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+  box-shadow: 0 2px 14px -3px rgba(0, 0, 0, 0.22);
+}
+
+.kb-cta:hover {
+  opacity: 0.92;
+}
+
+.kb-panel-box {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--kb-border);
+  border-radius: 0.75rem;
+  background: rgba(250, 250, 250, 0.6);
+  font-size: 14px;
+  line-height: 1.625;
+  color: #27272a;
+}
+
+.kb-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kb-steps li {
+  position: relative;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.kb-steps li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--kb-text);
+  font-weight: 600;
+}
+
+.kb-checklist {
+  padding: 0.875rem 1rem 1rem;
+  border: 1px dashed #a1a1aa;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.kb-checklist-title {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--kb-muted);
+  margin: 0 0 0.625rem;
+}
+
+.kb-address {
+  white-space: pre-line;
+  padding: 1rem 1.25rem;
+  border: 1px solid rgba(228, 228, 231, 0.8);
+  border-radius: 0.75rem;
+  background: rgba(250, 250, 250, 0.8);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.625;
+  color: var(--kb-text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.kb-faulty h2 {
+  font-size: 1.125rem;
+  letter-spacing: normal;
+  color: var(--kb-text);
+}
+
+.kb-faulty .kb-body > p + p {
+  margin-top: 1.5rem;
+}
+
+.kb-tab-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.kb-tabs {
+  position: relative;
+}
+
+.kb-tab-list {
+  display: flex;
+  border-bottom: 1px solid var(--kb-border);
+}
+
+.kb-tab-label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.75rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--kb-muted);
+  cursor: pointer;
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .kb-tab-label {
+    font-size: 14px;
+    padding: 0.75rem 1rem;
+  }
+}
+
+#kb-tab-policy:checked ~ .kb-tab-list label[for="kb-tab-policy"],
+#kb-tab-start:checked ~ .kb-tab-list label[for="kb-tab-start"] {
+  border-bottom-color: var(--kb-text);
+  color: var(--kb-text);
+}
+
+.kb-tab-panels {
+  padding-top: 2.5rem;
+}
+
+.kb-tab-panel {
+  display: none;
+}
+
+#kb-tab-policy:checked ~ .kb-tab-panels #kb-panel-policy,
+#kb-tab-start:checked ~ .kb-tab-panels #kb-panel-start {
+  display: block;
+}
+
+.kb-accordion {
+  border: 1px solid var(--kb-border);
+  border-radius: 0.75rem;
+  background: rgba(250, 250, 250, 0.6);
+}
+
+.kb-chevron {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: var(--kb-muted);
+  transition: transform 0.2s ease;
+}
+
+details[open] > summary .kb-chevron {
+  transform: rotate(180deg);
+}
+
+.kb-accordion-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.kb-accordion-summary::-webkit-details-marker {
+  display: none;
+}
+
+.kb-accordion-body {
+  padding: 0 1.25rem 1.25rem;
+  border-top: 1px solid rgba(228, 228, 231, 0.8);
+}
+
+.kb-accordion-body > * + * {
+  margin-top: 1.25rem;
+}
+
+.kb-faq {
+  margin-top: 5rem;
+  padding-top: 3.5rem;
+  border-top: 1px solid rgba(228, 228, 231, 0.9);
+}
+
+.kb-faq-header h2 {
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+  letter-spacing: normal;
+  color: var(--kb-text);
+}
+
+.kb-faq-header .kb-section-label {
+  margin-top: 0.75rem;
+}
+
+.kb-faq-categories {
+  margin-top: 2.5rem;
+}
+
+.kb-faq-categories > * + * {
+  margin-top: 3.5rem;
+}
+
+.kb-faq-category-title {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(228, 228, 231, 0.8);
+}
+
+.kb-faq-item {
+  border-bottom: 1px solid rgba(228, 228, 231, 0.8);
+}
+
+.kb-faq-question {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: normal;
+  color: var(--kb-text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.kb-faq-question > span {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .kb-faq-question {
+    font-size: 0.9375rem;
+  }
+}
+
+.kb-faq-question::-webkit-details-marker {
+  display: none;
+}
+
+.kb-faq-answer {
+  padding: 0 0 1.25rem;
+}</style>
+<article>
+  <header class="kb-hero">
+    <p class="kb-section-label">Returns information</p>
+    <h1>RETURNS</h1>
+    <p class="kb-body" style="margin-top:1.5rem;max-width:36rem;">Enter your order number, choose what you are sending back, then post to our address or drop off at InPost. We email you when the parcel arrives; refund within 5–10 working days.</p>
+  </header>
+
+  <div class="kb-tabs">
+    <input class="kb-tab-input" type="radio" name="kb-returns-tab" id="kb-tab-policy" checked>
+    <input class="kb-tab-input" type="radio" name="kb-returns-tab" id="kb-tab-start">
+
+    <div class="kb-tab-list" role="tablist" aria-label="Returns sections">
+      <label class="kb-tab-label" for="kb-tab-policy" role="tab">Returns Policy</label>
+      <label class="kb-tab-label" for="kb-tab-start" role="tab">Start A Return</label>
+    </div>
+
+    <div class="kb-tab-panels">
+      <section class="kb-tab-panel kb-stack-lg" id="kb-panel-policy" role="tabpanel" aria-labelledby="kb-tab-policy">
+        <aside class="kb-note" aria-label="Manual returns inspection">
+          <div>
+            <p class="kb-note-title">Please note</p>
+            <p class="kb-body"><strong style="font-weight:500;color:#18181b;">We check every return manually</strong> before we issue a refund. Each parcel is inspected by our team to confirm the items, condition, and return details meet our policy.</p>
+          </div>
+        </aside>
+
+        <section aria-labelledby="return-policy-heading">
+          <h2 class="kb-section-label" id="return-policy-heading">Return Policy</h2>
+          <div class="kb-body kb-policy-copy" style="margin-top:2rem;"><p>We operate a 14 day returns period. All eligible items must be returned within 14 days of receipt. Unfortunately if it has been over 14 days we are unable to accept your return and it will be rejected and returned back to you.</p><p>The returns form can be found below. You can either print this out, or write it out if you don't have access to a printer.</p><p>Please ensure the returns form is filled out and included in your return. Items sent back without any relevant info means we don't know who the return is coming from, and can therefore can increase time taken for us to process your return.</p><p>Returned items are your responsibility until they reach us, so make sure they're packed up securely and can't get damaged on the way! Please return your item using a signed for or tracked service as we are not responsible for your parcel getting lost en route to us. Please keep your proof of postage until you receive your refund.</p><p>For customers within the United Kingdom, returns can now be sent using our InPost returns service for added convenience. Please note that a £3.99 returns fee will be deducted from your refund total when using this service.</p><p>Customers outside of the United Kingdom will need to arrange and pay for return postage themselves using a tracked or signed-for service, as we currently do not provide international return labels.</p><p>We're not responsible for any items that are returned to us by mistake. If we're able to locate them (which is not always possible) and you'd like these returned to you, we may ask you to cover the delivery cost.</p><p>Once we receive your return it can take up to 14 working days to action. During the processing time please do not contact us as this can delay your return. Sending multiple messages may inadvertently delay our response time by moving your message in the queue as we reply to emails in a chronological order.</p><p>Please remember that we do NOT send email confirmations to say your return has reached us; you will only receive one to say your refund has been processed at the time of processing. Please do not email to ask us if we have received your return as this will slow down the process of you receiving your refund.</p><p>Our business hours are from 9-5PM GMT, Monday to Friday and we aim to reply to all customer queries within 48 hours during these hours.</p><p>Once we have actioned the return you will then receive a notification via email that your return has been processed.</p><p>Due to us being a small business we can't yet offer free returns, so at present you as a customer have to cover return postage. Please note your initial postage is non-refundable.</p><p>Please note, if the value of your return exdceeds £300 you will be charged a 5% handing fee. This will be deducted from your total refund amount.</p><p>We will gladly accept a return of, unworn, unwashed, unmarked, unaltered, and undamaged merchandise from UK customers only. We only currently accept returns from within the United Kingdom due to customs charges.</p><p>Please take care when trying on your new items, any damage such as (but not limited to): makeup stains / washed items / deodorant / perfume / pet hairs / stains / spills / discolouration / tampered tags / general wear and tear will be refused, and your order will be sent back to you.</p><p>If swimwear is sent back marked or dirty, it will be immediately refused and returned back to you. Please keep underwear on when trying swimwear.</p><p>We reserve the right to refuse and return if items are not returned in a saleable condition or are damaged, or we believe they have been tampered with.</p><p>We cannot accept returns for any jewellery, accessories e.g hats & caps, or underwear, due to hygiene reasons.</p></div>
+        </section>
+
+        <section aria-labelledby="returns-form-heading">
+          <h2 class="kb-section-label" id="returns-form-heading">Returns Form</h2>
+          <p class="kb-body" style="margin-top:2rem;">A returns form must be included when returning any item(s). If you cannot print this please include a piece of paper with your name, order number, item(s) being returned and reason code.</p>
+        </section>
+
+        <section class="kb-card kb-faulty" aria-labelledby="faulty-items-heading">
+          <h2 id="faulty-items-heading">Faulty Items:</h2>
+          <div class="kb-body" style="margin-top:1.25rem;">
+            <p>If you believe you have recieved a faulty item, please contact us before sending the item back on: <a class="kb-link" href="mailto:info@kokobay.co.uk">info@kokobay.co.uk</a> with your name, a description of the fault, and a photo.</p>
+            <p>To ensure quality control, all orders are carefully inspected by two different staff members before dispatch. All orders claimed as being faulty will be inspected by two staff members for any forcible damage/tampering made to the item. Any intentional or forcible damage or signs of tampering will void any refund.</p>
+            <p>Faulty items will be replaced and sent back out to you at no extra cost, and your return shipping will be refunded back to you.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="kb-tab-panel kb-stack-md" id="kb-panel-start" role="tabpanel" aria-labelledby="kb-tab-start">
+        <section class="kb-card kb-card-center" aria-labelledby="start-return-heading">
+          <p class="kb-section-label">Start A Return</p>
+          <h2 id="start-return-heading">Complete your return online</h2>
+          <p class="kb-body">Enter your order number, choose what you are sending back, then drop off at InPost or post to our address. We email you when the parcel arrives; refunds are usually processed within <strong style="font-weight:500;color:#18181b;">5–10 working days</strong> after we receive the items.</p>
+          <a class="kb-cta" href="https://www.kokobay-returns.co.uk/" target="_blank" rel="noopener noreferrer">START MY RETURN</a>
+        </section>
+
+        <section aria-labelledby="uk-return-steps-heading">
+          <h2 class="kb-section-label" id="uk-return-steps-heading">UK returns</h2>
+          <div class="kb-panel-box"><ul class="kb-steps"><li>Enter your order number and the email address used on the order, then select the item(s) you wish to return.</li><li>Pack your return securely in suitable packaging (use original packaging and keep tags attached where possible) before you drop off.</li><li>After submitting the form, press the <strong>InPost Returns</strong> button to find your nearest InPost Locker or Shop.</li><li>InPost will then email you a QR code to use at the locker — no printing required.</li><li>Once your parcel has been received and is being processed, we'll send you an email update.</li></ul></div>
+        </section>
+
+        <details class="kb-accordion">
+          <summary class="kb-accordion-summary">
+            <span class="kb-section-label">Returns from outside the UK</span>
+            <svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
+          </summary>
+          <div class="kb-accordion-body">
+            <ul class="kb-steps"><li>Enter your order number, the email on the order, and load your items.</li><li>Tick the items you are returning. You must choose a return reason for each selected item.</li><li>Put the <strong>original A4 paper</strong> from your delivery inside the parcel with your items. If you no longer have it, <strong>write your order number clearly on a slip of paper</strong> and place that inside the parcel instead.</li><li>Submit the form, then post your return to the address below (use a tracked or signed-for service and keep your proof of postage).</li><li>We will email you once your return is being processed.</li></ul>
+            <div class="kb-checklist" role="note" aria-label="What to include in your parcel">
+              <p class="kb-checklist-title">Check before you seal the box</p>
+              <ol class="kb-body" style="margin:0;padding-left:1.25rem;">
+                <li>The item(s) you are returning</li>
+                <li>The original A4 order sheet, or a clear written reference to your order number</li>
+              </ol>
+            </div>
+            <div class="kb-address" role="group" aria-label="Returns address">KOKOBAY RETURNS
+UNITS 8 & 9 ATLANTIC BUSINESS CENTRE
+ATLANTIC STREET
+ALTRINCHAM
+WA14 5NQ</div>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+
+  <section class="kb-faq" aria-labelledby="need-help-heading">
+    <header class="kb-faq-header">
+      <h2 id="need-help-heading">Need help?</h2>
+      <p class="kb-section-label">Frequently Asked Questions</p>
+    </header>
+    <div class="kb-faq-categories">
+<section class="kb-faq-category">
+  <h3 class="kb-section-label kb-faq-category-title">Orders</h3>
+  <div class="kb-faq-items">
+    
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>I've placed an order but had no email confirmation yet money has left my bank?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Not to worry, it may just be the case that the email has gone into your junk folder, so please check there. If you still can't find it, email us (<a class="kb-link" href="mailto:info@kokobay.co.uk">info@kokobay.co.uk</a>) with the full name you used to place your order we can check it from our end and issue you with an order number, and resend your tracking code if it has already been dispatched.</p><p>Please double check your email is correctly spelt when entering it at checkout as this may also be the cause.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>How do I know you have received my order?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Once you've placed your order, you will land on a confirmation page which will contain your order number. This info will also be emailed to you (please note this can take up to 30 minutes to arrive in your inbox.) Once your order has been processed by our team and dispatched you will receive a 2nd email with the tracking to let you know that your order is on its way to you.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>I entered the wrong address/wrong size when placing an order, can I change it?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Please contact us ASAP by email (<a class="kb-link" href="mailto:info@kokobay.co.uk">info@kokobay.co.uk</a>) and tell us your order number, name and the issue and we will do our best to help provided the order has not already been dispatched.</p><p>Unfortunately if this is not done instantly we can't change it as orders are processed straight away.</p><p>Please note: we cannot guarantee modifications before dispatch.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>How do I track my order?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Once you have placed an order you will shortly receive a confirmation email containing the tracking code.</p><p>To ensure that this goes into your inbox please add <a class="kb-link" href="mailto:info@kokobay.co.uk">info@kokobay.co.uk</a> to your contacts, otherwise your confirmation email may end up in your junk/spam folder. If you still have not received your order confirmation email please <a class="kb-link" href="https://www.kokobay.co.uk/pages/contact-us" target="_blank" rel="noopener noreferrer">contact us</a>.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>What should I do if I recieve an incorrect/faulty item?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>We're sorry to hear that you've received an incorrect or faulty item. So we can get this sorted for you, please drop us a message with the following info:</p><ul><li>Your name</li><li>Your order number</li><li>Product name (this can be found on your order confirmation email)</li><li>Picture of the fault / incorrect item</li></ul></div>
+    </details>
+  </div>
+</section>
+<section class="kb-faq-category">
+  <h3 class="kb-section-label kb-faq-category-title">delivery</h3>
+  <div class="kb-faq-items">
+    
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>Do you ship worldwide?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Yes! Our international delivery varies in price from country to country, please select your country at checkout for accurate prices.</p><p>More info can be found on our <a class="kb-link" href="https://www.kokobay.co.uk/pages/delivery-information" target="_blank" rel="noopener noreferrer">Shipping &amp; Returns page</a>.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>How long will my item take to get to me?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p class="kb-strong">UK:</p><ul><li>Standard shipping (£2.99) - 3-5 working days. Orders do not get dispatched on weekends, only Monday-Friday, however still get delivered on Saturdays.</li><li>Express shipping (£3.99) - 1-3 working days. Order before 12pm for same day dispatch. Orders after 12pm will be dispatched the next working day. Orders do not get delivered/dispatched on weekends.</li><li>Evri next day delivery (£5.99) - order before 12pm for same day dispatch. Anything ordered after 12pm will be dispatched the following day. Please note anything ordered after 12pm Friday will be dispatched the following Monday (or Tuesday if it is bank holiday).</li><li>Royal Mail next day delivery (£7.99) - order before 3pm for same day dispatch.</li></ul><p class="kb-strong">Rest of the world:</p><p>Standard shipping (price dependant on destination) - delivery aim 8-15 working days. Please note however that once the parcel has left the UK we can no longer be responsible for it.</p><p>We ship using Evri and Royal Mail.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>Next day delivery / express delivery - postcode exclusions</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Please note the following restrictions apply:</p><p>We cannot offer Next Day delivery to the Scottish Islands, Scottish Highlands, Channel Isles, Isle of Man, Isle of Wight, Scilly Isles, Cornwall, Jersey, Guernsey, Kilmarnock and Perth areas and certain areas in England.</p><p>You can find our full list of postcode exclusions <a class="kb-link" href="https://www.kokobay.co.uk/pages/postcode-exclusions" target="_blank" rel="noopener noreferrer">here</a>.</p><p>Please note it is your responsibility to order with the correct shipping service and we will not be liable for late deliveries on postcode exclusions.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>I can't see next day delivery at checkout?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>During busy periods or sale periods Next Day delivery may not be available.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>Do I need to pay customs charges for international orders?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Depending on the value of your order, your parcel may or may not be charged customs or import duties. If your parcel is charged, it is up to the person receiving the parcel to cover these costs. Unfortunately, these charges are out of our hands, and vary widely from country to country, so we're unable to predict what your particular charges may be. For more accurate information, we would suggest getting in touch with your local customs office so you're not surprised if there are any unexpected delivery charges at your end.</p></div>
+    </details>
+  </div>
+</section>
+<section class="kb-faq-category">
+  <h3 class="kb-section-label kb-faq-category-title">returns</h3>
+  <div class="kb-faq-items">
+    
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>How do I return an item?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Fill in the form for each item you are returning, along with your name, email, order number and date posted back. This can either be done by printing the form out, or writing it out if you don't have access to a printer.</p><p>Re-pack the item in the bag with labels and tags still attached (you can reuse our bags to be more environmentally friendly).</p><p>We advise you to use a tracked service to return any parcels and obtain proof of postage as we will not be held liable for missing parcels.</p><p>A refund will be issued for items returned to us in a resaleable condition. If discounts were applied the refund value will reflect the discounts used.</p><p><a class="kb-link" href="https://www.kokobay-returns.co.uk/" target="_blank" rel="noopener noreferrer">Click here for the returns sheet.</a></p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>Where can I find your returns form?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>You can find our returns form <a class="kb-link" href="https://www.kokobay-returns.co.uk/" target="_blank" rel="noopener noreferrer">here</a>.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>I've sent my item back but have not heard anything back yet?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Returns can take up to 14 working days to process. Please note that this does not include weekends or bank holidays.</p><p>Please note we do NOT send email confirmations to say your return has reached us; you will only receive one to say your refund has been processed at the time of processing. Please do not email to ask us if we have received your return as this will slow down the process of you receiving your refund.</p><p>If it has been over 14 working day since your item was received by us then please <a class="kb-link" href="https://www.kokobay.co.uk/pages/contact-us" target="_blank" rel="noopener noreferrer">contact us</a> via email.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>Do I have to pay postage to return an item?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Due to us being a small business we can't yet offer free returns, so at present you as a customer have to cover return postage.</p></div>
+    </details>
+  </div>
+</section>
+<section class="kb-faq-category">
+  <h3 class="kb-section-label kb-faq-category-title">product & stock</h3>
+  <div class="kb-faq-items">
+    
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>When is your next restock?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Any new drops and restock dates will be announced on our Instagram page <a class="kb-link" href="https://www.instagram.com/kokobayuk" target="_blank" rel="noopener noreferrer">@kokobayuk</a>.</p><p>In the meantime, we recommend signing up for restock notifications so that you get notified once the item comes back in stock as sizes may appear as we process returns. You can do this by going onto the specific product page, clicking the size you want and then clicking “notify when available”.and filling out the relevant information.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>How do back in stock notifications work?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>On the right hand side of every product page which contains an out of stock size, you will see a black bar which says 'notify when available'.</p><p>Select the size you are after, click 'notify when available' and fill out you email/number.</p><p>When that product/sizes comes back into stock, you wll recieve an email/SMS message informing you that it's back with a link to click through to the selected product.</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>How often do you launch new products?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>We aim to launch new products every week/every couple of weeks!</p><p>As a small business we tend to do more regular small drops, rather than one big drop - you can keep up to date with this on our instagram page where we share upcoming drops!</p></div>
+    </details>
+  </div>
+</section>
+<section class="kb-faq-category">
+  <h3 class="kb-section-label kb-faq-category-title">promotions & discounts</h3>
+  <div class="kb-faq-items">
+    
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>Is there a discount code I can use for my first order?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>Yes, you can sign up to our mailing list for 15% off your first order!</p></div>
+    </details>
+    <details class="kb-faq-item">
+      <summary class="kb-faq-question"><span>I want to collab with you guys - how do I get in touch?</span><svg class="kb-chevron" width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></summary>
+      <div class="kb-faq-answer kb-body"><p>We're constantly looking for new people to collaborate with. Please check our our <a class="kb-link" href="https://www.kokobay.co.uk/pages/kokobae" target="_blank" rel="noopener noreferrer">collaborations page</a> for more info on how to do this.</p></div>
+    </details>
+  </div>
+</section></div>
+  </section>
+</article>
+</div>

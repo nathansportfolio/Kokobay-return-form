@@ -27,7 +27,8 @@
     "merge-products": "node scripts/merge-products.js",
     "export-shopify-csv": "node scripts/export-shopify-import-csv.js",
     "generate-shopify-metafields": "node scripts/generate-shopify-metafields.js",
-    "active-products-shopify-headers": "node scripts/active-products-shopify-headers.js"
+    "active-products-shopify-headers": "node scripts/active-products-shopify-headers.js",
+    "export-shopify-how-to-return": "node --import tsx ./scripts/export-shopify-how-to-return.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AccordionChevron } from "@/components/AccordionChevron";
 import { HowToReturnFaq } from "@/components/HowToReturnFaq";
+import { HOW_TO_RETURN_LINKS } from "@/lib/howToReturnPageContent";
 import {
-  CaretDown,
   EnvelopeSimple,
   FileText,
   ListChecks,
@@ -25,7 +26,7 @@ const BODY_CLASS = "text-[0.9375rem] leading-relaxed text-zinc-600 dark:text-zin
 const SECTION_HEADING_CLASS =
   "text-xs font-medium uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400";
 
-const RETURN_PORTAL_URL = "https://www.kokobay-returns.co.uk/";
+const RETURN_PORTAL_URL = HOW_TO_RETURN_LINKS.startReturn;
 
 const RETURNS_ADDRESS = `KOKOBAY RETURNS
 UNITS 8 & 9 ATLANTIC BUSINESS CENTRE
@@ -283,10 +284,7 @@ function StartReturnPanel() {
           >
             Returns from outside the UK
           </span>
-          <CaretDown
-            className="h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-200 group-open:rotate-180 dark:text-zinc-400"
-            aria-hidden
-          />
+          <AccordionChevron className="shrink-0 text-zinc-500 transition-transform duration-200 group-open:rotate-180 dark:text-zinc-400" />
         </summary>
         <div className="space-y-5 border-t border-zinc-200/80 px-4 pb-4 pt-4 text-sm leading-relaxed text-zinc-800 sm:px-5 sm:pb-5 sm:pt-5 dark:border-zinc-800 dark:text-zinc-200">
           <ul className="space-y-3" role="list" aria-label="How to return from outside the UK">

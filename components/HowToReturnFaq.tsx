@@ -1,4 +1,5 @@
-import { CaretDown } from "@phosphor-icons/react";
+import { AccordionChevron } from "@/components/AccordionChevron";
+import { HOW_TO_RETURN_LINKS } from "@/lib/howToReturnPageContent";
 
 const BODY_CLASS = "text-[0.9375rem] leading-relaxed text-zinc-600 dark:text-zinc-300";
 
@@ -8,7 +9,7 @@ const FAQ_LINK_CLASS =
 export const HOW_TO_RETURN_FAQ_LINKS = {
   email: "info@kokobay.co.uk",
   contactUs: "https://www.kokobay.co.uk/pages/contact-us",
-  returnsPortal: "https://www.kokobay-returns.co.uk/",
+  returnsPortal: HOW_TO_RETURN_LINKS.returnsPortal,
   deliveryInformation: "https://www.kokobay.co.uk/pages/delivery-information",
   postcodeExclusions: "https://www.kokobay.co.uk/pages/postcode-exclusions",
   collaborations: "https://www.kokobay.co.uk/pages/kokobae",
@@ -41,10 +42,7 @@ function FaqItem({ question, children }: { question: string; children: React.Rea
     <details className="group border-b border-zinc-200/80 dark:border-zinc-800">
       <summary className="flex cursor-pointer list-none items-start justify-between gap-4 py-4 text-left text-sm font-medium tracking-normal text-zinc-900 sm:text-[0.9375rem] dark:text-zinc-50 [&::-webkit-details-marker]:hidden">
         <span>{question}</span>
-        <CaretDown
-          className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-200 group-open:rotate-180 dark:text-zinc-400"
-          aria-hidden
-        />
+        <AccordionChevron className="mt-0.5 shrink-0 text-zinc-500 transition-transform duration-200 group-open:rotate-180 dark:text-zinc-400" />
       </summary>
       <div className={`space-y-3 pb-5 pr-1 sm:pr-4 ${BODY_CLASS}`}>{children}</div>
     </details>
