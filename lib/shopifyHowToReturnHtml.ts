@@ -47,7 +47,7 @@ const CSS = `
   box-sizing: border-box;
   max-width: 42rem;
   margin: 0 auto;
-  padding: 2rem 1rem 4rem;
+  padding: 0 1rem 4rem;
   font-family: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.625;
@@ -82,8 +82,7 @@ const CSS = `
 }
 
 .kb-hero h1 {
-  margin-top: 1rem;
-  font-size: clamp(1.875rem, 5vw, 3rem);
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
   letter-spacing: 0.22em;
   color: var(--kb-text);
 }
@@ -164,7 +163,7 @@ const CSS = `
 
 @media (min-width: 640px) {
   .kb-returns-page {
-    padding: 3rem 1.5rem 5rem;
+    padding: 0 1.5rem 5rem;
   }
 
   .kb-card {
@@ -203,13 +202,43 @@ const CSS = `
   margin-top: 2rem;
   padding: 0.875rem 1.5rem;
   border-radius: 0.75rem;
-  background: var(--kb-text);
-  color: #fff;
+  background-color: #fff !important;
+  background-image: none !important;
+  background-size: auto !important;
+  background-position: 0 0 !important;
+  background-repeat: no-repeat !important;
+  color: #18181b !important;
+  border: 1px solid #e4e4e7 !important;
+  border-bottom: 1px solid #e4e4e7 !important;
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.14em;
-  text-decoration: none;
+  text-decoration: none !important;
+  text-decoration-line: none !important;
+  -webkit-text-decoration-line: none !important;
+  text-decoration-thickness: 0 !important;
   box-shadow: 0 2px 14px -3px rgba(0, 0, 0, 0.22);
+}
+
+.kb-cta-text {
+  display: inline-block;
+  background: transparent !important;
+  background-image: none !important;
+  text-decoration: none !important;
+  text-decoration-line: none !important;
+  -webkit-text-decoration-line: none !important;
+}
+
+.kb-cta::before,
+.kb-cta::after,
+.kb-cta-text::before,
+.kb-cta-text::after {
+  content: none !important;
+  display: none !important;
+  animation: none !important;
+  transition: none !important;
+  background: none !important;
+  background-image: none !important;
 }
 
 .kb-cta:hover {
@@ -467,9 +496,7 @@ export function buildShopifyHowToReturnHtml(): string {
 <style>${CSS}</style>
 <article>
   <header class="kb-hero">
-    <p class="kb-section-label">Returns information</p>
-    <h1>RETURNS</h1>
-    <p class="kb-body" style="margin-top:1.5rem;max-width:36rem;">Enter your order number, choose what you are sending back, then post to our address or drop off at InPost. We email you when the parcel arrives; refund within 5–10 working days.</p>
+    <p class="kb-body" style="max-width:36rem;">Enter your order number, choose what you are sending back, then post to our address or drop off at InPost. We email you when the parcel arrives; refund within 5–10 working days.</p>
   </header>
 
   <div class="kb-tabs">
@@ -495,11 +522,6 @@ export function buildShopifyHowToReturnHtml(): string {
           <div class="kb-body kb-policy-copy" style="margin-top:2rem;">${policyParagraphs}</div>
         </section>
 
-        <section aria-labelledby="returns-form-heading">
-          <h2 class="kb-section-label" id="returns-form-heading">Returns Form</h2>
-          <p class="kb-body" style="margin-top:2rem;">A returns form must be included when returning any item(s). If you cannot print this please include a piece of paper with your name, order number, item(s) being returned and reason code.</p>
-        </section>
-
         <section class="kb-card kb-faulty" aria-labelledby="faulty-items-heading">
           <h2 id="faulty-items-heading">Faulty Items:</h2>
           <div class="kb-body" style="margin-top:1.25rem;">
@@ -515,7 +537,7 @@ export function buildShopifyHowToReturnHtml(): string {
           <p class="kb-section-label">Start A Return</p>
           <h2 id="start-return-heading">Complete your return online</h2>
           <p class="kb-body">Enter your order number, choose what you are sending back, then drop off at InPost or post to our address. We email you when the parcel arrives; refunds are usually processed within <strong style="font-weight:500;color:#18181b;">5–10 working days</strong> after we receive the items.</p>
-          <a class="kb-cta" href="${startUrl}" target="_blank" rel="noopener noreferrer">START MY RETURN</a>
+          <a class="kb-cta" href="${startUrl}" target="_blank" rel="noopener noreferrer"><span class="kb-cta-text">START MY RETURN</span></a>
         </section>
 
         <section aria-labelledby="uk-return-steps-heading">

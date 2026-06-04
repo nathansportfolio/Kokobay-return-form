@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { AccordionChevron } from "@/components/AccordionChevron";
 import { HowToReturnFaq } from "@/components/HowToReturnFaq";
-import { HOW_TO_RETURN_LINKS } from "@/lib/howToReturnPageContent";
+import {
+  HOW_TO_RETURN_LINKS,
+  RETURN_POLICY_PARAGRAPHS,
+} from "@/lib/howToReturnPageContent";
 import {
   EnvelopeSimple,
   FileText,
@@ -16,7 +19,10 @@ import {
 } from "@phosphor-icons/react";
 
 const PRIMARY_CTA_CLASS =
-  "inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-foreground px-6 py-3.5 text-sm font-medium tracking-[0.14em] text-background no-underline shadow-[0_2px_14px_-3px_rgba(0,0,0,0.22)] transition-[transform,box-shadow,opacity] duration-200 hover:shadow-[0_6px_20px_-4px_rgba(0,0,0,0.28)] active:scale-[0.99] active:shadow-[0_2px_10px_-3px_rgba(0,0,0,0.2)] sm:w-auto sm:min-w-[16rem]";
+  "inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl border border-zinc-200 bg-white bg-none px-6 py-3.5 text-sm font-medium tracking-[0.14em] text-zinc-900 no-underline decoration-transparent shadow-[0_2px_14px_-3px_rgba(0,0,0,0.22)] before:hidden after:hidden before:content-none after:content-none sm:w-auto sm:min-w-[16rem] dark:border-zinc-600 dark:bg-zinc-100 dark:text-zinc-900";
+
+const PRIMARY_CTA_TEXT_CLASS =
+  "inline-block bg-transparent no-underline decoration-transparent before:hidden after:hidden before:content-none after:content-none";
 
 const PREMIUM_CARD_CLASS =
   "rounded-2xl border border-zinc-200/90 bg-white p-6 text-zinc-900 shadow-[0_4px_28px_-6px_rgba(0,0,0,0.08)] sm:p-10 dark:border-zinc-700/60 dark:bg-zinc-950 dark:text-zinc-50 dark:shadow-[0_4px_28px_-6px_rgba(0,0,0,0.35)]";
@@ -33,27 +39,6 @@ UNITS 8 & 9 ATLANTIC BUSINESS CENTRE
 ATLANTIC STREET
 ALTRINCHAM
 WA14 5NQ`;
-
-const RETURN_POLICY_PARAGRAPHS = [
-  "We operate a 14 day returns period. All eligible items must be returned within 14 days of receipt. Unfortunately if it has been over 14 days we are unable to accept your return and it will be rejected and returned back to you.",
-  "The returns form can be found below. You can either print this out, or write it out if you don't have access to a printer.",
-  "Please ensure the returns form is filled out and included in your return. Items sent back without any relevant info means we don't know who the return is coming from, and can therefore can increase time taken for us to process your return.",
-  "Returned items are your responsibility until they reach us, so make sure they're packed up securely and can't get damaged on the way! Please return your item using a signed for or tracked service as we are not responsible for your parcel getting lost en route to us. Please keep your proof of postage until you receive your refund.",
-  "For customers within the United Kingdom, returns can now be sent using our InPost returns service for added convenience. Please note that a £3.99 returns fee will be deducted from your refund total when using this service.",
-  "Customers outside of the United Kingdom will need to arrange and pay for return postage themselves using a tracked or signed-for service, as we currently do not provide international return labels.",
-  "We're not responsible for any items that are returned to us by mistake. If we're able to locate them (which is not always possible) and you'd like these returned to you, we may ask you to cover the delivery cost.",
-  "Once we receive your return it can take up to 14 working days to action. During the processing time please do not contact us as this can delay your return. Sending multiple messages may inadvertently delay our response time by moving your message in the queue as we reply to emails in a chronological order.",
-  "Please remember that we do NOT send email confirmations to say your return has reached us; you will only receive one to say your refund has been processed at the time of processing. Please do not email to ask us if we have received your return as this will slow down the process of you receiving your refund.",
-  "Our business hours are from 9-5PM GMT, Monday to Friday and we aim to reply to all customer queries within 48 hours during these hours.",
-  "Once we have actioned the return you will then receive a notification via email that your return has been processed.",
-  "Due to us being a small business we can't yet offer free returns, so at present you as a customer have to cover return postage. Please note your initial postage is non-refundable.",
-  "Please note, if the value of your return exdceeds £300 you will be charged a 5% handing fee. This will be deducted from your total refund amount.",
-  "We will gladly accept a return of, unworn, unwashed, unmarked, unaltered, and undamaged merchandise from UK customers only. We only currently accept returns from within the United Kingdom due to customs charges.",
-  "Please take care when trying on your new items, any damage such as (but not limited to): makeup stains / washed items / deodorant / perfume / pet hairs / stains / spills / discolouration / tampered tags / general wear and tear will be refused, and your order will be sent back to you.",
-  "If swimwear is sent back marked or dirty, it will be immediately refused and returned back to you. Please keep underwear on when trying swimwear.",
-  "We reserve the right to refuse and return if items are not returned in a saleable condition or are damaged, or we believe they have been tampered with.",
-  "We cannot accept returns for any jewellery, accessories e.g hats & caps, or underwear, due to hygiene reasons.",
-] as const;
 
 type TabId = "policy" | "start";
 
@@ -129,8 +114,8 @@ function ManualReturnsCheckNote() {
             <strong className="font-medium text-zinc-900 dark:text-zinc-50">
               We check every return manually
             </strong>{" "}
-            before we issue a refund. Each parcel is inspected by our team to
-            confirm the items, condition, and return details meet our policy.
+            before we issue a refund. Each parcel is inspected by our team to confirm the
+            items, condition, and return details meet our policy.
           </p>
         </div>
       </div>
@@ -152,17 +137,6 @@ function ReturnsPolicyPanel() {
             <p key={paragraph}>{paragraph}</p>
           ))}
         </div>
-      </section>
-
-      <section aria-labelledby="returns-form-heading">
-        <h2 id="returns-form-heading" className={SECTION_HEADING_CLASS}>
-          Returns Form
-        </h2>
-        <p className={`mt-8 ${BODY_CLASS}`}>
-          A returns form must be included when returning any item(s). If you cannot print
-          this please include a piece of paper with your name, order number, item(s) being
-          returned and reason code.
-        </p>
       </section>
 
       <section
@@ -188,10 +162,10 @@ function ReturnsPolicyPanel() {
             If you believe you have recieved a faulty item, please contact us before sending
             the item back on:{" "}
             <a
-              href="mailto:info@kokobay.co.uk"
+              href={`mailto:${HOW_TO_RETURN_LINKS.email}`}
               className="font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-700 dark:text-zinc-50 dark:hover:text-zinc-200"
             >
-              info@kokobay.co.uk
+              {HOW_TO_RETURN_LINKS.email}
             </a>{" "}
             with your name, a description of the fault, and a photo.
           </p>
@@ -239,7 +213,7 @@ function StartReturnPanel() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              START MY RETURN
+              <span className={PRIMARY_CTA_TEXT_CLASS}>START MY RETURN</span>
             </a>
           </div>
         </div>
@@ -349,15 +323,9 @@ export function HowToReturnPage() {
 
   return (
     <article className="mx-auto w-full max-w-2xl text-zinc-800 dark:text-zinc-200">
-      <header className="pb-10 sm:pb-14">
-        <p className={SECTION_HEADING_CLASS}>Returns information</p>
-        <h1 className="mt-4 text-3xl font-normal tracking-[0.22em] text-zinc-900 sm:text-4xl md:text-5xl dark:text-zinc-50">
-          RETURNS
-        </h1>
-        <p className={`mt-6 max-w-xl text-sm leading-relaxed sm:mt-8 sm:text-[0.9375rem] ${BODY_CLASS}`}>
-          Enter your order number, choose what you are sending back, then post to our address
-          or drop off at InPost. We email you when the parcel arrives; refund within 5–10
-          working days.
+      <header className="pb-8 sm:pb-10">
+        <p className={`max-w-xl text-sm leading-relaxed sm:text-[0.9375rem] ${BODY_CLASS}`}>
+        We want you to love your Kokobay pieces. If something isn’t quite right, returning them is simple.
         </p>
       </header>
 

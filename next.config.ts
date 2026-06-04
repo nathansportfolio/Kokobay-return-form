@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
       { source: "/operations", destination: "/", permanent: true },
       { source: "/returns", destination: "/", permanent: true },
       { source: "/returns/:path*", destination: "/", permanent: true },
+      { source: "/order-tracking", destination: "/track-order", permanent: false },
     ];
   },
   images: {

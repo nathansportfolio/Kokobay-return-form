@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function HowToReturnRoute() {
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 px-4 pt-8 pb-24 sm:px-6 sm:pt-12 sm:pb-32">
+    <div className="mx-auto flex w-full max-w-3xl flex-1 px-4 pb-24 sm:px-6 sm:pb-32">
       <HowToReturnPage />
     </div>
   );

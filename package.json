@@ -28,7 +28,8 @@
     "export-shopify-csv": "node scripts/export-shopify-import-csv.js",
     "generate-shopify-metafields": "node scripts/generate-shopify-metafields.js",
     "active-products-shopify-headers": "node scripts/active-products-shopify-headers.js",
-    "export-shopify-how-to-return": "node --import tsx ./scripts/export-shopify-how-to-return.ts"
+    "export-shopify-how-to-return": "node --import tsx ./scripts/export-shopify-how-to-return.ts",
+    "export-shopify-track-order": "node --import tsx ./scripts/export-shopify-track-order.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

@@ -21,24 +21,19 @@ ALTRINCHAM
 WA14 5NQ`;
 
 export const RETURN_POLICY_PARAGRAPHS = [
-  "We operate a 14 day returns period. All eligible items must be returned within 14 days of receipt. Unfortunately if it has been over 14 days we are unable to accept your return and it will be rejected and returned back to you.",
-  "The returns form can be found below. You can either print this out, or write it out if you don't have access to a printer.",
-  "Please ensure the returns form is filled out and included in your return. Items sent back without any relevant info means we don't know who the return is coming from, and can therefore can increase time taken for us to process your return.",
-  "Returned items are your responsibility until they reach us, so make sure they're packed up securely and can't get damaged on the way! Please return your item using a signed for or tracked service as we are not responsible for your parcel getting lost en route to us. Please keep your proof of postage until you receive your refund.",
+  "All eligible items must be returned within 14 days of receipt. Your return label must be created and used within this 14-day window. Labels created but not used within this timeframe will be rejected.",
   "For customers within the United Kingdom, returns can now be sent using our InPost returns service for added convenience. Please note that a £3.99 returns fee will be deducted from your refund total when using this service.",
-  "Customers outside of the United Kingdom will need to arrange and pay for return postage themselves using a tracked or signed-for service, as we currently do not provide international return labels.",
-  "We're not responsible for any items that are returned to us by mistake. If we're able to locate them (which is not always possible) and you'd like these returned to you, we may ask you to cover the delivery cost.",
-  "Once we receive your return it can take up to 14 working days to action. During the processing time please do not contact us as this can delay your return. Sending multiple messages may inadvertently delay our response time by moving your message in the queue as we reply to emails in a chronological order.",
-  "Please remember that we do NOT send email confirmations to say your return has reached us; you will only receive one to say your refund has been processed at the time of processing. Please do not email to ask us if we have received your return as this will slow down the process of you receiving your refund.",
-  "Our business hours are from 9-5PM GMT, Monday to Friday and we aim to reply to all customer queries within 48 hours during these hours.",
-  "Once we have actioned the return you will then receive a notification via email that your return has been processed.",
-  "Due to us being a small business we can't yet offer free returns, so at present you as a customer have to cover return postage. Please note your initial postage is non-refundable.",
-  "Please note, if the value of your return exdceeds £300 you will be charged a 5% handing fee. This will be deducted from your total refund amount.",
-  "We will gladly accept a return of, unworn, unwashed, unmarked, unaltered, and undamaged merchandise from UK customers only. We only currently accept returns from within the United Kingdom due to customs charges.",
-  "Please take care when trying on your new items, any damage such as (but not limited to): makeup stains / washed items / deodorant / perfume / pet hairs / stains / spills / discolouration / tampered tags / general wear and tear will be refused, and your order will be sent back to you.",
-  "If swimwear is sent back marked or dirty, it will be immediately refused and returned back to you. Please keep underwear on when trying swimwear.",
-  "We reserve the right to refuse and return if items are not returned in a saleable condition or are damaged, or we believe they have been tampered with.",
-  "We cannot accept returns for any jewellery, accessories e.g hats & caps, or underwear, due to hygiene reasons.",
+  "We will gladly accept a return of, unworn, unwashed, unmarked, unaltered, and undamaged merchandise from UK customers only. Please take care when trying on your new items, any damage such as (but not limited to): makeup stains / washed items / deodorant / perfume / pet hairs / stains / spills / discolouration / tampered tags / general wear and tear will be refused, and your order will be sent back to you. Please keep underwear on when trying swimwear.",
+  "We reserve the right to refuse and return if items are not returned in a saleable condition or are damaged, or we believe they have been tampered with. Should an item be returned in an unacceptable condition, we will notify you by email. If no response is received within 72 hours, the item will be returned to the original shipping address.",
+  "A returns form must be included when returning any item(s). If you cannot print this please include a piece of paper with your name, order number, item(s) being returned and reason code. Items sent back without any relevant info may be subject to a longer processing time.",
+  "Customers outside of the United Kingdom must arrange and pay for their own return postage using a tracked or signed-for service, as we do not currently provide international return labels. Any customs charges incurred on international returns will be deducted from the final refund amount.",
+  "We're not responsible for any items returned to us by mistake. If we're able to locate them (which cannot be guaranteed) and you'd like them returned, you may be required to cover the cost of redelivery.",
+  "You will receive an email confirmation once your return has reached us.",
+  "Refunds are processed manually. Please allow up to 14 business days from the date your return reaches our warehouse for it to be actioned. Sending multiple messages during this processing time may inadvertently delay our response time by moving your message in the queue as we reply to emails in a chronological order.",
+  "Our business hours are Monday to Friday, 9am–5pm GMT. We aim to respond to all customer queries within 48 business hours. Weekends and bank holidays are excluded.",
+  "Please note that original shipping costs are non-refundable.",
+  "If the value of your return exceeds £300 you will be charged a 5% handing fee. This will be deducted from your total refund amount.",
+  "Items returned outside of our returns portal remain your responsibility until they reach us. We recommend using a tracked or signed-for service and keeping proof of postage until your refund has been processed.",
 ] as const;
 
 export type FaqEntry = { question: string; answerHtml: string };
@@ -123,7 +118,7 @@ export function buildFaqCategories(links: typeof HOW_TO_RETURN_LINKS): FaqCatego
         },
         {
           question: "I've sent my item back but have not heard anything back yet?",
-          answerHtml: `<p>Returns can take up to 14 working days to process. Please note that this does not include weekends or bank holidays.</p><p>Please note we do NOT send email confirmations to say your return has reached us; you will only receive one to say your refund has been processed at the time of processing. Please do not email to ask us if we have received your return as this will slow down the process of you receiving your refund.</p><p>If it has been over 14 working day since your item was received by us then please ${contact} via email.</p>`,
+          answerHtml: `<p>You will receive an email confirmation once your return has reached us.</p><p>Refunds are processed manually. Please allow up to 14 business days from the date your return reaches our warehouse for it to be actioned. Weekends and bank holidays are excluded.</p><p>If it has been over 14 business days since your return reached our warehouse then please ${contact} via email.</p>`,
         },
         {
           question: "Do I have to pay postage to return an item?",

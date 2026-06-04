@@ -297,19 +297,15 @@ export function HowToReturnFaq() {
           </FaqItem>
 
           <FaqItem question="I've sent my item back but have not heard anything back yet?">
+            <p>You will receive an email confirmation once your return has reached us.</p>
             <p>
-              Returns can take up to 14 working days to process. Please note that this does
-              not include weekends or bank holidays.
+              Refunds are processed manually. Please allow up to 14 business days from the
+              date your return reaches our warehouse for it to be actioned. Weekends and bank
+              holidays are excluded.
             </p>
             <p>
-              Please note we do NOT send email confirmations to say your return has reached
-              us; you will only receive one to say your refund has been processed at the time
-              of processing. Please do not email to ask us if we have received your return as
-              this will slow down the process of you receiving your refund.
-            </p>
-            <p>
-              If it has been over 14 working day since your item was received by us then
-              please <FaqContactLink /> via email.
+              If it has been over 14 business days since your return reached our warehouse
+              then please <FaqContactLink /> via email.
             </p>
           </FaqItem>
 
