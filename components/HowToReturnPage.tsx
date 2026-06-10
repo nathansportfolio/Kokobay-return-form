@@ -202,7 +202,7 @@ function StartReturnPanel() {
             InPost or post to our address. We email you when the parcel arrives; refunds are
             usually processed within{" "}
             <strong className="font-medium text-zinc-900 dark:text-zinc-50">
-              5–10 working days
+              14 working days
             </strong>{" "}
             after we receive the items.
           </p>

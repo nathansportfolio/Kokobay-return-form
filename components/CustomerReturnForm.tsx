@@ -595,7 +595,7 @@ export function CustomerReturnForm() {
                 We will email you when we have your parcel. Refunds are usually processed
                 within{" "}
                 <strong className="font-medium text-zinc-900 dark:text-zinc-50">
-                  5–10 working days
+                  14 working days
                 </strong>{" "}
                 after we receive the items.
               </p>
@@ -607,7 +607,7 @@ export function CustomerReturnForm() {
                 email you when the parcel has arrived. Refunds are usually processed
                 within{" "}
                 <strong className="font-medium text-zinc-900 dark:text-zinc-50">
-                  5–10 working days
+                  14 working days
                 </strong>{" "}
                 after we receive the items.
               </p>

@@ -14,7 +14,7 @@ const instrumentSans = Instrument_Sans({
 export const metadata: Metadata = {
   title: { absolute: "KOKO BAY RETURNS" },
   description:
-    "Enter your order number, choose what you are sending back, then post to our address. We email you when the parcel arrives; refund within 5–10 working days.",
+    "Enter your order number, choose what you are sending back, then post to our address. We email you when the parcel arrives; refund within 14 working days.",
   icons: {
     icon: [
       { url: "/favicon/favicon.ico" },

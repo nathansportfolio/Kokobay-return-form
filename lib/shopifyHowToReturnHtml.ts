@@ -496,7 +496,7 @@ export function buildShopifyHowToReturnHtml(): string {
 <style>${CSS}</style>
 <article>
   <header class="kb-hero">
-    <p class="kb-body" style="max-width:36rem;">Enter your order number, choose what you are sending back, then post to our address or drop off at InPost. We email you when the parcel arrives; refund within 5–10 working days.</p>
+    <p class="kb-body" style="max-width:36rem;">Enter your order number, choose what you are sending back, then post to our address or drop off at InPost. We email you when the parcel arrives; refund within 14 working days.</p>
   </header>
 
   <div class="kb-tabs">
@@ -536,7 +536,7 @@ export function buildShopifyHowToReturnHtml(): string {
         <section class="kb-card kb-card-center" aria-labelledby="start-return-heading">
           <p class="kb-section-label">Start A Return</p>
           <h2 id="start-return-heading">Complete your return online</h2>
-          <p class="kb-body">Enter your order number, choose what you are sending back, then drop off at InPost or post to our address. We email you when the parcel arrives; refunds are usually processed within <strong style="font-weight:500;color:#18181b;">5–10 working days</strong> after we receive the items.</p>
+          <p class="kb-body">Enter your order number, choose what you are sending back, then drop off at InPost or post to our address. We email you when the parcel arrives; refunds are usually processed within <strong style="font-weight:500;color:#18181b;">14 working days</strong> after we receive the items.</p>
           <a class="kb-cta" href="${startUrl}" target="_blank" rel="noopener noreferrer"><span class="kb-cta-text">START MY RETURN</span></a>
         </section>
 
