@@ -290,8 +290,16 @@ export function CustomerReturnForm() {
     () => parseCustomerReturnSuccessPreview(searchParams),
     [searchParams],
   );
+  const orderFromUrl = useMemo(
+    () => searchParams.get("orderNumber")?.trim() ?? "",
+    [searchParams],
+  );
+  const emailFromUrl = useMemo(
+    () => searchParams.get("email")?.trim() ?? "",
+    [searchParams],
+  );
 
-  const [orderInput, setOrderInput] = useState("");
+  const [orderInput, setOrderInput] = useState(orderFromUrl);
   const [orderRef, setOrderRef] = useState<string | null>(null);
   const [lines, setLines] = useState<KokobayOrderLine[] | null>(null);
   const [loadBusy, setLoadBusy] = useState(false);
@@ -300,7 +308,7 @@ export function CustomerReturnForm() {
     {},
   );
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailFromUrl);
   const [datePosted, setDatePosted] = useState("");
   const [submitBusy, setSubmitBusy] = useState(false);
   const [successUid, setSuccessUid] = useState<string | null>(null);
@@ -313,6 +321,7 @@ export function CustomerReturnForm() {
     useState<ReturnInstructionsRegion>("uk");
   const orderLoadedAnchorRef = useRef<HTMLDivElement>(null);
   const entireOrderCheckboxRef = useRef<HTMLInputElement>(null);
+  const autoLookupDoneRef = useRef(false);
 
   const allLinesIncluded = useMemo(
     () =>
@@ -343,94 +352,107 @@ export function CustomerReturnForm() {
     return () => cancelAnimationFrame(id);
   }, [lines]);
 
-  const onLoadOrder = useCallback(async () => {
-    setOrderLookupError(null);
-    setReturnWindowExpired(false);
-    const o = orderInput.trim();
-    const em = email.trim();
-    if (o.length < 2) {
-      logReturnsOrderLookupClient("lookup_blocked_short_input", {
+  const onLoadOrder = useCallback(
+    async (overrides?: { order?: string; email?: string }) => {
+      setOrderLookupError(null);
+      setReturnWindowExpired(false);
+      const o = (overrides?.order ?? orderInput).trim();
+      const em = (overrides?.email ?? email).trim();
+      if (o.length < 2) {
+        logReturnsOrderLookupClient("lookup_blocked_short_input", {
+          orderInput: o,
+          orderInputLength: o.length,
+          queryDiagnostics: queryDiagnosticsForOrderString(o),
+        });
+        setOrderLookupError("Enter your order number.");
+        return;
+      }
+      if (em.length < 3 || !em.includes("@")) {
+        setOrderLookupError(
+          "Enter the email address from your order confirmation so we can verify it’s you.",
+        );
+        return;
+      }
+      logReturnsOrderLookupClient("lookup_attempt", {
         orderInput: o,
         orderInputLength: o.length,
         queryDiagnostics: queryDiagnosticsForOrderString(o),
+        emailLength: em.length,
       });
-      setOrderLookupError("Enter your order number.");
-      return;
-    }
-    if (em.length < 3 || !em.includes("@")) {
-      setOrderLookupError(
-        "Enter the email address from your order confirmation so we can verify it’s you.",
-      );
-      return;
-    }
-    logReturnsOrderLookupClient("lookup_attempt", {
-      orderInput: o,
-      orderInputLength: o.length,
-      queryDiagnostics: queryDiagnosticsForOrderString(o),
-      emailLength: em.length,
-    });
-    setLoadBusy(true);
-    setSuccessUid(null);
-    try {
-      const q = new URLSearchParams({
-        order: o,
-        email: em,
-      });
-      const res = await fetch(`/api/returns/preview-order?${q.toString()}`, {
-        cache: "no-store",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        lines?: KokobayOrderLine[];
-        orderRef?: string;
-        error?: string;
-        code?: string;
-        shopify?: { customerName?: string };
-      };
-      logReturnsOrderLookupClient("lookup_response", {
-        orderInput: o,
-        queryDiagnostics: queryDiagnosticsForOrderString(o),
-        httpStatus: res.status,
-        responseOk: res.ok,
-        payloadOk: data.ok,
-        orderRef: data.orderRef,
-        lineCount: data.lines?.length ?? 0,
-        error: data.error,
-      });
-      if (!res.ok || !data.ok || !data.lines?.length) {
-        const expired = data.code === "return_window_expired";
-        setReturnWindowExpired(expired);
-        setOrderLookupError(
-          expired
-            ? null
-            : (data.error ??
-                "No lines found for that order. Check the number and try again."),
-        );
-        setLines(null);
-        setOrderRef(null);
-        return;
-      }
-      setOrderLookupError(null);
-      setOrderRef(data.orderRef ?? o);
-      setOrderInput(data.orderRef ?? o);
-      setLines(data.lines);
-      const fromShopify = data.shopify?.customerName?.trim() ?? "";
-      if (fromShopify && fromShopify !== "—") {
-        setName(fromShopify);
-      }
-      const next: Record<string, PerLine> = {};
-      for (const l of data.lines) {
-        next[l.id] = {
-          include: false,
-          reasonValue: CUSTOMER_FORM_REASON_UNSET,
-          notes: "",
+      setLoadBusy(true);
+      setSuccessUid(null);
+      try {
+        const q = new URLSearchParams({
+          order: o,
+          email: em,
+        });
+        const res = await fetch(`/api/returns/preview-order?${q.toString()}`, {
+          cache: "no-store",
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          lines?: KokobayOrderLine[];
+          orderRef?: string;
+          error?: string;
+          code?: string;
+          shopify?: { customerName?: string };
         };
+        logReturnsOrderLookupClient("lookup_response", {
+          orderInput: o,
+          queryDiagnostics: queryDiagnosticsForOrderString(o),
+          httpStatus: res.status,
+          responseOk: res.ok,
+          payloadOk: data.ok,
+          orderRef: data.orderRef,
+          lineCount: data.lines?.length ?? 0,
+          error: data.error,
+        });
+        if (!res.ok || !data.ok || !data.lines?.length) {
+          const expired = data.code === "return_window_expired";
+          setReturnWindowExpired(expired);
+          setOrderLookupError(
+            expired
+              ? null
+              : (data.error ??
+                  "No lines found for that order. Check the number and try again."),
+          );
+          setLines(null);
+          setOrderRef(null);
+          return;
+        }
+        setOrderLookupError(null);
+        setOrderRef(data.orderRef ?? o);
+        setOrderInput(data.orderRef ?? o);
+        setLines(data.lines);
+        const fromShopify = data.shopify?.customerName?.trim() ?? "";
+        if (fromShopify && fromShopify !== "—") {
+          setName(fromShopify);
+        }
+        const next: Record<string, PerLine> = {};
+        for (const l of data.lines) {
+          next[l.id] = {
+            include: false,
+            reasonValue: CUSTOMER_FORM_REASON_UNSET,
+            notes: "",
+          };
+        }
+        setByLine(next);
+      } finally {
+        setLoadBusy(false);
       }
-      setByLine(next);
-    } finally {
-      setLoadBusy(false);
-    }
-  }, [orderInput, email]);
+    },
+    [orderInput, email],
+  );
+
+  useEffect(() => {
+    if (autoLookupDoneRef.current || urlSuccessPreview) return;
+    if (orderFromUrl.length < 2) return;
+    if (emailFromUrl.length < 3 || !emailFromUrl.includes("@")) return;
+    autoLookupDoneRef.current = true;
+    setOrderInput(orderFromUrl);
+    setEmail(emailFromUrl);
+    void onLoadOrder({ order: orderFromUrl, email: emailFromUrl });
+  }, [orderFromUrl, emailFromUrl, urlSuccessPreview, onLoadOrder]);
 
   const toggleEntireOrder = useCallback(
     (selectAll: boolean) => {
