@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { List } from "@phosphor-icons/react";
+import { Check, Copy, List } from "@phosphor-icons/react";
 import { AffiliateAreaChart } from "@/components/affiliate/AffiliateAreaChart";
 import { AffiliateSidebar } from "@/components/affiliate/AffiliateSidebar";
 import {
@@ -24,11 +24,101 @@ import type {
   AffiliateSeriesPoint,
 } from "@/lib/affiliate/types";
 
+const STOREFRONT_BASE = "https://kokobay.co.uk";
+
 const RANGE_OPTIONS: { value: AffiliateRange; label: string }[] = [
   { value: "7d", label: "Last 7 days" },
   { value: "30d", label: "Last 30 days" },
   { value: "90d", label: "Last 90 days" },
 ];
+
+function affiliateShareUrl(discountCode: string): string {
+  const code = discountCode.trim().toUpperCase();
+  return `${STOREFRONT_BASE}?ref=${encodeURIComponent(code)}`;
+}
+
+function CopyField({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(id);
+  }, [copied]);
+
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8580]">
+        {label}
+      </p>
+      <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <p className="min-w-0 flex-1 break-all rounded-xl border border-[#E4DED6] bg-[#FBF9F7] px-3.5 py-2.5 text-sm font-medium text-[#1A1A1A]">
+          {value}
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            void (async () => {
+              try {
+                await navigator.clipboard.writeText(value);
+                setCopied(true);
+              } catch {
+                setCopied(false);
+              }
+            })();
+          }}
+          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3.5 text-sm text-[#3D3A36] shadow-sm hover:bg-[#FBF9F7]"
+        >
+          {copied ? (
+            <>
+              <Check className="h-4 w-4 text-emerald-600" weight="bold" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy className="h-4 w-4" />
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+      {hint ? <p className="mt-1.5 text-xs text-[#8A8580]">{hint}</p> : null}
+    </div>
+  );
+}
+
+function AffiliateShareCard({ account }: { account: AffiliateAccount }) {
+  const shareUrl = affiliateShareUrl(account.discountCode);
+  return (
+    <section className="rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)] sm:p-6">
+      <p className="text-base text-[#1A1A1A]">Your link &amp; code</p>
+      <p className="mt-1 text-sm text-[#7A746C]">
+        Share this link so clicks are tracked. Shoppers can use your discount
+        code for {formatAffiliateDiscount(account)} off.
+      </p>
+      <div className="mt-5 grid gap-5">
+        <CopyField
+          label="Discount code"
+          value={account.discountCode}
+          hint={`Customer discount: ${formatAffiliateDiscount(account)} · Your commission: ${account.earningsPercent}%`}
+        />
+        <CopyField
+          label="Share link"
+          value={shareUrl}
+          hint="Example: https://kokobay.co.uk?ref=YOURCODE"
+        />
+      </div>
+    </section>
+  );
+}
 
 function StatCard({
   label,
@@ -340,6 +430,12 @@ export function AffiliateDashboard({
               </p>
             ) : null}
 
+            {(nav === "dashboard" || nav === "profile") && (
+              <div className="mb-6">
+                <AffiliateShareCard account={account} />
+              </div>
+            )}
+
             {loading && nav === "dashboard" ? <DashboardSkeleton /> : null}
             {loading && (nav === "clicks" || nav === "codeUsage") ? (
               <ChartPanelSkeleton
@@ -538,14 +634,6 @@ export function AffiliateDashboard({
                       Login code
                     </dt>
                     <dd className="mt-1 text-sm tabular-nums">{account.code}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs uppercase tracking-[0.14em] text-[#8A8580]">
-                      Discount code
-                    </dt>
-                    <dd className="mt-1 text-sm">
-                      {account.discountCode} ({formatAffiliateDiscount(account)})
-                    </dd>
                   </div>
                   <div>
                     <dt className="text-xs uppercase tracking-[0.14em] text-[#8A8580]">
