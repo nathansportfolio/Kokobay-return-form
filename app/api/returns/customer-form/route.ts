@@ -8,6 +8,7 @@ import {
   isCustomerReturnWindowClosed,
   RETURN_WINDOW_EXPIRED_MESSAGE,
 } from "@/lib/returnEligibilityWindow";
+import { fetchShopifyFulfillmentDeliveryInfo } from "@/lib/shopifyFulfillmentDelivery";
 import { fetchReturnOrderFromShopify } from "@/lib/shopifyReturnOrderLookup";
 import { isUnitedKingdomShippingCountry } from "@/lib/ukShippingCountry";
 
@@ -50,7 +51,21 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      if (isCustomerReturnWindowClosed(shopify.createdAt)) {
+      const delivery = await fetchShopifyFulfillmentDeliveryInfo(
+        shopify.shopifyOrderId,
+      );
+      const isInternational = !isUnitedKingdomShippingCountry(
+        shopify.shippingCountry,
+        shopify.shippingCountryCode,
+      );
+      if (
+        isCustomerReturnWindowClosed({
+          orderCreatedAt: shopify.createdAt,
+          deliveredAt: delivery.deliveredAt,
+          fulfilledAt: delivery.fulfilledAt,
+          isInternational,
+        })
+      ) {
         return NextResponse.json(
           { ok: false, error: RETURN_WINDOW_EXPIRED_MESSAGE, code: "return_window_expired" },
           { status: 400 },

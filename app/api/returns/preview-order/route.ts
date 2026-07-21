@@ -10,10 +10,12 @@ import {
   isCustomerReturnWindowClosed,
   RETURN_WINDOW_EXPIRED_MESSAGE,
 } from "@/lib/returnEligibilityWindow";
+import { fetchShopifyFulfillmentDeliveryInfo } from "@/lib/shopifyFulfillmentDelivery";
 import {
   fetchReturnOrderFromShopify,
   shopifyOrderDisplayFromLookup,
 } from "@/lib/shopifyReturnOrderLookup";
+import { isUnitedKingdomShippingCountry } from "@/lib/ukShippingCountry";
 
 /**
  * GET /api/returns/preview-order?order=…&email=…
@@ -98,12 +100,29 @@ export async function GET(request: Request) {
           { status: 404, headers: { "Cache-Control": "no-store" } },
         );
       }
-      if (isCustomerReturnWindowClosed(result.createdAt)) {
+      const delivery = await fetchShopifyFulfillmentDeliveryInfo(
+        result.shopifyOrderId,
+      );
+      const isInternational = !isUnitedKingdomShippingCountry(
+        result.shippingCountry,
+        result.shippingCountryCode,
+      );
+      if (
+        isCustomerReturnWindowClosed({
+          orderCreatedAt: result.createdAt,
+          deliveredAt: delivery.deliveredAt,
+          fulfilledAt: delivery.fulfilledAt,
+          isInternational,
+        })
+      ) {
         logReturnOrderPreview("warn", "return_window_expired", {
           ...requestContext(),
           httpStatus: 400,
           shopifyOrderId: result.shopifyOrderId,
           orderCreatedAt: result.createdAt,
+          deliveredAt: delivery.deliveredAt,
+          fulfilledAt: delivery.fulfilledAt,
+          isInternational,
         });
         return NextResponse.json(
           {
