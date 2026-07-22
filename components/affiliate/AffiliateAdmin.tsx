@@ -5,11 +5,15 @@ import { Plus, Trash } from "@phosphor-icons/react";
 import {
   createAffiliateAccount,
   deleteAffiliateAccount,
+  fetchAffiliateAdminOverview,
   formatAffiliateDiscount,
-  listAffiliateAccounts,
+  formatGbp,
+  formatInt,
 } from "@/lib/affiliate/api";
 import type {
   AffiliateAccount,
+  AffiliateAdminOverview,
+  AffiliateAdminOverviewRow,
   AffiliateDiscountType,
 } from "@/lib/affiliate/types";
 
@@ -21,6 +25,26 @@ const MAX_DISCOUNT_PERCENT = 30;
 /** Affiliate commission hard cap. */
 const MAX_EARNINGS_PERCENT = 40;
 
+function OverviewStat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
+      <p className="text-sm text-[#7A746C]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-[#1A1A1A] sm:text-3xl">
+        {value}
+      </p>
+      {hint ? <p className="mt-1.5 text-xs text-[#8A8580]">{hint}</p> : null}
+    </div>
+  );
+}
+
 export function AffiliateAdmin({
   account,
   onLogout,
@@ -28,7 +52,7 @@ export function AffiliateAdmin({
   account: AffiliateAccount;
   onLogout: () => void;
 }) {
-  const [accounts, setAccounts] = useState<AffiliateAccount[]>([]);
+  const [overview, setOverview] = useState<AffiliateAdminOverview | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
 
@@ -48,13 +72,13 @@ export function AffiliateAdmin({
 
   const refresh = useCallback(async () => {
     setListError(null);
-    const result = await listAffiliateAccounts();
+    const result = await fetchAffiliateAdminOverview();
     if (!result.ok) {
       setListError(result.error);
-      setAccounts([]);
+      setOverview(null);
       return;
     }
-    setAccounts(result.accounts);
+    setOverview(result.overview);
   }, []);
 
   useEffect(() => {
@@ -77,6 +101,8 @@ export function AffiliateAdmin({
     setEarningsPercent("10");
   }
 
+  const affiliates: AffiliateAdminOverviewRow[] = overview?.affiliates ?? [];
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#F7F5F2] text-[#1A1A1A]">
       <header className="flex items-center justify-between border-b border-[#EBE6E0] bg-[#FBF9F7] px-4 py-4 sm:px-6">
@@ -95,7 +121,43 @@ export function AffiliateAdmin({
         </button>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
+        <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {loadingList && !overview ? (
+            <>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-[6.5rem] animate-pulse rounded-2xl border border-[#EBE6E0] bg-[#EBE6E0]/50"
+                />
+              ))}
+            </>
+          ) : (
+            <>
+              <OverviewStat
+                label="Total affiliate revenue"
+                value={formatGbp(overview?.totals?.revenue ?? 0)}
+                hint="Order subtotals from all affiliate discount codes"
+              />
+              <OverviewStat
+                label="Commission owed"
+                value={formatGbp(overview?.totals?.commissionOwed ?? 0)}
+                hint="Total commission across all affiliates"
+              />
+              <OverviewStat
+                label="Net after commission"
+                value={formatGbp(overview?.totals?.netRevenue ?? 0)}
+                hint="Revenue minus commission owed"
+              />
+              <OverviewStat
+                label="Attributed orders"
+                value={formatInt(overview?.totals?.orders ?? 0)}
+                hint={`${overview?.totals?.affiliateCount ?? 0} affiliate accounts`}
+              />
+            </>
+          )}
+        </section>
+
         <section className="rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)] sm:p-6">
           <p className="text-base text-[#1A1A1A]">Create affiliate account</p>
           <p className="mt-1 text-sm text-[#7A746C]">
@@ -335,7 +397,11 @@ export function AffiliateAdmin({
 
         <section className="mt-6 overflow-hidden rounded-2xl border border-[#EBE6E0] bg-white shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
           <div className="border-b border-[#EFEAE4] px-5 py-4">
-            <p className="text-base text-[#1A1A1A]">Accounts</p>
+            <p className="text-base text-[#1A1A1A]">Affiliates</p>
+            <p className="mt-1 text-sm text-[#7A746C]">
+              Revenue is attributed order subtotals; commission owed is what you
+              owe each affiliate.
+            </p>
           </div>
           {loadingList ? (
             <p className="px-5 py-8 text-sm text-[#7A746C]">Loading…</p>
@@ -343,58 +409,76 @@ export function AffiliateAdmin({
             <p className="px-5 py-8 text-sm text-rose-700" role="alert">
               {listError}
             </p>
-          ) : accounts.length === 0 ? (
+          ) : affiliates.length === 0 ? (
             <p className="px-5 py-8 text-sm text-[#7A746C]">No accounts yet.</p>
           ) : (
-            <ul className="divide-y divide-[#EFEAE4]">
-              {accounts.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <p className="font-medium">
-                      {a.displayName}
-                      {!a.active ? (
-                        <span className="ml-2 text-xs font-normal text-[#8A8580]">
-                          (disabled)
-                        </span>
-                      ) : null}
-                      {a.role === "admin" ? (
-                        <span className="ml-2 text-xs font-normal text-[#8B4A4A]">
-                          admin
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className="mt-0.5 text-sm text-[#7A746C]">
-                      Login <span className="tabular-nums">{a.code}</span> ·{" "}
-                      {a.discountCode} ({formatAffiliateDiscount(a)}) · earn{" "}
-                      {a.earningsPercent}% · max{" "}
-                      {a.maxUsesPerCustomer ?? "∞"}/customer
-                      {a.usageLimit != null ? ` · cap ${a.usageLimit}` : ""}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={a.id === account.id || !a.active}
-                    onClick={() => {
-                      void (async () => {
-                        const result = await deleteAffiliateAccount(a.id);
-                        if (!result.ok) {
-                          setListError(result.error);
-                          return;
-                        }
-                        await refresh();
-                      })();
-                    }}
-                    className="inline-flex items-center justify-center gap-1.5 self-start rounded-xl border border-[#E4DED6] px-3 py-2 text-sm text-[#8B4A4A] hover:bg-[#FDF6F6] disabled:opacity-40"
-                  >
-                    <Trash className="h-4 w-4" />
-                    Disable
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[40rem] text-left text-sm">
+                <thead className="bg-[#FBF9F7] text-[#7A746C]">
+                  <tr>
+                    <th className="px-5 py-3 font-medium">Affiliate</th>
+                    <th className="px-5 py-3 font-medium">Orders</th>
+                    <th className="px-5 py-3 font-medium">Revenue</th>
+                    <th className="px-5 py-3 font-medium">Commission owed</th>
+                    <th className="px-5 py-3 font-medium"> </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {affiliates.map((a) => (
+                    <tr key={a.id} className="border-t border-[#EFEAE4]">
+                      <td className="px-5 py-4 align-top">
+                        <p className="font-medium text-[#1A1A1A]">
+                          {a.displayName}
+                          {!a.active ? (
+                            <span className="ml-2 text-xs font-normal text-[#8A8580]">
+                              (disabled)
+                            </span>
+                          ) : null}
+                          {a.role === "admin" ? (
+                            <span className="ml-2 text-xs font-normal text-[#8B4A4A]">
+                              admin
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[#7A746C]">
+                          {a.discountCode} ({formatAffiliateDiscount(a)}) ·{" "}
+                          {a.earningsPercent}% commission
+                        </p>
+                      </td>
+                      <td className="px-5 py-4 tabular-nums align-top">
+                        {formatInt(a.orders)}
+                      </td>
+                      <td className="px-5 py-4 font-medium tabular-nums align-top">
+                        {formatGbp(a.revenue)}
+                      </td>
+                      <td className="px-5 py-4 font-medium tabular-nums align-top text-[#8B4A4A]">
+                        {formatGbp(a.commissionOwed)}
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <button
+                          type="button"
+                          disabled={a.id === account.id || !a.active}
+                          onClick={() => {
+                            void (async () => {
+                              const result = await deleteAffiliateAccount(a.id);
+                              if (!result.ok) {
+                                setListError(result.error);
+                                return;
+                              }
+                              await refresh();
+                            })();
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] px-3 py-2 text-sm text-[#8B4A4A] hover:bg-[#FDF6F6] disabled:opacity-40"
+                        >
+                          <Trash className="h-4 w-4" />
+                          Disable
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
       </main>

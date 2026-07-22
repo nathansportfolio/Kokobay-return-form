@@ -1,5 +1,6 @@
 import type {
   AffiliateAccount,
+  AffiliateAdminOverview,
   AffiliateDashboardData,
   AffiliateOrderRow,
   AffiliateRange,
@@ -158,6 +159,29 @@ export async function listAffiliateAccounts(): Promise<
   );
   if (!result.ok) return result;
   return { ok: true, accounts: result.data.accounts };
+}
+
+export async function fetchAffiliateAdminOverview(): Promise<
+  | { ok: true; overview: AffiliateAdminOverview }
+  | { ok: false; error: string }
+> {
+  const result = await affiliateFetch<AffiliateAdminOverview & { ok: true }>(
+    "/admin/overview",
+  );
+  if (!result.ok) return result;
+  const totals = result.data.totals;
+  const affiliates = result.data.affiliates;
+  if (!totals || !Array.isArray(affiliates)) {
+    return {
+      ok: false,
+      error:
+        "Admin overview is unavailable. Deploy the latest Kokobay API (GET /api/affiliate/admin/overview).",
+    };
+  }
+  return {
+    ok: true,
+    overview: { totals, affiliates },
+  };
 }
 
 export async function createAffiliateAccount(

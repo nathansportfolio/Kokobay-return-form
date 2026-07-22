@@ -75,3 +75,20 @@ export type CreateAffiliateInput = {
   earningsPercent: number;
   role?: AffiliateRole;
 };
+
+export type AffiliateAdminOverviewRow = AffiliateAccount & {
+  orders: number;
+  revenue: number;
+  commissionOwed: number;
+};
+
+export type AffiliateAdminOverview = {
+  totals: {
+    revenue: number;
+    commissionOwed: number;
+    orders: number;
+    netRevenue: number;
+    affiliateCount: number;
+  };
+  affiliates: AffiliateAdminOverviewRow[];
+};
