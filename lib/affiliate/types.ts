@@ -77,6 +77,7 @@ export type CreateAffiliateInput = {
 };
 
 export type AffiliateAdminOverviewRow = AffiliateAccount & {
+  clicks: number;
   orders: number;
   revenue: number;
   commissionOwed: number;
@@ -84,6 +85,7 @@ export type AffiliateAdminOverviewRow = AffiliateAccount & {
 
 export type AffiliateAdminOverview = {
   totals: {
+    clicks: number;
     revenue: number;
     commissionOwed: number;
     orders: number;

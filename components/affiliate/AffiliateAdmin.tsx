@@ -399,8 +399,8 @@ export function AffiliateAdmin({
           <div className="border-b border-[#EFEAE4] px-5 py-4">
             <p className="text-base text-[#1A1A1A]">Affiliates</p>
             <p className="mt-1 text-sm text-[#7A746C]">
-              Revenue is attributed order subtotals; commission owed is what you
-              owe each affiliate.
+              Clicks are tracked referral visits; revenue is attributed order
+              subtotals; commission owed is what you owe each affiliate.
             </p>
           </div>
           {loadingList ? (
@@ -413,10 +413,11 @@ export function AffiliateAdmin({
             <p className="px-5 py-8 text-sm text-[#7A746C]">No accounts yet.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem] text-left text-sm">
+              <table className="w-full min-w-[44rem] text-left text-sm">
                 <thead className="bg-[#FBF9F7] text-[#7A746C]">
                   <tr>
                     <th className="px-5 py-3 font-medium">Affiliate</th>
+                    <th className="px-5 py-3 font-medium">Clicks</th>
                     <th className="px-5 py-3 font-medium">Orders</th>
                     <th className="px-5 py-3 font-medium">Revenue</th>
                     <th className="px-5 py-3 font-medium">Commission owed</th>
@@ -444,6 +445,9 @@ export function AffiliateAdmin({
                           {a.discountCode} ({formatAffiliateDiscount(a)}) ·{" "}
                           {a.earningsPercent}% commission
                         </p>
+                      </td>
+                      <td className="px-5 py-4 tabular-nums align-top">
+                        {formatInt(a.clicks ?? 0)}
                       </td>
                       <td className="px-5 py-4 tabular-nums align-top">
                         {formatInt(a.orders)}

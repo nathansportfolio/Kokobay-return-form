@@ -13,6 +13,7 @@
 (function () {
   var TRACK_URL = "https://kokobay-mizd.vercel.app/api/affiliate/track";
   var STORAGE_KEY = "kb_affiliate_ref";
+  var VISITOR_KEY = "kb_affiliate_vid";
   var SESSION_KEY = "kb_affiliate_tracked";
   var COOKIE_DAYS = 30;
 
@@ -65,6 +66,40 @@
     return (getCookie(STORAGE_KEY) || "").trim().toUpperCase();
   }
 
+  function uuid() {
+    try {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+    } catch (e) {}
+    return (
+      "v_" +
+      Date.now().toString(36) +
+      "_" +
+      Math.random().toString(36).slice(2, 12)
+    );
+  }
+
+  function visitorId() {
+    try {
+      var existing = (localStorage.getItem(VISITOR_KEY) || "").trim();
+      if (existing) return existing;
+    } catch (e) {}
+    var fromCookie = (getCookie(VISITOR_KEY) || "").trim();
+    if (fromCookie) {
+      try {
+        localStorage.setItem(VISITOR_KEY, fromCookie);
+      } catch (e) {}
+      return fromCookie;
+    }
+    var id = uuid();
+    try {
+      localStorage.setItem(VISITOR_KEY, id);
+    } catch (e) {}
+    setCookie(VISITOR_KEY, id, 365);
+    return id;
+  }
+
   function alreadyTrackedThisSession(code) {
     try {
       return sessionStorage.getItem(SESSION_KEY) === code;
@@ -93,6 +128,7 @@
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       affiliateCode: code,
+      visitorId: visitorId(),
       url: window.location.href,
       referrer: document.referrer || "",
     }),
