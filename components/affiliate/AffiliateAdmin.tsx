@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash } from "@phosphor-icons/react";
+import { CaretDown, Check, Copy, Plus, Trash } from "@phosphor-icons/react";
 import {
   createAffiliateAccount,
   deleteAffiliateAccount,
@@ -20,10 +20,17 @@ import type {
 const inputClass =
   "mt-1.5 w-full rounded-xl border border-[#E4DED6] bg-[#FBF9F7] px-3.5 py-2.5 text-sm outline-none focus:border-[#E89292] focus:ring-2 focus:ring-[#E89292]/30";
 
+const STOREFRONT_BASE = "https://kokobay.co.uk";
+
 /** Customer-facing percentage discount hard cap. */
 const MAX_DISCOUNT_PERCENT = 30;
 /** Affiliate commission hard cap. */
 const MAX_EARNINGS_PERCENT = 40;
+
+function affiliateShareUrl(discountCode: string): string {
+  const code = discountCode.trim().toUpperCase();
+  return `${STOREFRONT_BASE}?ref=${encodeURIComponent(code)}`;
+}
 
 function OverviewStat({
   label,
@@ -41,6 +48,158 @@ function OverviewStat({
         {value}
       </p>
       {hint ? <p className="mt-1.5 text-xs text-[#8A8580]">{hint}</p> : null}
+    </div>
+  );
+}
+
+function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(id);
+  }, [copied]);
+
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8580]">
+        {label}
+      </p>
+      <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <p className="min-w-0 flex-1 break-all rounded-xl border border-[#E4DED6] bg-[#FBF9F7] px-3.5 py-2.5 text-sm font-medium text-[#1A1A1A]">
+          {value}
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            void (async () => {
+              try {
+                await navigator.clipboard.writeText(value);
+                setCopied(true);
+              } catch {
+                setCopied(false);
+              }
+            })();
+          }}
+          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3.5 text-sm text-[#3D3A36] shadow-sm hover:bg-[#FBF9F7]"
+        >
+          {copied ? (
+            <>
+              <Check className="h-4 w-4 text-emerald-600" weight="bold" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy className="h-4 w-4" />
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AffiliateAccordionRow({
+  affiliate: a,
+  selfId,
+  onDisable,
+}: {
+  affiliate: AffiliateAdminOverviewRow;
+  selfId: string;
+  onDisable: (id: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [disabling, setDisabling] = useState(false);
+  const shareUrl = affiliateShareUrl(a.discountCode);
+
+  return (
+    <div className="border-t border-[#EFEAE4]">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-start gap-3 px-5 py-4 text-left hover:bg-[#FBF9F7]/80"
+      >
+        <CaretDown
+          className={`mt-1 h-4 w-4 shrink-0 text-[#8A8580] transition-transform ${
+            open ? "rotate-0" : "-rotate-90"
+          }`}
+          weight="bold"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-[#1A1A1A]">
+            {a.displayName}
+            {!a.active ? (
+              <span className="ml-2 text-xs font-normal text-[#8A8580]">
+                (disabled)
+              </span>
+            ) : null}
+            {a.role === "admin" ? (
+              <span className="ml-2 text-xs font-normal text-[#8B4A4A]">
+                admin
+              </span>
+            ) : null}
+          </p>
+          <p className="mt-0.5 text-xs text-[#7A746C]">
+            {formatAffiliateDiscount(a)} off · {a.earningsPercent}% commission
+          </p>
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-xs text-[#8A8580]">Clicks</dt>
+              <dd className="mt-0.5 tabular-nums text-[#1A1A1A]">
+                {formatInt(a.clicks ?? 0)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[#8A8580]">Orders</dt>
+              <dd className="mt-0.5 tabular-nums text-[#1A1A1A]">
+                {formatInt(a.orders)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[#8A8580]">Revenue</dt>
+              <dd className="mt-0.5 font-medium tabular-nums text-[#1A1A1A]">
+                {formatGbp(a.revenue)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[#8A8580]">Commission owed</dt>
+              <dd className="mt-0.5 font-medium tabular-nums text-[#8B4A4A]">
+                {formatGbp(a.commissionOwed)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </button>
+
+      {open ? (
+        <div className="space-y-4 border-t border-[#F3EEE8] bg-[#FBF9F7]/60 px-5 py-4 sm:pl-12">
+          <CopyField label="Discount code" value={a.discountCode} />
+          <CopyField label="Share link" value={shareUrl} />
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              disabled={a.id === selfId || !a.active || disabling}
+              onClick={() => {
+                void (async () => {
+                  setDisabling(true);
+                  try {
+                    await onDisable(a.id);
+                  } finally {
+                    setDisabling(false);
+                  }
+                })();
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3 py-2 text-sm text-[#8B4A4A] hover:bg-[#FDF6F6] disabled:opacity-40"
+            >
+              <Trash className="h-4 w-4" />
+              Disable
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -399,8 +558,9 @@ export function AffiliateAdmin({
           <div className="border-b border-[#EFEAE4] px-5 py-4">
             <p className="text-base text-[#1A1A1A]">Affiliates</p>
             <p className="mt-1 text-sm text-[#7A746C]">
-              Clicks are tracked referral visits; revenue is attributed order
-              subtotals; commission owed is what you owe each affiliate.
+              Expand an affiliate to copy their discount code and share link.
+              Revenue is attributed order subtotals; commission owed is what you
+              owe each affiliate.
             </p>
           </div>
           {loadingList ? (
@@ -412,76 +572,22 @@ export function AffiliateAdmin({
           ) : affiliates.length === 0 ? (
             <p className="px-5 py-8 text-sm text-[#7A746C]">No accounts yet.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[44rem] text-left text-sm">
-                <thead className="bg-[#FBF9F7] text-[#7A746C]">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">Affiliate</th>
-                    <th className="px-5 py-3 font-medium">Clicks</th>
-                    <th className="px-5 py-3 font-medium">Orders</th>
-                    <th className="px-5 py-3 font-medium">Revenue</th>
-                    <th className="px-5 py-3 font-medium">Commission owed</th>
-                    <th className="px-5 py-3 font-medium"> </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {affiliates.map((a) => (
-                    <tr key={a.id} className="border-t border-[#EFEAE4]">
-                      <td className="px-5 py-4 align-top">
-                        <p className="font-medium text-[#1A1A1A]">
-                          {a.displayName}
-                          {!a.active ? (
-                            <span className="ml-2 text-xs font-normal text-[#8A8580]">
-                              (disabled)
-                            </span>
-                          ) : null}
-                          {a.role === "admin" ? (
-                            <span className="ml-2 text-xs font-normal text-[#8B4A4A]">
-                              admin
-                            </span>
-                          ) : null}
-                        </p>
-                        <p className="mt-0.5 text-xs text-[#7A746C]">
-                          {a.discountCode} ({formatAffiliateDiscount(a)}) ·{" "}
-                          {a.earningsPercent}% commission
-                        </p>
-                      </td>
-                      <td className="px-5 py-4 tabular-nums align-top">
-                        {formatInt(a.clicks ?? 0)}
-                      </td>
-                      <td className="px-5 py-4 tabular-nums align-top">
-                        {formatInt(a.orders)}
-                      </td>
-                      <td className="px-5 py-4 font-medium tabular-nums align-top">
-                        {formatGbp(a.revenue)}
-                      </td>
-                      <td className="px-5 py-4 font-medium tabular-nums align-top text-[#8B4A4A]">
-                        {formatGbp(a.commissionOwed)}
-                      </td>
-                      <td className="px-5 py-4 align-top">
-                        <button
-                          type="button"
-                          disabled={a.id === account.id || !a.active}
-                          onClick={() => {
-                            void (async () => {
-                              const result = await deleteAffiliateAccount(a.id);
-                              if (!result.ok) {
-                                setListError(result.error);
-                                return;
-                              }
-                              await refresh();
-                            })();
-                          }}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] px-3 py-2 text-sm text-[#8B4A4A] hover:bg-[#FDF6F6] disabled:opacity-40"
-                        >
-                          <Trash className="h-4 w-4" />
-                          Disable
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div>
+              {affiliates.map((a) => (
+                <AffiliateAccordionRow
+                  key={a.id}
+                  affiliate={a}
+                  selfId={account.id}
+                  onDisable={async (id) => {
+                    const result = await deleteAffiliateAccount(id);
+                    if (!result.ok) {
+                      setListError(result.error);
+                      return;
+                    }
+                    await refresh();
+                  }}
+                />
+              ))}
             </div>
           )}
         </section>
