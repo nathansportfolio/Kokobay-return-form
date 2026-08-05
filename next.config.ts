@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   async redirects() {
     return [
+      {
+        source: "/",
+        destination: "https://returns.reveni.io/koko-bay",
+        permanent: true,
+      },
       { source: "/returns/form", destination: "/", permanent: true },
       { source: "/operations", destination: "/", permanent: true },
       { source: "/returns", destination: "/", permanent: true },

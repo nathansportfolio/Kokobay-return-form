@@ -10,6 +10,7 @@ import {
   fetchAffiliateDashboard,
   fetchAffiliateEarnings,
   fetchAffiliateOrders,
+  fetchAffiliatePayments,
   formatAffiliateDiscount,
   formatChangePct,
   formatGbp,
@@ -20,6 +21,7 @@ import type {
   AffiliateDashboardData,
   AffiliateNavId,
   AffiliateOrderRow,
+  AffiliatePaymentsSummary,
   AffiliateRange,
   AffiliateSeriesPoint,
 } from "@/lib/affiliate/types";
@@ -291,6 +293,9 @@ export function AffiliateDashboard({
     earningsPercent: number;
     changePct: number | null;
   } | null>(null);
+  const [payments, setPayments] = useState<AffiliatePaymentsSummary | null>(
+    null,
+  );
 
   useEffect(() => {
     void (async () => {
@@ -336,6 +341,14 @@ export function AffiliateDashboard({
           setEarnings(null);
         } else {
           setEarnings(result);
+        }
+      } else if (nav === "payments") {
+        const result = await fetchAffiliatePayments();
+        if (!result.ok) {
+          setError(result.error);
+          setPayments(null);
+        } else {
+          setPayments(result.data);
         }
       }
 
@@ -610,13 +623,85 @@ export function AffiliateDashboard({
               </div>
             ) : null}
 
-            {!loading && nav === "payments" ? (
-              <section className="rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)] sm:p-6">
-                <p className="text-base text-[#1A1A1A]">Payments</p>
-                <p className="mt-2 text-sm text-[#7A746C]">
-                  Payout history isn&apos;t available from the API yet.
+            {!loading && nav === "payments" && payments ? (
+              <div className="space-y-6">
+                <p className="text-sm text-[#7A746C]">
+                  Cycle{" "}
+                  <span className="font-medium text-[#3D3A36]">
+                    {payments.period.label}
+                  </span>
+                  {payments.period.isOpen
+                    ? " · earnings accrue until UK midnight on the 24th"
+                    : " · previous cycle closed"}
                 </p>
-              </section>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
+                    <p className="text-sm text-[#7A746C]">This cycle</p>
+                    <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">
+                      {formatGbp(payments.periodEarnings)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
+                    <p className="text-sm text-[#7A746C]">Unpaid balance</p>
+                    <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-[#8B4A4A]">
+                      {formatGbp(payments.unpaidBalance)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
+                    <p className="text-sm text-[#7A746C]">Total paid</p>
+                    <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">
+                      {formatGbp(payments.lifetimePaid)}
+                    </p>
+                  </div>
+                </div>
+                <section className="overflow-hidden rounded-2xl border border-[#EBE6E0] bg-white shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
+                  <div className="border-b border-[#EFEAE4] px-5 py-4">
+                    <p className="text-base text-[#1A1A1A]">Payout history</p>
+                  </div>
+                  {payments.payouts.length === 0 ? (
+                    <p className="px-5 py-8 text-sm text-[#7A746C]">
+                      No payouts recorded yet.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="bg-[#FBF9F7] text-xs uppercase tracking-[0.12em] text-[#8A8580]">
+                          <tr>
+                            <th className="px-5 py-3 font-medium">Date</th>
+                            <th className="px-5 py-3 font-medium">Amount</th>
+                            <th className="px-5 py-3 font-medium">Note</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {payments.payouts.map((p) => (
+                            <tr
+                              key={p.id}
+                              className="border-t border-[#F3EEE8]"
+                            >
+                              <td className="px-5 py-3 text-[#3D3A36]">
+                                {new Date(p.paidAt).toLocaleString("en-GB", {
+                                  timeZone: "Europe/London",
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </td>
+                              <td className="px-5 py-3 font-medium tabular-nums">
+                                {formatGbp(p.amount)}
+                              </td>
+                              <td className="px-5 py-3 text-[#7A746C]">
+                                {p.note || "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              </div>
             ) : null}
 
             {!loading && nav === "profile" ? (

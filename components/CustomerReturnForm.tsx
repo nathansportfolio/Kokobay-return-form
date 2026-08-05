@@ -42,7 +42,7 @@ ATLANTIC STREET
 ALTRINCHAM
 WA14 5NQ`;
 
-const INPOST_RETURNS_URL = "https://returns.inpost.co.uk/kokobayreturns";
+const REVENI_RETURNS_URL = "https://returns.reveni.io/koko-bay";
 
 const SUCCESS_CARD_CLASS =
   "rounded-2xl border border-zinc-200/90 bg-white p-6 text-zinc-900 shadow-[0_4px_28px_-6px_rgba(0,0,0,0.08)] sm:p-8 dark:border-zinc-700/60 dark:bg-zinc-950 dark:text-zinc-50 dark:shadow-[0_4px_28px_-6px_rgba(0,0,0,0.35)]";
@@ -560,7 +560,7 @@ export function CustomerReturnForm() {
       toast.success("Return form submitted", {
         description:
           data.returnDeliveryFlow === "inpost"
-            ? "Use InPost to drop off your return."
+            ? "Continue with your return on Reveni."
             : "We’ll email you when we’ve received your parcel.",
       });
     } finally {
@@ -598,20 +598,20 @@ export function CustomerReturnForm() {
             <div className="mt-8 space-y-6 border-t border-zinc-200/80 pt-8 dark:border-zinc-700/50">
               <div className="space-y-3">
                 <h3 className="text-xl font-medium leading-snug tracking-normal text-zinc-900 sm:text-[1.375rem] dark:text-zinc-50">
-                  Returns are completed through InPost
+                  Complete your return with Reveni
                 </h3>
                 <p className={SUCCESS_BODY_CLASS}>
-                  Please click the button below to find your nearest locker and generate
-                  a QR code for a quick, easy return.
+                  Please click the button below to continue your return and arrange
+                  drop-off.
                 </p>
               </div>
               <a
-                href={INPOST_RETURNS_URL}
+                href={REVENI_RETURNS_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={SUCCESS_CTA_CLASS}
               >
-                Get started with your InPost return
+                Continue to Reveni returns
               </a>
               <p className={`${SUCCESS_BODY_CLASS} pt-1`}>
                 We will email you when we have your parcel. Refunds are usually processed

@@ -9,12 +9,14 @@ import {
   formatAffiliateDiscount,
   formatGbp,
   formatInt,
+  recordAffiliatePayout,
 } from "@/lib/affiliate/api";
 import type {
   AffiliateAccount,
   AffiliateAdminOverview,
   AffiliateAdminOverviewRow,
   AffiliateDiscountType,
+  AffiliatePayoutPeriod,
 } from "@/lib/affiliate/types";
 
 const inputClass =
@@ -30,6 +32,32 @@ const MAX_EARNINGS_PERCENT = 40;
 function affiliateShareUrl(discountCode: string): string {
   const code = discountCode.trim().toUpperCase();
   return `${STOREFRONT_BASE}?ref=${encodeURIComponent(code)}`;
+}
+
+function formatPaidAt(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-GB", {
+    timeZone: "Europe/London",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function paysAfterLabel(period: AffiliatePayoutPeriod | null | undefined): string {
+  if (!period?.paysAfter) return "";
+  const d = new Date(period.paysAfter);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", {
+    timeZone: "Europe/London",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function OverviewStat({
@@ -101,18 +129,155 @@ function CopyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function AffiliateAccordionRow({
-  affiliate: a,
-  selfId,
-  onDisable,
+function PayAffiliateModal({
+  affiliate,
+  onClose,
+  onPaid,
 }: {
   affiliate: AffiliateAdminOverviewRow;
+  onClose: () => void;
+  onPaid: () => Promise<void>;
+}) {
+  const [amount, setAmount] = useState(
+    affiliate.commissionOwed > 0 ? String(affiliate.commissionOwed) : "",
+  );
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pay-affiliate-title"
+        className="w-full max-w-md rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-xl sm:p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p id="pay-affiliate-title" className="text-base text-[#1A1A1A]">
+          Pay {affiliate.displayName}
+        </p>
+        <p className="mt-1 text-sm text-[#7A746C]">
+          Unpaid balance {formatGbp(affiliate.commissionOwed)}. Record what you
+          actually paid — this is timestamped in Mongo.
+        </p>
+
+        <form
+          className="mt-5 space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void (async () => {
+              setError(null);
+              const value = Number.parseFloat(amount);
+              if (!Number.isFinite(value) || value <= 0) {
+                setError("Enter an amount greater than zero.");
+                return;
+              }
+              setBusy(true);
+              const result = await recordAffiliatePayout({
+                affiliateId: affiliate.id,
+                amount: value,
+                note: note.trim() || undefined,
+              });
+              setBusy(false);
+              if (!result.ok) {
+                setError(result.error);
+                return;
+              }
+              await onPaid();
+              onClose();
+            })();
+          }}
+        >
+          <div>
+            <label htmlFor="pay-amount" className="text-sm font-medium">
+              Amount paid (£)
+            </label>
+            <input
+              id="pay-amount"
+              type="number"
+              min={0.01}
+              step={0.01}
+              required
+              autoFocus
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className={inputClass}
+              placeholder="0.00"
+            />
+          </div>
+          <div>
+            <label htmlFor="pay-note" className="text-sm font-medium">
+              Note (optional)
+            </label>
+            <input
+              id="pay-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className={inputClass}
+              placeholder="Bank transfer, PayPal…"
+              maxLength={200}
+            />
+          </div>
+          {error ? (
+            <p className="text-sm text-rose-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="rounded-xl border border-[#E4DED6] bg-white px-4 py-2.5 text-sm text-[#3D3A36] hover:bg-[#FBF9F7] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-xl bg-[#1A1A1A] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+            >
+              {busy ? "Saving…" : "Record payment"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AffiliateAccordionRow({
+  affiliate: a,
+  period,
+  selfId,
+  onDisable,
+  onPay,
+}: {
+  affiliate: AffiliateAdminOverviewRow;
+  period: AffiliatePayoutPeriod | null | undefined;
   selfId: string;
   onDisable: (id: string) => Promise<void>;
+  onPay: (affiliate: AffiliateAdminOverviewRow) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [disabling, setDisabling] = useState(false);
   const shareUrl = affiliateShareUrl(a.discountCode);
+  const dueHint = period?.isOpen
+    ? `This cycle · due after ${paysAfterLabel(period)}`
+    : "Due now";
 
   return (
     <div className="border-t border-[#EFEAE4]">
@@ -159,13 +324,13 @@ function AffiliateAccordionRow({
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-[#8A8580]">Revenue</dt>
+              <dt className="text-xs text-[#8A8580]">This cycle</dt>
               <dd className="mt-0.5 font-medium tabular-nums text-[#1A1A1A]">
-                {formatGbp(a.revenue)}
+                {formatGbp(a.periodEarnings ?? 0)}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-[#8A8580]">Commission owed</dt>
+              <dt className="text-xs text-[#8A8580]">Unpaid</dt>
               <dd className="mt-0.5 font-medium tabular-nums text-[#8B4A4A]">
                 {formatGbp(a.commissionOwed)}
               </dd>
@@ -178,7 +343,36 @@ function AffiliateAccordionRow({
         <div className="space-y-4 border-t border-[#F3EEE8] bg-[#FBF9F7]/60 px-5 py-4 sm:pl-12">
           <CopyField label="Discount code" value={a.discountCode} />
           <CopyField label="Share link" value={shareUrl} />
-          <div className="flex justify-end pt-1">
+          {a.role === "affiliate" ? (
+            <div className="rounded-xl border border-[#E4DED6] bg-white px-3.5 py-3 text-sm">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8580]">
+                Payouts
+              </p>
+              <p className="mt-1.5 text-[#3D3A36]">
+                Unpaid {formatGbp(a.commissionOwed)}
+                <span className="text-[#8A8580]"> · {dueHint}</span>
+              </p>
+              <p className="mt-1 text-xs text-[#8A8580]">
+                Last paid{" "}
+                {a.lastPaidAt
+                  ? `${formatGbp(a.lastPaidAmount ?? 0)} on ${formatPaidAt(a.lastPaidAt)}`
+                  : "—"}
+                {a.lifetimePaid && a.lifetimePaid > 0
+                  ? ` · Total paid ${formatGbp(a.lifetimePaid)}`
+                  : ""}
+              </p>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap justify-end gap-2 pt-1">
+            {a.role === "affiliate" && a.active ? (
+              <button
+                type="button"
+                onClick={() => onPay(a)}
+                className="inline-flex items-center justify-center rounded-xl bg-[#1A1A1A] px-3.5 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                Pay affiliate
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={a.id === selfId || !a.active || disabling}
@@ -214,6 +408,9 @@ export function AffiliateAdmin({
   const [overview, setOverview] = useState<AffiliateAdminOverview | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
+  const [payTarget, setPayTarget] = useState<AffiliateAdminOverviewRow | null>(
+    null,
+  );
 
   const [code, setCode] = useState("");
   const [pin, setPin] = useState("");
@@ -261,6 +458,7 @@ export function AffiliateAdmin({
   }
 
   const affiliates: AffiliateAdminOverviewRow[] = overview?.affiliates ?? [];
+  const period = overview?.period;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#F7F5F2] text-[#1A1A1A]">
@@ -281,6 +479,16 @@ export function AffiliateAdmin({
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
+        {period ? (
+          <p className="mb-4 text-sm text-[#7A746C]">
+            Payout cycle{" "}
+            <span className="font-medium text-[#3D3A36]">{period.label}</span>
+            {period.isOpen
+              ? ` · accrues until ${paysAfterLabel(period)} (UK midnight)`
+              : " · period closed — pay unpaid balances"}
+          </p>
+        ) : null}
+
         <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {loadingList && !overview ? (
             <>
@@ -299,14 +507,18 @@ export function AffiliateAdmin({
                 hint="Order subtotals from all affiliate discount codes"
               />
               <OverviewStat
-                label="Commission owed"
+                label="Unpaid commission"
                 value={formatGbp(overview?.totals?.commissionOwed ?? 0)}
-                hint="Total commission across all affiliates"
+                hint={
+                  period
+                    ? `This cycle ${formatGbp(overview?.totals?.periodEarnings ?? 0)} · paid ${formatGbp(overview?.totals?.lifetimePaid ?? 0)}`
+                    : "Earnings minus recorded payouts"
+                }
               />
               <OverviewStat
-                label="Net after commission"
+                label="Net after unpaid"
                 value={formatGbp(overview?.totals?.netRevenue ?? 0)}
-                hint="Revenue minus commission owed"
+                hint="Revenue minus unpaid commission"
               />
               <OverviewStat
                 label="Attributed orders"
@@ -558,9 +770,9 @@ export function AffiliateAdmin({
           <div className="border-b border-[#EFEAE4] px-5 py-4">
             <p className="text-base text-[#1A1A1A]">Affiliates</p>
             <p className="mt-1 text-sm text-[#7A746C]">
-              Expand an affiliate to copy their discount code and share link.
-              Revenue is attributed order subtotals; commission owed is what you
-              owe each affiliate.
+              Expand an affiliate to copy their link or record a payout. Unpaid
+              is earnings since 30 Jul 2026 minus what you&apos;ve marked as
+              paid.
             </p>
           </div>
           {loadingList ? (
@@ -577,7 +789,9 @@ export function AffiliateAdmin({
                 <AffiliateAccordionRow
                   key={a.id}
                   affiliate={a}
+                  period={period}
                   selfId={account.id}
+                  onPay={setPayTarget}
                   onDisable={async (id) => {
                     const result = await deleteAffiliateAccount(id);
                     if (!result.ok) {
@@ -592,6 +806,14 @@ export function AffiliateAdmin({
           )}
         </section>
       </main>
+
+      {payTarget ? (
+        <PayAffiliateModal
+          affiliate={payTarget}
+          onClose={() => setPayTarget(null)}
+          onPaid={refresh}
+        />
+      ) : null}
     </div>
   );
 }

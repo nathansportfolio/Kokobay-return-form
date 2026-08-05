@@ -3,6 +3,8 @@ import type {
   AffiliateAdminOverview,
   AffiliateDashboardData,
   AffiliateOrderRow,
+  AffiliatePaymentsSummary,
+  AffiliatePayoutRow,
   AffiliateRange,
   AffiliateSeriesPoint,
   CreateAffiliateInput,
@@ -180,7 +182,11 @@ export async function fetchAffiliateAdminOverview(): Promise<
   }
   return {
     ok: true,
-    overview: { totals, affiliates },
+    overview: {
+      totals,
+      affiliates,
+      period: result.data.period,
+    },
   };
 }
 
@@ -327,4 +333,45 @@ export async function fetchAffiliateEarnings(range: AffiliateRange): Promise<
     earningsPercent: result.data.earningsPercent,
     changePct: result.data.changePct,
   };
+}
+
+export async function fetchAffiliatePayments(): Promise<
+  | { ok: true; data: AffiliatePaymentsSummary }
+  | { ok: false; error: string }
+> {
+  const result = await affiliateFetch<AffiliatePaymentsSummary & { ok: true }>(
+    "/payments",
+  );
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: {
+      period: result.data.period,
+      periodEarnings: result.data.periodEarnings,
+      unpaidBalance: result.data.unpaidBalance,
+      lifetimePaid: result.data.lifetimePaid,
+      lastPaidAt: result.data.lastPaidAt,
+      lastPaidAmount: result.data.lastPaidAmount,
+      payouts: result.data.payouts ?? [],
+    },
+  };
+}
+
+export async function recordAffiliatePayout(input: {
+  affiliateId: string;
+  amount: number;
+  note?: string;
+}): Promise<
+  | { ok: true; payout: AffiliatePayoutRow }
+  | { ok: false; error: string }
+> {
+  const result = await affiliateFetch<{ ok: true; payout: AffiliatePayoutRow }>(
+    "/admin/payouts",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+  if (!result.ok) return result;
+  return { ok: true, payout: result.data.payout };
 }

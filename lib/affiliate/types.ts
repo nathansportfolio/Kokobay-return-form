@@ -76,18 +76,57 @@ export type CreateAffiliateInput = {
   role?: AffiliateRole;
 };
 
+export type AffiliatePayoutPeriod = {
+  from: string;
+  to: string;
+  isOpen: boolean;
+  label: string;
+  paysAfter: string;
+};
+
+export type AffiliatePayoutRow = {
+  id: string;
+  affiliateId: string;
+  amount: number;
+  paidAt: string;
+  note: string | null;
+  recordedBy: {
+    id: string;
+    displayName: string;
+  } | null;
+  createdAt: string;
+};
+
+export type AffiliatePaymentsSummary = {
+  period: AffiliatePayoutPeriod;
+  periodEarnings: number;
+  unpaidBalance: number;
+  lifetimePaid: number;
+  lastPaidAt: string | null;
+  lastPaidAmount: number | null;
+  payouts: AffiliatePayoutRow[];
+};
+
 export type AffiliateAdminOverviewRow = AffiliateAccount & {
   clicks: number;
   orders: number;
   revenue: number;
+  /** Unpaid commission (earnings since cycle start − payouts). */
   commissionOwed: number;
+  periodEarnings?: number;
+  lifetimePaid?: number;
+  lastPaidAt?: string | null;
+  lastPaidAmount?: number | null;
 };
 
 export type AffiliateAdminOverview = {
+  period?: AffiliatePayoutPeriod;
   totals: {
     clicks: number;
     revenue: number;
     commissionOwed: number;
+    periodEarnings?: number;
+    lifetimePaid?: number;
     orders: number;
     netRevenue: number;
     affiliateCount: number;
