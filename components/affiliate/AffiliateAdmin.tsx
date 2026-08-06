@@ -310,7 +310,7 @@ function AffiliateAccordionRow({
           <p className="mt-0.5 text-xs text-[#7A746C]">
             {formatAffiliateDiscount(a)} off · {a.earningsPercent}% commission
           </p>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-5">
             <div>
               <dt className="text-xs text-[#8A8580]">Clicks</dt>
               <dd className="mt-0.5 tabular-nums text-[#1A1A1A]">
@@ -321,6 +321,12 @@ function AffiliateAccordionRow({
               <dt className="text-xs text-[#8A8580]">Orders</dt>
               <dd className="mt-0.5 tabular-nums text-[#1A1A1A]">
                 {formatInt(a.orders)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[#8A8580]">Revenue</dt>
+              <dd className="mt-0.5 font-medium tabular-nums text-[#1A1A1A]">
+                {formatGbp(a.revenue ?? 0)}
               </dd>
             </div>
             <div>
