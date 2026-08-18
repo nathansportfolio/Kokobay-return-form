@@ -1,21 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CaretDown, Check, Copy, Plus, Trash } from "@phosphor-icons/react";
+import { CaretDown, Check, Copy, Key, Plus, Printer, Trash } from "@phosphor-icons/react";
 import {
   createAffiliateAccount,
   deleteAffiliateAccount,
   fetchAffiliateAdminOverview,
+  fetchAffiliateInvoicesForAdmin,
   formatAffiliateDiscount,
   formatGbp,
   formatInt,
+  openAffiliateInvoicePdf,
+  printAffiliateInvoice,
   recordAffiliatePayout,
+  updateAffiliateAccountPin,
 } from "@/lib/affiliate/api";
 import type {
   AffiliateAccount,
   AffiliateAdminOverview,
   AffiliateAdminOverviewRow,
   AffiliateDiscountType,
+  AffiliateInvoiceRow,
   AffiliatePayoutPeriod,
 } from "@/lib/affiliate/types";
 
@@ -46,6 +51,21 @@ function formatPaidAt(iso: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function payoutDetailsReady(
+  details: AffiliateAdminOverviewRow["payoutDetails"],
+): boolean {
+  if (!details) return false;
+  return Boolean(
+    details.legalName?.trim() &&
+      details.addressLine1?.trim() &&
+      details.city?.trim() &&
+      details.postcode?.trim() &&
+      details.accountName?.trim() &&
+      details.sortCode?.trim() &&
+      details.accountNumber?.trim(),
+  );
 }
 
 function paysAfterLabel(period: AffiliatePayoutPeriod | null | undefined): string {
@@ -259,25 +279,178 @@ function PayAffiliateModal({
   );
 }
 
+function ChangePinModal({
+  affiliate,
+  onClose,
+}: {
+  affiliate: AffiliateAdminOverviewRow;
+  onClose: () => void;
+}) {
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="change-pin-title"
+        className="w-full max-w-md rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-xl sm:p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p id="change-pin-title" className="text-base text-[#1A1A1A]">
+          Change PIN for {affiliate.displayName}
+        </p>
+        <p className="mt-1 text-sm text-[#7A746C]">
+          Login code {affiliate.code}. The new PIN replaces their current one
+          immediately.
+        </p>
+
+        <form
+          className="mt-5 space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void (async () => {
+              setError(null);
+              setOkMsg(null);
+              if (!/^\d{4,8}$/.test(pin)) {
+                setError("PIN must be 4–8 digits.");
+                return;
+              }
+              if (pin !== confirmPin) {
+                setError("PINs do not match.");
+                return;
+              }
+              setBusy(true);
+              const result = await updateAffiliateAccountPin(affiliate.id, pin);
+              setBusy(false);
+              if (!result.ok) {
+                setError(result.error);
+                return;
+              }
+              setOkMsg("PIN updated.");
+              window.setTimeout(() => onClose(), 700);
+            })();
+          }}
+        >
+          <div>
+            <label htmlFor="new-pin" className="text-sm font-medium">
+              New PIN (4–8 digits)
+            </label>
+            <input
+              id="new-pin"
+              inputMode="numeric"
+              maxLength={8}
+              autoFocus
+              value={pin}
+              onChange={(e) =>
+                setPin(e.target.value.replace(/\D/g, "").slice(0, 8))
+              }
+              className={`${inputClass} tracking-[0.3em]`}
+              placeholder="1234"
+            />
+          </div>
+          <div>
+            <label htmlFor="confirm-pin" className="text-sm font-medium">
+              Confirm PIN
+            </label>
+            <input
+              id="confirm-pin"
+              inputMode="numeric"
+              maxLength={8}
+              value={confirmPin}
+              onChange={(e) =>
+                setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 8))
+              }
+              className={`${inputClass} tracking-[0.3em]`}
+              placeholder="1234"
+            />
+          </div>
+          {error ? (
+            <p className="text-sm text-rose-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {okMsg ? (
+            <p className="text-sm text-emerald-700" role="status">
+              {okMsg}
+            </p>
+          ) : null}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="rounded-xl border border-[#E4DED6] bg-white px-4 py-2.5 text-sm text-[#3D3A36] hover:bg-[#FBF9F7] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-xl bg-[#1A1A1A] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+            >
+              {busy ? "Saving…" : "Update PIN"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function AffiliateAccordionRow({
   affiliate: a,
   period,
   selfId,
   onDisable,
   onPay,
+  onChangePin,
 }: {
   affiliate: AffiliateAdminOverviewRow;
   period: AffiliatePayoutPeriod | null | undefined;
   selfId: string;
   onDisable: (id: string) => Promise<void>;
   onPay: (affiliate: AffiliateAdminOverviewRow) => void;
+  onChangePin: (affiliate: AffiliateAdminOverviewRow) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [disabling, setDisabling] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [invoices, setInvoices] = useState<AffiliateInvoiceRow[] | null>(null);
   const shareUrl = affiliateShareUrl(a.discountCode);
   const dueHint = period?.isOpen
     ? `This cycle · due after ${paysAfterLabel(period)}`
     : "Due now";
+  const canPrint =
+    a.role === "affiliate" &&
+    a.active &&
+    a.commissionOwed > 0 &&
+    payoutDetailsReady(a.payoutDetails);
+
+  useEffect(() => {
+    if (!open || a.role !== "affiliate") return;
+    void (async () => {
+      const result = await fetchAffiliateInvoicesForAdmin(a.id);
+      if (result.ok) setInvoices(result.invoices);
+    })();
+  }, [open, a.id, a.role]);
 
   return (
     <div className="border-t border-[#EFEAE4]">
@@ -367,17 +540,102 @@ function AffiliateAccordionRow({
                   ? ` · Total paid ${formatGbp(a.lifetimePaid)}`
                   : ""}
               </p>
+              {a.payoutDetails && payoutDetailsReady(a.payoutDetails) ? (
+                <dl className="mt-3 grid gap-1 text-xs text-[#7A746C]">
+                  <div>
+                    {a.payoutDetails.legalName} · {a.payoutDetails.city}{" "}
+                    {a.payoutDetails.postcode}
+                  </div>
+                  <div>
+                    {a.payoutDetails.accountName} · {a.payoutDetails.sortCode} ·{" "}
+                    {a.payoutDetails.accountNumber}
+                  </div>
+                </dl>
+              ) : (
+                <p className="mt-2 text-xs text-[#8B4A4A]">
+                  No address/bank details on file yet — they need to add these
+                  in Profile before you can print an invoice.
+                </p>
+              )}
             </div>
+          ) : null}
+          {a.role === "affiliate" && invoices && invoices.length > 0 ? (
+            <div className="rounded-xl border border-[#E4DED6] bg-white px-3.5 py-3 text-sm">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8580]">
+                Invoices
+              </p>
+              <ul className="mt-2 space-y-2">
+                {invoices.map((inv) => (
+                  <li
+                    key={inv.id}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="min-w-0 truncate text-[#3D3A36]">
+                      {inv.invoiceNumber} · {formatGbp(inv.amount)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void (async () => {
+                          const result = await openAffiliateInvoicePdf(inv.id);
+                          if (!result.ok) setActionError(result.error);
+                        })();
+                      }}
+                      className="shrink-0 rounded-lg border border-[#E4DED6] bg-white px-2.5 py-1 text-xs text-[#3D3A36] hover:bg-[#FBF9F7]"
+                    >
+                      View PDF
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {actionError ? (
+            <p className="text-sm text-rose-700" role="alert">
+              {actionError}
+            </p>
           ) : null}
           <div className="flex flex-wrap justify-end gap-2 pt-1">
             {a.role === "affiliate" && a.active ? (
-              <button
-                type="button"
-                onClick={() => onPay(a)}
-                className="inline-flex items-center justify-center rounded-xl bg-[#1A1A1A] px-3.5 py-2 text-sm font-medium text-white hover:opacity-90"
-              >
-                Pay affiliate
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => onChangePin(a)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3.5 py-2 text-sm font-medium text-[#3D3A36] hover:bg-[#FBF9F7]"
+                >
+                  <Key className="h-4 w-4" />
+                  Change PIN
+                </button>
+                <button
+                  type="button"
+                  disabled={!canPrint || printing}
+                  onClick={() => {
+                    void (async () => {
+                      setActionError(null);
+                      setPrinting(true);
+                      const result = await printAffiliateInvoice(a.id);
+                      setPrinting(false);
+                      if (!result.ok) {
+                        setActionError(result.error);
+                        return;
+                      }
+                      const listed = await fetchAffiliateInvoicesForAdmin(a.id);
+                      if (listed.ok) setInvoices(listed.invoices);
+                    })();
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3.5 py-2 text-sm font-medium text-[#3D3A36] hover:bg-[#FBF9F7] disabled:opacity-40"
+                >
+                  <Printer className="h-4 w-4" />
+                  {printing ? "Preparing…" : "Print invoice"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPay(a)}
+                  className="inline-flex items-center justify-center rounded-xl bg-[#1A1A1A] px-3.5 py-2 text-sm font-medium text-white hover:opacity-90"
+                >
+                  Pay affiliate
+                </button>
+              </>
             ) : null}
             <button
               type="button"
@@ -415,6 +673,9 @@ export function AffiliateAdmin({
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [payTarget, setPayTarget] = useState<AffiliateAdminOverviewRow | null>(
+    null,
+  );
+  const [pinTarget, setPinTarget] = useState<AffiliateAdminOverviewRow | null>(
     null,
   );
 
@@ -798,6 +1059,7 @@ export function AffiliateAdmin({
                   period={period}
                   selfId={account.id}
                   onPay={setPayTarget}
+                  onChangePin={setPinTarget}
                   onDisable={async (id) => {
                     const result = await deleteAffiliateAccount(id);
                     if (!result.ok) {
@@ -818,6 +1080,12 @@ export function AffiliateAdmin({
           affiliate={payTarget}
           onClose={() => setPayTarget(null)}
           onPaid={refresh}
+        />
+      ) : null}
+      {pinTarget ? (
+        <ChangePinModal
+          affiliate={pinTarget}
+          onClose={() => setPinTarget(null)}
         />
       ) : null}
     </div>

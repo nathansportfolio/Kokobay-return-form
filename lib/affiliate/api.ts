@@ -2,8 +2,10 @@ import type {
   AffiliateAccount,
   AffiliateAdminOverview,
   AffiliateDashboardData,
+  AffiliateInvoiceRow,
   AffiliateOrderRow,
   AffiliatePaymentsSummary,
+  AffiliatePayoutDetails,
   AffiliatePayoutRow,
   AffiliateRange,
   AffiliateSeriesPoint,
@@ -223,6 +225,21 @@ export async function deleteAffiliateAccount(
   return { ok: true, account: result.data.account };
 }
 
+export async function updateAffiliateAccountPin(
+  id: string,
+  pin: string,
+): Promise<{ ok: true; account: AffiliateAccount } | { ok: false; error: string }> {
+  const result = await affiliateFetch<{ ok: true; account: AffiliateAccount }>(
+    `/accounts/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ pin }),
+    },
+  );
+  if (!result.ok) return result;
+  return { ok: true, account: result.data.account };
+}
+
 export async function fetchAffiliateDashboard(
   range: AffiliateRange,
 ): Promise<
@@ -353,6 +370,7 @@ export async function fetchAffiliatePayments(): Promise<
       lastPaidAt: result.data.lastPaidAt,
       lastPaidAmount: result.data.lastPaidAmount,
       payouts: result.data.payouts ?? [],
+      invoices: result.data.invoices ?? [],
     },
   };
 }
@@ -374,4 +392,114 @@ export async function recordAffiliatePayout(input: {
   );
   if (!result.ok) return result;
   return { ok: true, payout: result.data.payout };
+}
+
+export async function updateAffiliatePayoutDetails(
+  input: Omit<AffiliatePayoutDetails, "updatedAt">,
+): Promise<
+  | { ok: true; account: AffiliateAccount }
+  | { ok: false; error: string }
+> {
+  const result = await affiliateFetch<{
+    ok: true;
+    account: AffiliateAccount;
+  }>("/me", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  if (!result.ok) return result;
+  return { ok: true, account: result.data.account };
+}
+
+export async function fetchAffiliateInvoicesForAdmin(
+  affiliateId: string,
+): Promise<
+  | { ok: true; invoices: AffiliateInvoiceRow[] }
+  | { ok: false; error: string }
+> {
+  const result = await affiliateFetch<{ ok: true; invoices: AffiliateInvoiceRow[] }>(
+    `/admin/invoices?affiliateId=${encodeURIComponent(affiliateId)}`,
+  );
+  if (!result.ok) return result;
+  return { ok: true, invoices: result.data.invoices ?? [] };
+}
+
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      return fallback;
+    }
+  }
+  const plain = /filename="?([^"]+)"?/i.exec(header);
+  return plain?.[1]?.trim() || fallback;
+}
+
+async function openAffiliatePdf(
+  path: string,
+  init?: RequestInit,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type") && init?.body) {
+    headers.set("Content-Type", "application/json");
+  }
+  const token = readAffiliateSessionToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  let res: Response;
+  try {
+    res = await fetch(`/api/affiliate${path}`, {
+      ...init,
+      headers,
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, error: "Could not reach affiliate API." };
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!res.ok || !contentType.includes("pdf")) {
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    return {
+      ok: false,
+      error: data.error ?? `Could not open invoice (${res.status})`,
+    };
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const filename = filenameFromDisposition(
+    res.headers.get("content-disposition"),
+    "KOKO-BAY-invoice.pdf",
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return { ok: true };
+}
+
+export async function openAffiliateInvoicePdf(
+  invoiceId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  return openAffiliatePdf(`/invoices/${encodeURIComponent(invoiceId)}/pdf`);
+}
+
+export async function printAffiliateInvoice(
+  affiliateId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  return openAffiliatePdf("/admin/invoices", {
+    method: "POST",
+    body: JSON.stringify({ affiliateId }),
+  });
 }

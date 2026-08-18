@@ -75,6 +75,10 @@ export async function proxyKokobayRequest(
   } else {
     outHeaders.set("Content-Type", "application/json");
   }
+  const contentDisposition = upstream.headers.get("content-disposition");
+  if (contentDisposition) {
+    outHeaders.set("Content-Disposition", contentDisposition);
+  }
   outHeaders.set("Cache-Control", "no-store");
 
   const retryAfter = upstream.headers.get("retry-after");

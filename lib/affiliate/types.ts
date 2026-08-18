@@ -20,6 +20,21 @@ export type AffiliateAccount = {
   active: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+  payoutDetails?: AffiliatePayoutDetails | null;
+};
+
+export type AffiliatePayoutDetails = {
+  legalName: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  postcode: string;
+  country: string;
+  accountName: string;
+  sortCode: string;
+  accountNumber: string;
+  iban: string | null;
+  updatedAt?: string;
 };
 
 export type AffiliateNavId =
@@ -105,6 +120,22 @@ export type AffiliatePaymentsSummary = {
   lastPaidAt: string | null;
   lastPaidAmount: number | null;
   payouts: AffiliatePayoutRow[];
+  invoices: AffiliateInvoiceRow[];
+};
+
+export type AffiliateInvoiceRow = {
+  id: string;
+  invoiceNumber: string;
+  affiliateId: string;
+  affiliateCode: string;
+  displayName: string;
+  amount: number;
+  currency: string;
+  periodFrom: string;
+  periodTo: string;
+  periodLabel: string;
+  payee: AffiliatePayoutDetails;
+  issuedAt: string;
 };
 
 export type AffiliateAdminOverviewRow = AffiliateAccount & {

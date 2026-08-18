@@ -15,7 +15,9 @@ import {
   formatChangePct,
   formatGbp,
   formatInt,
+  openAffiliateInvoicePdf,
 } from "@/lib/affiliate/api";
+import { AffiliatePayoutDetailsForm } from "@/components/affiliate/AffiliatePayoutDetailsForm";
 import type {
   AffiliateAccount,
   AffiliateDashboardData,
@@ -265,9 +267,11 @@ function EarningsSkeleton() {
 export function AffiliateDashboard({
   account,
   onLogout,
+  onAccountChange,
 }: {
   account: AffiliateAccount;
   onLogout: () => void;
+  onAccountChange: (account: AffiliateAccount) => void;
 }) {
   const [nav, setNav] = useState<AffiliateNavId>("dashboard");
   const [range, setRange] = useState<AffiliateRange>("30d");
@@ -701,6 +705,66 @@ export function AffiliateDashboard({
                     </div>
                   )}
                 </section>
+                <section className="overflow-hidden rounded-2xl border border-[#EBE6E0] bg-white shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
+                  <div className="border-b border-[#EFEAE4] px-5 py-4">
+                    <p className="text-base text-[#1A1A1A]">Invoices</p>
+                    <p className="mt-1 text-sm text-[#7A746C]">
+                      Open a PDF to save or print. Add your bank details in Profile
+                      so invoices can be issued.
+                    </p>
+                  </div>
+                  {(payments.invoices ?? []).length === 0 ? (
+                    <p className="px-5 py-8 text-sm text-[#7A746C]">
+                      No invoices yet.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="bg-[#FBF9F7] text-xs uppercase tracking-[0.12em] text-[#8A8580]">
+                          <tr>
+                            <th className="px-5 py-3 font-medium">Invoice</th>
+                            <th className="px-5 py-3 font-medium">Period</th>
+                            <th className="px-5 py-3 font-medium">Amount</th>
+                            <th className="px-5 py-3 font-medium"> </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {payments.invoices.map((inv) => (
+                            <tr
+                              key={inv.id}
+                              className="border-t border-[#F3EEE8]"
+                            >
+                              <td className="px-5 py-3 font-medium tabular-nums text-[#1A1A1A]">
+                                {inv.invoiceNumber}
+                              </td>
+                              <td className="px-5 py-3 text-[#7A746C]">
+                                {inv.periodLabel}
+                              </td>
+                              <td className="px-5 py-3 font-medium tabular-nums">
+                                {formatGbp(inv.amount)}
+                              </td>
+                              <td className="px-5 py-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void (async () => {
+                                      const result =
+                                        await openAffiliateInvoicePdf(inv.id);
+                                      if (!result.ok) setError(result.error);
+                                    })();
+                                  }}
+                                  className="rounded-xl border border-[#E4DED6] bg-white px-3 py-1.5 text-sm text-[#3D3A36] hover:bg-[#FBF9F7]"
+                                >
+                                  View PDF
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
               </div>
             ) : null}
 
@@ -743,6 +807,15 @@ export function AffiliateDashboard({
                     </dd>
                   </div>
                 </dl>
+                <div className="mt-8 border-t border-[#EFEAE4] pt-6">
+                  <p className="text-base text-[#1A1A1A]">
+                    Address &amp; bank details
+                  </p>
+                  <AffiliatePayoutDetailsForm
+                    account={account}
+                    onSaved={onAccountChange}
+                  />
+                </div>
               </section>
             ) : null}
           </div>

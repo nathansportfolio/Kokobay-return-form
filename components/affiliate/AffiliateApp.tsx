@@ -74,6 +74,12 @@ export function AffiliateApp() {
   }
 
   return (
-    <AffiliateDashboard account={state.account} onLogout={() => void logout()} />
+    <AffiliateDashboard
+      account={state.account}
+      onLogout={() => void logout()}
+      onAccountChange={(account) =>
+        setState({ status: "affiliate", account })
+      }
+    />
   );
 }
