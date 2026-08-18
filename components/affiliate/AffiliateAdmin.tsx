@@ -796,6 +796,32 @@ export function AffiliateAdmin({
           )}
         </section>
 
+        {overview?.otherPay ? (
+          <section className="mb-6">
+            <p className="mb-3 text-base text-[#1A1A1A]">Other pay</p>
+            <p className="mb-4 text-sm text-[#7A746C]">
+              25% of affiliate commission this cycle and last cycle (so it is
+              still visible the day after cutoff).
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <OverviewStat
+                label="This cycle"
+                value={formatGbp(overview.otherPay.current.amount)}
+                hint={`25% of ${formatGbp(overview.otherPay.current.affiliatePay)} · ${overview.otherPay.current.label}`}
+              />
+              <OverviewStat
+                label="Previous cycle"
+                value={formatGbp(overview.otherPay.previous?.amount ?? 0)}
+                hint={
+                  overview.otherPay.previous
+                    ? `25% of ${formatGbp(overview.otherPay.previous.affiliatePay)} · ${overview.otherPay.previous.label}`
+                    : "No previous cycle yet"
+                }
+              />
+            </div>
+          </section>
+        ) : null}
+
         <section className="rounded-2xl border border-[#EBE6E0] bg-white p-5 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)] sm:p-6">
           <p className="text-base text-[#1A1A1A]">Create affiliate account</p>
           <p className="mt-1 text-sm text-[#7A746C]">

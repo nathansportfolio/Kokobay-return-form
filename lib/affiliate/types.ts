@@ -150,8 +150,19 @@ export type AffiliateAdminOverviewRow = AffiliateAccount & {
   lastPaidAmount?: number | null;
 };
 
+export type AffiliateOtherPaySlice = {
+  label: string;
+  affiliatePay: number;
+  amount: number;
+};
+
 export type AffiliateAdminOverview = {
   period?: AffiliatePayoutPeriod;
+  otherPay?: {
+    ratePercent: number;
+    current: AffiliateOtherPaySlice;
+    previous: AffiliateOtherPaySlice | null;
+  };
   totals: {
     clicks: number;
     revenue: number;

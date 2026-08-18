@@ -188,6 +188,7 @@ export async function fetchAffiliateAdminOverview(): Promise<
       totals,
       affiliates,
       period: result.data.period,
+      otherPay: result.data.otherPay,
     },
   };
 }

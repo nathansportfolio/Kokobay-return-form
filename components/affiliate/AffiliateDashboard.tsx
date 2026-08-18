@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, List } from "@phosphor-icons/react";
+import { Check, Copy, List, WarningCircle } from "@phosphor-icons/react";
 import { AffiliateAreaChart } from "@/components/affiliate/AffiliateAreaChart";
 import { AffiliateSidebar } from "@/components/affiliate/AffiliateSidebar";
 import {
@@ -35,6 +35,21 @@ const RANGE_OPTIONS: { value: AffiliateRange; label: string }[] = [
   { value: "30d", label: "Last 30 days" },
   { value: "90d", label: "Last 90 days" },
 ];
+
+function payoutDetailsReady(
+  details: AffiliateAccount["payoutDetails"],
+): boolean {
+  if (!details) return false;
+  return Boolean(
+    details.legalName?.trim() &&
+      details.addressLine1?.trim() &&
+      details.city?.trim() &&
+      details.postcode?.trim() &&
+      details.accountName?.trim() &&
+      details.sortCode?.trim() &&
+      details.accountNumber?.trim(),
+  );
+}
 
 function affiliateShareUrl(discountCode: string): string {
   const code = discountCode.trim().toUpperCase();
@@ -445,6 +460,35 @@ export function AffiliateDashboard({
               <p className="mb-4 text-sm text-rose-700" role="alert">
                 {error}
               </p>
+            ) : null}
+
+            {!payoutDetailsReady(account.payoutDetails) && nav !== "profile" ? (
+              <div
+                className="mb-6 flex flex-col gap-3 rounded-2xl border border-[#E89292]/40 bg-[#FDF6F6] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+                role="status"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <WarningCircle
+                    className="mt-0.5 h-5 w-5 shrink-0 text-[#8B4A4A]"
+                    weight="fill"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-[#8B4A4A]">
+                      Action needed before we can pay you
+                    </p>
+                    <p className="mt-0.5 text-sm text-[#7A746C]">
+                      Add your address and bank details so we can send commission.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNav("profile")}
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-[#1A1A1A] px-4 text-sm font-medium text-white hover:opacity-90"
+                >
+                  Add details
+                </button>
+              </div>
             ) : null}
 
             {(nav === "dashboard" || nav === "profile") && (
