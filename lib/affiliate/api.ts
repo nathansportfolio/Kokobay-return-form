@@ -493,14 +493,18 @@ async function openAffiliatePdf(
     res.headers.get("content-disposition"),
     "KOKO-BAY-invoice.pdf",
   );
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  // Prefer opening in a new tab so the invoice is visible immediately.
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
   return { ok: true };
 }
 

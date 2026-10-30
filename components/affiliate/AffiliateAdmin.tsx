@@ -664,13 +664,62 @@ function AffiliateAccordionRow({
           {a.role === "affiliate" ? (
             <div className="rounded-xl border border-[#E4DED6] bg-white px-3.5 py-3 text-sm">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8580]">
+                Invoices
+              </p>
+              <p className="mt-1 text-xs text-[#8A8580]">
+                Open a PDF for any invoice already issued for this affiliate.
+              </p>
+              {invoices == null ? (
+                <p className="mt-2 text-xs text-[#8A8580]">Loading…</p>
+              ) : invoices.length === 0 ? (
+                <p className="mt-2 text-xs text-[#7A746C]">
+                  No invoices yet — use Invoice on a cycle below, or New invoice.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {invoices.map((inv) => (
+                    <li
+                      key={inv.id}
+                      className="flex flex-col gap-2 border-t border-[#F3EEE8] pt-2 first:border-t-0 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <span className="min-w-0 text-[#3D3A36]">
+                        <span className="font-medium tabular-nums">
+                          {inv.invoiceNumber}
+                        </span>
+                        {" · "}
+                        {formatGbp(inv.amount)}
+                        {inv.periodLabel ? (
+                          <span className="text-[#8A8580]">
+                            {" "}
+                            · {inv.periodLabel}
+                          </span>
+                        ) : null}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void (async () => {
+                            const result = await openAffiliateInvoicePdf(inv.id);
+                            if (!result.ok) setActionError(result.error);
+                          })();
+                        }}
+                        className="shrink-0 self-start rounded-lg bg-[#1A1A1A] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 sm:self-auto"
+                      >
+                        View PDF
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+          {a.role === "affiliate" ? (
+            <div className="rounded-xl border border-[#E4DED6] bg-white px-3.5 py-3 text-sm">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8580]">
                 Monthly dues
               </p>
               <p className="mt-1 text-xs text-[#8A8580]">
                 Each payout cycle’s earnings, paid amount, and remaining due.
-                Use Invoice on a cycle to create/open its PDF — including paid
-                months. Past invoices stay available even when New invoice is
-                disabled.
               </p>
               {monthlyDues == null ? (
                 <p className="mt-2 text-xs text-[#8A8580]">Loading…</p>
@@ -766,49 +815,6 @@ function AffiliateAccordionRow({
                   })}
                 </ul>
               )}
-              {invoices != null && invoices.length > 0 ? (
-                <div className="mt-4 border-t border-[#F3EEE8] pt-3">
-                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8580]">
-                    All invoices
-                  </p>
-                  <ul className="mt-2 space-y-2">
-                    {invoices.map((inv) => (
-                      <li
-                        key={inv.id}
-                        className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-                      >
-                        <span className="min-w-0 text-[#3D3A36]">
-                          <span className="font-medium tabular-nums">
-                            {inv.invoiceNumber}
-                          </span>
-                          {" · "}
-                          {formatGbp(inv.amount)}
-                          {inv.periodLabel ? (
-                            <span className="text-[#8A8580]">
-                              {" "}
-                              · {inv.periodLabel}
-                            </span>
-                          ) : null}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void (async () => {
-                              const result = await openAffiliateInvoicePdf(
-                                inv.id,
-                              );
-                              if (!result.ok) setActionError(result.error);
-                            })();
-                          }}
-                          className="shrink-0 self-start rounded-lg border border-[#E4DED6] bg-white px-2.5 py-1 text-xs text-[#3D3A36] hover:bg-[#FBF9F7] sm:self-auto"
-                        >
-                          View PDF
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
             </div>
           ) : null}
           {actionError ? (
