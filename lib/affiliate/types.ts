@@ -105,11 +105,26 @@ export type AffiliatePayoutRow = {
   amount: number;
   paidAt: string;
   note: string | null;
+  periodFrom?: string | null;
+  periodTo?: string | null;
+  periodLabel?: string | null;
+  invoiceId?: string | null;
   recordedBy: {
     id: string;
     displayName: string;
   } | null;
   createdAt: string;
+};
+
+export type AffiliateMonthlyDue = {
+  periodFrom: string;
+  periodTo: string;
+  label: string;
+  isOpen: boolean;
+  earnings: number;
+  paid: number;
+  due: number;
+  invoice: AffiliateInvoiceRow | null;
 };
 
 export type AffiliatePaymentsSummary = {
@@ -121,6 +136,7 @@ export type AffiliatePaymentsSummary = {
   lastPaidAmount: number | null;
   payouts: AffiliatePayoutRow[];
   invoices: AffiliateInvoiceRow[];
+  monthlyDues?: AffiliateMonthlyDue[];
 };
 
 export type AffiliateInvoiceRow = {

@@ -3,6 +3,7 @@ import type {
   AffiliateAdminOverview,
   AffiliateDashboardData,
   AffiliateInvoiceRow,
+  AffiliateMonthlyDue,
   AffiliateOrderRow,
   AffiliatePaymentsSummary,
   AffiliatePayoutDetails,
@@ -372,6 +373,7 @@ export async function fetchAffiliatePayments(): Promise<
       lastPaidAmount: result.data.lastPaidAmount,
       payouts: result.data.payouts ?? [],
       invoices: result.data.invoices ?? [],
+      monthlyDues: result.data.monthlyDues ?? [],
     },
   };
 }
@@ -380,6 +382,8 @@ export async function recordAffiliatePayout(input: {
   affiliateId: string;
   amount: number;
   note?: string;
+  periodFrom?: string;
+  invoiceId?: string;
 }): Promise<
   | { ok: true; payout: AffiliatePayoutRow }
   | { ok: false; error: string }
@@ -415,14 +419,24 @@ export async function updateAffiliatePayoutDetails(
 export async function fetchAffiliateInvoicesForAdmin(
   affiliateId: string,
 ): Promise<
-  | { ok: true; invoices: AffiliateInvoiceRow[] }
+  | {
+      ok: true;
+      invoices: AffiliateInvoiceRow[];
+      monthlyDues: AffiliateMonthlyDue[];
+    }
   | { ok: false; error: string }
 > {
-  const result = await affiliateFetch<{ ok: true; invoices: AffiliateInvoiceRow[] }>(
-    `/admin/invoices?affiliateId=${encodeURIComponent(affiliateId)}`,
-  );
+  const result = await affiliateFetch<{
+    ok: true;
+    invoices: AffiliateInvoiceRow[];
+    monthlyDues?: AffiliateMonthlyDue[];
+  }>(`/admin/invoices?affiliateId=${encodeURIComponent(affiliateId)}`);
   if (!result.ok) return result;
-  return { ok: true, invoices: result.data.invoices ?? [] };
+  return {
+    ok: true,
+    invoices: result.data.invoices ?? [],
+    monthlyDues: result.data.monthlyDues ?? [],
+  };
 }
 
 function filenameFromDisposition(header: string | null, fallback: string): string {
@@ -498,9 +512,13 @@ export async function openAffiliateInvoicePdf(
 
 export async function printAffiliateInvoice(
   affiliateId: string,
+  periodFrom?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   return openAffiliatePdf("/admin/invoices", {
     method: "POST",
-    body: JSON.stringify({ affiliateId }),
+    body: JSON.stringify({
+      affiliateId,
+      ...(periodFrom ? { periodFrom } : {}),
+    }),
   });
 }

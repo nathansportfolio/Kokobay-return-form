@@ -21,6 +21,7 @@ import type {
   AffiliateAdminOverviewRow,
   AffiliateDiscountType,
   AffiliateInvoiceRow,
+  AffiliateMonthlyDue,
   AffiliatePayoutPeriod,
 } from "@/lib/affiliate/types";
 
@@ -158,6 +159,10 @@ function PayAffiliateModal({
   onClose: () => void;
   onPaid: () => Promise<void>;
 }) {
+  const [monthlyDues, setMonthlyDues] = useState<AffiliateMonthlyDue[] | null>(
+    null,
+  );
+  const [periodFrom, setPeriodFrom] = useState("");
   const [amount, setAmount] = useState(
     affiliate.commissionOwed > 0 ? String(affiliate.commissionOwed) : "",
   );
@@ -172,6 +177,25 @@ function PayAffiliateModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    void (async () => {
+      const result = await fetchAffiliateInvoicesForAdmin(affiliate.id);
+      if (!result.ok) {
+        setMonthlyDues([]);
+        return;
+      }
+      setMonthlyDues(result.monthlyDues);
+      const firstDue =
+        result.monthlyDues.find((d) => d.due > 0) ?? result.monthlyDues[0];
+      if (firstDue) {
+        setPeriodFrom(firstDue.periodFrom);
+        setAmount(firstDue.due > 0 ? String(firstDue.due) : "");
+      }
+    })();
+  }, [affiliate.id]);
+
+  const selected = monthlyDues?.find((d) => d.periodFrom === periodFrom);
 
   return (
     <div
@@ -190,8 +214,8 @@ function PayAffiliateModal({
           Pay {affiliate.displayName}
         </p>
         <p className="mt-1 text-sm text-[#7A746C]">
-          Unpaid balance {formatGbp(affiliate.commissionOwed)}. Record what you
-          actually paid — this is timestamped in Mongo.
+          Unpaid balance {formatGbp(affiliate.commissionOwed)}. Choose the cycle
+          (and invoice) this payment covers.
         </p>
 
         <form
@@ -205,11 +229,17 @@ function PayAffiliateModal({
                 setError("Enter an amount greater than zero.");
                 return;
               }
+              if (!periodFrom) {
+                setError("Select which cycle you are paying.");
+                return;
+              }
               setBusy(true);
               const result = await recordAffiliatePayout({
                 affiliateId: affiliate.id,
                 amount: value,
                 note: note.trim() || undefined,
+                periodFrom,
+                invoiceId: selected?.invoice?.id,
               });
               setBusy(false);
               if (!result.ok) {
@@ -221,6 +251,49 @@ function PayAffiliateModal({
             })();
           }}
         >
+          <div>
+            <label htmlFor="pay-period" className="text-sm font-medium">
+              Cycle / invoice
+            </label>
+            <select
+              id="pay-period"
+              required
+              value={periodFrom}
+              disabled={monthlyDues == null}
+              onChange={(e) => {
+                const next = e.target.value;
+                setPeriodFrom(next);
+                const row = monthlyDues?.find((d) => d.periodFrom === next);
+                if (row) {
+                  setAmount(row.due > 0 ? String(row.due) : "");
+                }
+              }}
+              className={inputClass}
+            >
+              {monthlyDues == null ? (
+                <option value="">Loading cycles…</option>
+              ) : monthlyDues.length === 0 ? (
+                <option value="">No cycles yet</option>
+              ) : (
+                monthlyDues.map((d) => (
+                  <option key={d.periodFrom} value={d.periodFrom}>
+                    {d.label}
+                    {d.isOpen ? " (open)" : ""} · due {formatGbp(d.due)}
+                    {d.invoice ? ` · ${d.invoice.invoiceNumber}` : ""}
+                  </option>
+                ))
+              )}
+            </select>
+            {selected ? (
+              <p className="mt-1.5 text-xs text-[#8A8580]">
+                Earned {formatGbp(selected.earnings)} · paid{" "}
+                {formatGbp(selected.paid)}
+                {selected.invoice
+                  ? ` · invoice ${selected.invoice.invoiceNumber}`
+                  : " · no invoice yet"}
+              </p>
+            ) : null}
+          </div>
           <div>
             <label htmlFor="pay-amount" className="text-sm font-medium">
               Amount paid (£)
@@ -267,7 +340,7 @@ function PayAffiliateModal({
             </button>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || !periodFrom}
               className="rounded-xl bg-[#1A1A1A] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
             >
               {busy ? "Saving…" : "Record payment"}
@@ -432,24 +505,44 @@ function AffiliateAccordionRow({
   const [open, setOpen] = useState(false);
   const [disabling, setDisabling] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [printingPeriodFrom, setPrintingPeriodFrom] = useState<string | null>(
+    null,
+  );
   const [actionError, setActionError] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<AffiliateInvoiceRow[] | null>(null);
+  const [monthlyDues, setMonthlyDues] = useState<AffiliateMonthlyDue[] | null>(
+    null,
+  );
   const shareUrl = affiliateShareUrl(a.discountCode);
   const dueHint = period?.isOpen
     ? `This cycle · due after ${paysAfterLabel(period)}`
     : "Due now";
+  const hasPayoutDetails = payoutDetailsReady(a.payoutDetails);
   const canPrint =
     a.role === "affiliate" &&
     a.active &&
     a.commissionOwed > 0 &&
-    payoutDetailsReady(a.payoutDetails);
+    hasPayoutDetails;
+  const printDisabledReason = !a.active
+    ? "Account is disabled."
+    : a.commissionOwed <= 0
+      ? "Nothing unpaid — New invoice needs an unpaid commission balance."
+      : !hasPayoutDetails
+        ? "Missing address/bank details — they need to add these in Profile first."
+        : null;
+
+  async function refreshInvoiceData() {
+    const result = await fetchAffiliateInvoicesForAdmin(a.id);
+    if (result.ok) {
+      setInvoices(result.invoices);
+      setMonthlyDues(result.monthlyDues);
+    }
+  }
 
   useEffect(() => {
     if (!open || a.role !== "affiliate") return;
-    void (async () => {
-      const result = await fetchAffiliateInvoicesForAdmin(a.id);
-      if (result.ok) setInvoices(result.invoices);
-    })();
+    void refreshInvoiceData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when row opens / id changes
   }, [open, a.id, a.role]);
 
   return (
@@ -559,35 +652,149 @@ function AffiliateAccordionRow({
               )}
             </div>
           ) : null}
-          {a.role === "affiliate" && invoices && invoices.length > 0 ? (
+          {a.role === "affiliate" ? (
             <div className="rounded-xl border border-[#E4DED6] bg-white px-3.5 py-3 text-sm">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8580]">
-                Invoices
+                Monthly dues
               </p>
-              <ul className="mt-2 space-y-2">
-                {invoices.map((inv) => (
-                  <li
-                    key={inv.id}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <span className="min-w-0 truncate text-[#3D3A36]">
-                      {inv.invoiceNumber} · {formatGbp(inv.amount)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void (async () => {
-                          const result = await openAffiliateInvoicePdf(inv.id);
-                          if (!result.ok) setActionError(result.error);
-                        })();
-                      }}
-                      className="shrink-0 rounded-lg border border-[#E4DED6] bg-white px-2.5 py-1 text-xs text-[#3D3A36] hover:bg-[#FBF9F7]"
-                    >
-                      View PDF
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <p className="mt-1 text-xs text-[#8A8580]">
+                Each payout cycle’s earnings, paid amount, and remaining due.
+                Past invoices stay available even when New invoice is disabled.
+              </p>
+              {monthlyDues == null ? (
+                <p className="mt-2 text-xs text-[#8A8580]">Loading…</p>
+              ) : monthlyDues.length === 0 ? (
+                <p className="mt-2 text-xs text-[#7A746C]">No cycles yet.</p>
+              ) : (
+                <ul className="mt-3 space-y-3">
+                  {monthlyDues.map((due) => {
+                    const canInvoiceMonth =
+                      a.active && due.due > 0 && hasPayoutDetails;
+                    const invoicingThis =
+                      printing && printingPeriodFrom === due.periodFrom;
+                    return (
+                      <li
+                        key={due.periodFrom}
+                        className="border-t border-[#F3EEE8] pt-3 first:border-t-0 first:pt-0"
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="font-medium text-[#3D3A36]">
+                              {due.label}
+                              {due.isOpen ? (
+                                <span className="ml-1.5 text-xs font-normal text-[#8A8580]">
+                                  (open)
+                                </span>
+                              ) : null}
+                            </p>
+                            <p className="mt-0.5 text-xs text-[#8A8580]">
+                              Earned {formatGbp(due.earnings)} · paid{" "}
+                              {formatGbp(due.paid)} · due{" "}
+                              <span className="font-medium text-[#8B4A4A]">
+                                {formatGbp(due.due)}
+                              </span>
+                            </p>
+                            {due.invoice ? (
+                              <p className="mt-0.5 text-xs text-[#7A746C]">
+                                Invoice {due.invoice.invoiceNumber} ·{" "}
+                                {formatGbp(due.invoice.amount)}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 flex-wrap gap-2">
+                            {due.invoice ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void (async () => {
+                                    const result = await openAffiliateInvoicePdf(
+                                      due.invoice!.id,
+                                    );
+                                    if (!result.ok) setActionError(result.error);
+                                  })();
+                                }}
+                                className="rounded-lg border border-[#E4DED6] bg-white px-2.5 py-1 text-xs text-[#3D3A36] hover:bg-[#FBF9F7]"
+                              >
+                                View PDF
+                              </button>
+                            ) : null}
+                            {canInvoiceMonth ? (
+                              <button
+                                type="button"
+                                disabled={printing}
+                                onClick={() => {
+                                  void (async () => {
+                                    setActionError(null);
+                                    setPrinting(true);
+                                    setPrintingPeriodFrom(due.periodFrom);
+                                    const result = await printAffiliateInvoice(
+                                      a.id,
+                                      due.periodFrom,
+                                    );
+                                    setPrinting(false);
+                                    setPrintingPeriodFrom(null);
+                                    if (!result.ok) {
+                                      setActionError(result.error);
+                                      return;
+                                    }
+                                    await refreshInvoiceData();
+                                  })();
+                                }}
+                                className="rounded-lg border border-[#E4DED6] bg-white px-2.5 py-1 text-xs text-[#3D3A36] hover:bg-[#FBF9F7] disabled:opacity-40"
+                              >
+                                {invoicingThis ? "Preparing…" : "Invoice"}
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {invoices != null && invoices.length > 0 ? (
+                <div className="mt-4 border-t border-[#F3EEE8] pt-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8580]">
+                    All invoices
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {invoices.map((inv) => (
+                      <li
+                        key={inv.id}
+                        className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+                      >
+                        <span className="min-w-0 text-[#3D3A36]">
+                          <span className="font-medium tabular-nums">
+                            {inv.invoiceNumber}
+                          </span>
+                          {" · "}
+                          {formatGbp(inv.amount)}
+                          {inv.periodLabel ? (
+                            <span className="text-[#8A8580]">
+                              {" "}
+                              · {inv.periodLabel}
+                            </span>
+                          ) : null}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void (async () => {
+                              const result = await openAffiliateInvoicePdf(
+                                inv.id,
+                              );
+                              if (!result.ok) setActionError(result.error);
+                            })();
+                          }}
+                          className="shrink-0 self-start rounded-lg border border-[#E4DED6] bg-white px-2.5 py-1 text-xs text-[#3D3A36] hover:bg-[#FBF9F7] sm:self-auto"
+                        >
+                          View PDF
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {actionError ? (
@@ -595,66 +802,76 @@ function AffiliateAccordionRow({
               {actionError}
             </p>
           ) : null}
-          <div className="flex flex-wrap justify-end gap-2 pt-1">
-            {a.role === "affiliate" && a.active ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onChangePin(a)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3.5 py-2 text-sm font-medium text-[#3D3A36] hover:bg-[#FBF9F7]"
-                >
-                  <Key className="h-4 w-4" />
-                  Change PIN
-                </button>
-                <button
-                  type="button"
-                  disabled={!canPrint || printing}
-                  onClick={() => {
-                    void (async () => {
-                      setActionError(null);
-                      setPrinting(true);
-                      const result = await printAffiliateInvoice(a.id);
-                      setPrinting(false);
-                      if (!result.ok) {
-                        setActionError(result.error);
-                        return;
-                      }
-                      const listed = await fetchAffiliateInvoicesForAdmin(a.id);
-                      if (listed.ok) setInvoices(listed.invoices);
-                    })();
-                  }}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3.5 py-2 text-sm font-medium text-[#3D3A36] hover:bg-[#FBF9F7] disabled:opacity-40"
-                >
-                  <Printer className="h-4 w-4" />
-                  {printing ? "Preparing…" : "Print invoice"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onPay(a)}
-                  className="inline-flex items-center justify-center rounded-xl bg-[#1A1A1A] px-3.5 py-2 text-sm font-medium text-white hover:opacity-90"
-                >
-                  Pay affiliate
-                </button>
-              </>
+          <div className="space-y-2 pt-1">
+            <div className="flex flex-wrap justify-end gap-2">
+              {a.role === "affiliate" && a.active ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onChangePin(a)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3.5 py-2 text-sm font-medium text-[#3D3A36] hover:bg-[#FBF9F7]"
+                  >
+                    <Key className="h-4 w-4" />
+                    Change PIN
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canPrint || printing}
+                    title={printDisabledReason ?? undefined}
+                    onClick={() => {
+                      void (async () => {
+                        setActionError(null);
+                        setPrinting(true);
+                        setPrintingPeriodFrom(null);
+                        const result = await printAffiliateInvoice(a.id);
+                        setPrinting(false);
+                        if (!result.ok) {
+                          setActionError(result.error);
+                          return;
+                        }
+                        await refreshInvoiceData();
+                      })();
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3.5 py-2 text-sm font-medium text-[#3D3A36] hover:bg-[#FBF9F7] disabled:opacity-40"
+                  >
+                    <Printer className="h-4 w-4" />
+                    {printing && printingPeriodFrom == null
+                      ? "Preparing…"
+                      : "New invoice"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onPay(a)}
+                    className="inline-flex items-center justify-center rounded-xl bg-[#1A1A1A] px-3.5 py-2 text-sm font-medium text-white hover:opacity-90"
+                  >
+                    Pay affiliate
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                disabled={a.id === selfId || !a.active || disabling}
+                onClick={() => {
+                  void (async () => {
+                    setDisabling(true);
+                    try {
+                      await onDisable(a.id);
+                    } finally {
+                      setDisabling(false);
+                    }
+                  })();
+                }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3 py-2 text-sm text-[#8B4A4A] hover:bg-[#FDF6F6] disabled:opacity-40"
+              >
+                <Trash className="h-4 w-4" />
+                Disable
+              </button>
+            </div>
+            {a.role === "affiliate" && a.active && !canPrint && printDisabledReason ? (
+              <p className="text-right text-xs text-[#8B4A4A]">
+                New invoice disabled: {printDisabledReason}
+              </p>
             ) : null}
-            <button
-              type="button"
-              disabled={a.id === selfId || !a.active || disabling}
-              onClick={() => {
-                void (async () => {
-                  setDisabling(true);
-                  try {
-                    await onDisable(a.id);
-                  } finally {
-                    setDisabling(false);
-                  }
-                })();
-              }}
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3 py-2 text-sm text-[#8B4A4A] hover:bg-[#FDF6F6] disabled:opacity-40"
-            >
-              <Trash className="h-4 w-4" />
-              Disable
-            </button>
           </div>
         </div>
       ) : null}

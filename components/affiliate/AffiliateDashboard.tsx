@@ -704,6 +704,80 @@ export function AffiliateDashboard({
                 </div>
                 <section className="overflow-hidden rounded-2xl border border-[#EBE6E0] bg-white shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
                   <div className="border-b border-[#EFEAE4] px-5 py-4">
+                    <p className="text-base text-[#1A1A1A]">Monthly dues</p>
+                    <p className="mt-1 text-sm text-[#7A746C]">
+                      Earnings and amounts still due for each payout cycle.
+                    </p>
+                  </div>
+                  {(payments.monthlyDues ?? []).length === 0 ? (
+                    <p className="px-5 py-8 text-sm text-[#7A746C]">
+                      No cycles yet.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="bg-[#FBF9F7] text-xs uppercase tracking-[0.12em] text-[#8A8580]">
+                          <tr>
+                            <th className="px-5 py-3 font-medium">Cycle</th>
+                            <th className="px-5 py-3 font-medium">Earned</th>
+                            <th className="px-5 py-3 font-medium">Paid</th>
+                            <th className="px-5 py-3 font-medium">Due</th>
+                            <th className="px-5 py-3 font-medium">Invoice</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(payments.monthlyDues ?? []).map((d) => (
+                            <tr
+                              key={d.periodFrom}
+                              className="border-t border-[#F3EEE8]"
+                            >
+                              <td className="px-5 py-3 text-[#3D3A36]">
+                                {d.label}
+                                {d.isOpen ? (
+                                  <span className="ml-1 text-xs text-[#8A8580]">
+                                    (open)
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="px-5 py-3 tabular-nums">
+                                {formatGbp(d.earnings)}
+                              </td>
+                              <td className="px-5 py-3 tabular-nums">
+                                {formatGbp(d.paid)}
+                              </td>
+                              <td className="px-5 py-3 font-medium tabular-nums text-[#8B4A4A]">
+                                {formatGbp(d.due)}
+                              </td>
+                              <td className="px-5 py-3 text-[#7A746C]">
+                                {d.invoice ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void (async () => {
+                                        const result =
+                                          await openAffiliateInvoicePdf(
+                                            d.invoice!.id,
+                                          );
+                                        if (!result.ok) setError(result.error);
+                                      })();
+                                    }}
+                                    className="rounded-lg border border-[#E4DED6] bg-white px-2.5 py-1 text-xs text-[#3D3A36] hover:bg-[#FBF9F7]"
+                                  >
+                                    {d.invoice.invoiceNumber}
+                                  </button>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+                <section className="overflow-hidden rounded-2xl border border-[#EBE6E0] bg-white shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
+                  <div className="border-b border-[#EFEAE4] px-5 py-4">
                     <p className="text-base text-[#1A1A1A]">Payout history</p>
                   </div>
                   {payments.payouts.length === 0 ? (
@@ -716,6 +790,7 @@ export function AffiliateDashboard({
                         <thead className="bg-[#FBF9F7] text-xs uppercase tracking-[0.12em] text-[#8A8580]">
                           <tr>
                             <th className="px-5 py-3 font-medium">Date</th>
+                            <th className="px-5 py-3 font-medium">Cycle</th>
                             <th className="px-5 py-3 font-medium">Amount</th>
                             <th className="px-5 py-3 font-medium">Note</th>
                           </tr>
@@ -735,6 +810,9 @@ export function AffiliateDashboard({
                                   hour: "2-digit",
                                   minute: "2-digit",
                                 })}
+                              </td>
+                              <td className="px-5 py-3 text-[#7A746C]">
+                                {p.periodLabel || "—"}
                               </td>
                               <td className="px-5 py-3 font-medium tabular-nums">
                                 {formatGbp(p.amount)}
