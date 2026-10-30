@@ -525,17 +525,19 @@ function AffiliateAccordionRow({
     ? `This cycle · due after ${paysAfterLabel(period)}`
     : "Due now";
   const hasPayoutDetails = payoutDetailsReady(a.payoutDetails);
+  const nextInvoiceCycle =
+    monthlyDues?.find((d) => d.earnings > 0 && !d.invoice) ?? null;
   const canPrint =
     a.role === "affiliate" &&
     a.active &&
-    a.commissionOwed > 0 &&
-    hasPayoutDetails;
+    hasPayoutDetails &&
+    (a.commissionOwed > 0 || nextInvoiceCycle != null);
   const printDisabledReason = !a.active
     ? "Account is disabled."
-    : a.commissionOwed <= 0
-      ? "Nothing unpaid — New invoice needs an unpaid commission balance."
-      : !hasPayoutDetails
-        ? "Missing address/bank details — they need to add these in Profile first."
+    : !hasPayoutDetails
+      ? "Missing address/bank details — they need to add these in Profile first."
+      : a.commissionOwed <= 0 && !nextInvoiceCycle
+        ? "Nothing left to invoice — every earned cycle already has a PDF (or no earnings yet)."
         : null;
 
   async function refreshInvoiceData() {
@@ -834,9 +836,17 @@ function AffiliateAccordionRow({
                       void (async () => {
                         setActionError(null);
                         setPrinting(true);
-                        setPrintingPeriodFrom(null);
-                        const result = await printAffiliateInvoice(a.id);
+                        const periodFrom =
+                          a.commissionOwed > 0
+                            ? undefined
+                            : nextInvoiceCycle?.periodFrom;
+                        setPrintingPeriodFrom(periodFrom ?? null);
+                        const result = await printAffiliateInvoice(
+                          a.id,
+                          periodFrom,
+                        );
                         setPrinting(false);
+                        setPrintingPeriodFrom(null);
                         if (!result.ok) {
                           setActionError(result.error);
                           return;
@@ -847,7 +857,9 @@ function AffiliateAccordionRow({
                     className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DED6] bg-white px-3.5 py-2 text-sm font-medium text-[#3D3A36] hover:bg-[#FBF9F7] disabled:opacity-40"
                   >
                     <Printer className="h-4 w-4" />
-                    {printing && printingPeriodFrom == null
+                    {printing &&
+                    (printingPeriodFrom == null ||
+                      printingPeriodFrom === nextInvoiceCycle?.periodFrom)
                       ? "Preparing…"
                       : "New invoice"}
                   </button>
