@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CaretDown, Check, Copy, Key, Plus, Printer, Trash } from "@phosphor-icons/react";
 import {
   createAffiliateAccount,
@@ -169,6 +169,7 @@ function PayAffiliateModal({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -222,6 +223,7 @@ function PayAffiliateModal({
           className="mt-5 space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
+            if (submittingRef.current) return;
             void (async () => {
               setError(null);
               const value = Number.parseFloat(amount);
@@ -233,21 +235,26 @@ function PayAffiliateModal({
                 setError("Select which cycle you are paying.");
                 return;
               }
+              submittingRef.current = true;
               setBusy(true);
-              const result = await recordAffiliatePayout({
-                affiliateId: affiliate.id,
-                amount: value,
-                note: note.trim() || undefined,
-                periodFrom,
-                invoiceId: selected?.invoice?.id,
-              });
-              setBusy(false);
-              if (!result.ok) {
-                setError(result.error);
-                return;
+              try {
+                const result = await recordAffiliatePayout({
+                  affiliateId: affiliate.id,
+                  amount: value,
+                  note: note.trim() || undefined,
+                  periodFrom,
+                  invoiceId: selected?.invoice?.id,
+                });
+                if (!result.ok) {
+                  setError(result.error);
+                  return;
+                }
+                await onPaid();
+                onClose();
+              } finally {
+                submittingRef.current = false;
+                setBusy(false);
               }
-              await onPaid();
-              onClose();
             })();
           }}
         >
@@ -659,7 +666,9 @@ function AffiliateAccordionRow({
               </p>
               <p className="mt-1 text-xs text-[#8A8580]">
                 Each payout cycle’s earnings, paid amount, and remaining due.
-                Past invoices stay available even when New invoice is disabled.
+                Use Invoice on a cycle to create/open its PDF — including paid
+                months. Past invoices stay available even when New invoice is
+                disabled.
               </p>
               {monthlyDues == null ? (
                 <p className="mt-2 text-xs text-[#8A8580]">Loading…</p>
@@ -669,7 +678,10 @@ function AffiliateAccordionRow({
                 <ul className="mt-3 space-y-3">
                   {monthlyDues.map((due) => {
                     const canInvoiceMonth =
-                      a.active && due.due > 0 && hasPayoutDetails;
+                      a.active &&
+                      due.earnings > 0 &&
+                      hasPayoutDetails &&
+                      !due.invoice;
                     const invoicingThis =
                       printing && printingPeriodFrom === due.periodFrom;
                     return (
